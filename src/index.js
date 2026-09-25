@@ -1,3 +1,5 @@
+import { openNotebook, closeNotebook, savePart, onSaveStatus, flushNotebook, hasPendingChanges, readCloudChanges, getDraft, discardDraftAndReload } from './notebookStore.js';
+import { supabase } from './supabaseClient.js';
 // all major functions are stored in these objects
 import {toDosManager, domManipulator, notesManager} from "./todoFunctions.js"
 
@@ -39,53 +41,9 @@ const newProjectMenu = document.querySelector('#new-project-menu');
 const newNoteMenu = document.querySelector('#new-note-menu');
 
 
-// object of to-do arrays 
-// grab object data from local storage if it exists, or create new example object
-const todos = JSON.parse(localStorage.getItem('todos')) || {
-                                                            "home": [],
-                                                            "today": [],
-                                                            "week": [],
-                                                            "Gym":[],
-                                                            "Study":[],
-                                                            "Work":[]                                              
-                                                            }
-
-// if there is no local storage, populate todo list object with example items
-if (!localStorage.getItem('todos')) {
-    todos.home.push(toDosManager.createToDo("brush teeth", "low", "2021-12-12", " with colgate", "home", true));
-    todos.home.push(toDosManager.createToDo("get dressed", "high", "2021-11-11", "singlet cos its hot", "home"));
-    todos.home.push(toDosManager.createToDo("feed jimmy", "medium", "2021-06-09", "only the finest bickies", "home", true));
-
-    todos.today.push(toDosManager.createToDo("get mail", "medium", "2021-06-09", "im expecting something", "today"));
-    todos.today.push(toDosManager.createToDo("cook dinner", "medium", "2021-06-09", "juicy steak", "today", true));
-
-    todos.week.push(toDosManager.createToDo("sport", "medium", "2021-06-09", "", "week"));
-
-    todos.Gym.push(toDosManager.createToDo("swim", "medium", "2021-06-09", "", "Gym", true));
-    todos.Gym.push(toDosManager.createToDo("walk", "high", "2021-06-09", "", "Gym"));
-    todos.Gym.push(toDosManager.createToDo("weights", "low", "2021-06-09", "", "Gym"));
-    
-    todos.Study.push(toDosManager.createToDo("learn webkit", "high", "2021-06-09", "", "Study", true));
-    todos.Study.push(toDosManager.createToDo("learn react", "medium", "2021-06-09", "", "Study"));
-
-    todos.Work.push(toDosManager.createToDo("get that report on johnson's desk", "low", "2021-06-09", "", "Work"));
-}
-
-// array of to-do notes 
-// grab array data from local storage if it exists, or create new example array
-const notes = JSON.parse(localStorage.getItem('notes')) || [];
-
-// if there is no local storage, populate notes list object with example items
-if (!localStorage.getItem('notes')) {
-    notes.push(notesManager.createNote("title", 'you can edit title and details in place'));
-    notes.push(notesManager.createNote("books", 'go get some books'));
-    notes.push(notesManager.createNote("shopping list", 'steak\ncheese\ntomatos\nsauce'));
-    notes.push(notesManager.createNote("example note", 'example\nnote\nwith\nlots\nof\nlines\n'));
-    notes.push(notesManager.createNote("another example note", 'example\nnote\nwith\neven\nmore\nlines\nthan\nthe\nlast\nnote'));
-    notes.push(notesManager.createNote("another example note", 'example note to show off the pinterest style layout'));
-    notes.push(notesManager.createNote("books", 'go get some more books'));
-    notes.push(notesManager.createNote("one more example note", 'one\nmore\nexample\nnote'));
-}
+// Each authenticated account starts with its own empty state.
+const todos = Object.assign(Object.create(null), { home: [], today: [], week: [] });
+const notes = [];
 
 // initial homescreen render
 domManipulator.renderAllToDos(todos, display);
@@ -277,4 +235,181 @@ createNewOptions.forEach(option => {
     });
 })
 
-console.log(todos)
+
+const authScreen = document.querySelector('#auth-screen');
+const todoApp = document.querySelector('#todo-app');
+const authForm = document.querySelector('#auth-form');
+const authSwitch = document.querySelector('#auth-switch');
+const authTitle = document.querySelector('#auth-title');
+const authSubmit = document.querySelector('#auth-submit');
+const authMessage = document.querySelector('#auth-message');
+const authPassword = document.querySelector('#auth-password');
+const logout = document.querySelector('#logout-btn');
+let registering = false;
+let activeUser = null;
+let generation = 0;
+let ready = false;
+let polling = false;
+let changingAccount = false;
+
+const bar = document.createElement('div');
+bar.style.cssText = 'position:fixed;bottom:8px;left:50%;transform:translateX(-50%);z-index:1000;max-width:96vw;padding:8px 12px;background:#f7f7f7;color:#501f3a;border:1px solid #c38d9e;border-radius:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font:13px sans-serif;';
+bar.hidden = true;
+const status = document.createElement('span');
+status.setAttribute('role', 'status');
+bar.append(status);
+function action(label, handler) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.style.cssText = 'padding:5px 8px;background:#c38d9e;color:white;border:0;border-radius:3px;cursor:pointer;font:inherit;';
+    button.addEventListener('click', handler);
+    bar.append(button);
+    return button;
+}
+action('Retry save', () => { flushNotebook(); });
+action('Download draft', () => {
+    const draft = getDraft();
+    if (!draft) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'notebook-draft.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+action('Load cloud copy', async () => {
+    if (hasPendingChanges() && !window.confirm('This replaces your unsaved edits with the cloud copy. Download your draft first. Continue?')) return;
+    todoApp.inert = true;
+    try {
+        const state = await discardDraftAndReload();
+        if (state && ready) applyState(state);
+    } catch (error) { status.textContent = error.message; }
+    finally { todoApp.inert = !ready; }
+});
+document.body.append(bar);
+onSaveStatus(message => { status.textContent = message; });
+
+function applyState(state) {
+    for (const name of Object.keys(todos)) delete todos[name];
+    Object.assign(todos, { home: [], today: [], week: [] }, state.todos);
+    notes.splice(0, notes.length, ...state.notes);
+    toDosManager.changeCurrentProject('home');
+    domManipulator.renderAllToDos(todos, display);
+    domManipulator.renderProjectNames(todos, display);
+    document.querySelectorAll('.nav__selected').forEach(el => el.classList.remove('nav__selected'));
+    document.querySelector('.nav').children.item(0).classList.add('nav__selected');
+}
+function resetScreen() {
+    ready = false;
+    todoApp.hidden = true;
+    todoApp.inert = true;
+    bar.hidden = true;
+    closeNotebook();
+    applyState({ todos: { home: [], today: [], week: [] }, notes: [] });
+    addToDoForm.reset();
+    editPopup.querySelector('form').reset();
+    detailsPopup.querySelector('.details-popup__content').textContent = '';
+    addToDoForm.classList.remove('create-new-open');
+    editPopup.classList.remove('edit-popup-open');
+    detailsPopup.classList.remove('details-popup-open');
+    overlayNew.classList.add('overlay-new-invisible');
+    editOverlay.classList.add('overlay-edit-invisible');
+    detailsOverlay.classList.add('overlay-details-invisible');
+}
+const retryLoad = document.createElement('button');
+retryLoad.type = 'button';
+retryLoad.textContent = 'Retry loading notebook';
+retryLoad.hidden = true;
+authMessage.after(retryLoad);
+retryLoad.addEventListener('click', () => { if (activeUser) loadAccount(activeUser, generation); });
+
+async function loadAccount(id, ticket) {
+    retryLoad.disabled = true;
+    authMessage.textContent = 'Loading your notebook...';
+    try {
+        const state = await openNotebook(id);
+        if (ticket !== generation || !state) return;
+        applyState(state);
+        ready = true;
+        authScreen.hidden = true;
+        todoApp.hidden = false;
+        todoApp.inert = false;
+        bar.hidden = false;
+        retryLoad.hidden = true;
+    } catch (error) {
+        if (ticket !== generation) return;
+        closeNotebook();
+        authMessage.textContent = `Could not load notebook: ${error.message}`;
+        retryLoad.hidden = false;
+    } finally {
+        if (ticket === generation) retryLoad.disabled = false;
+    }
+}
+supabase.auth.onAuthStateChange((_event, session) => {
+    const id = session?.user?.id || null;
+    if (id === activeUser) return;
+    activeUser = id;
+    const ticket = ++generation;
+    resetScreen();
+    authScreen.hidden = false;
+    authForm.hidden = Boolean(id);
+    authSwitch.hidden = Boolean(id);
+    retryLoad.hidden = true;
+    authForm.reset();
+    authMessage.textContent = id ? 'Loading your notebook...' : '';
+    // Run database calls outside the Supabase auth callback.
+    if (id) setTimeout(() => { if (ticket === generation) loadAccount(id, ticket); }, 0);
+});
+resetScreen();
+
+authSwitch.addEventListener('click', () => {
+    registering = !registering;
+    authMessage.textContent = '';
+    authTitle.textContent = registering ? 'Sign up' : 'Sign in';
+    authSubmit.textContent = registering ? 'Create account' : 'Sign in';
+    authSwitch.textContent = registering ? 'Already have an account? Sign in' : 'Create an account';
+    authPassword.autocomplete = registering ? 'new-password' : 'current-password';
+});
+authForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const email = document.querySelector('#auth-email').value.trim();
+    const password = authPassword.value;
+    const signUp = registering;
+    authSubmit.disabled = authSwitch.disabled = true;
+    authMessage.textContent = 'Please wait...';
+    try {
+        const { data, error } = signUp
+            ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } })
+            : await supabase.auth.signInWithPassword({ email, password });
+        if (error) authMessage.textContent = error.message;
+        else if (signUp && !data.session) authMessage.textContent = 'Check your email to confirm your account.';
+    } catch (_) { authMessage.textContent = 'Connection failed. Please try again.'; }
+    finally { authSubmit.disabled = authSwitch.disabled = false; }
+});
+logout.addEventListener('click', async () => {
+    if (changingAccount) return;
+    changingAccount = true;
+    todoApp.inert = true;
+    try {
+        if (!await flushNotebook()) {
+            window.alert('Your latest edits are not saved to the cloud. Retry saving or download your draft before leaving.');
+            return;
+        }
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
+        if (error) window.alert(error.message);
+    } catch (error) { window.alert(error.message); }
+    finally { changingAccount = false; todoApp.inert = !ready; }
+});
+async function refreshCloud() {
+    if (!ready || polling || changingAccount || document.hidden || hasPendingChanges()) return;
+    if (document.activeElement?.matches('input, textarea, [contenteditable="true"]')) return;
+    if (document.querySelector('.create-new-open, .edit-popup-open, .details-popup-open')) return;
+    polling = true;
+    try {
+        const state = await readCloudChanges();
+        if (state && ready) applyState(state);
+    } finally { polling = false; }
+}
+setInterval(refreshCloud, 10000);
+window.addEventListener('focus', refreshCloud);

@@ -1,0 +1,115 @@
+/* Login screen uses the colors of the original to-do app. */
+[hidden] {
+    display: none !important;
+}
+
+.auth-screen {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.auth-card {
+    width: min(420px, 100%);
+    background: #f7f7f7;
+    color: #501f3a;
+    border-radius: 3px;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, .4);
+}
+
+.auth-card__header {
+    padding: 14px 22px;
+    background: #c38d9e;
+}
+
+.auth-card__logo {
+    display: block;
+    width: 210px;
+    max-width: 100%;
+    height: auto;
+}
+
+.auth-card__body {
+    padding: 30px;
+}
+
+.auth-card h1 {
+    margin-bottom: 8px;
+    font-size: 26px;
+}
+
+.auth-card__intro {
+    margin-bottom: 24px;
+    color: #555;
+    font-size: 15px;
+}
+
+.auth-card form {
+    display: grid;
+    gap: 10px;
+}
+
+.auth-card label {
+    font-size: 15px;
+}
+
+.auth-card input {
+    min-width: 0;
+    width: 100%;
+    padding: 11px;
+    margin-bottom: 10px;
+    border: 1px solid #bbb;
+    border-radius: 3px;
+    background: white;
+    font: inherit;
+    font-size: 16px;
+}
+
+.auth-card input:focus {
+    outline: 2px solid #3ba395;
+    outline-offset: 1px;
+}
+
+#auth-submit {
+    margin-top: 8px;
+    padding: 12px;
+    border: 0;
+    border-radius: 3px;
+    background: #c38d9e;
+    color: white;
+    font: inherit;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+#auth-submit:hover {
+    background: #501f3a;
+}
+
+#auth-submit:disabled {
+    opacity: .6;
+    cursor: wait;
+}
+
+.auth-card__switch {
+    display: block;
+    margin: 20px auto 0;
+    border: 0;
+    background: transparent;
+    color: #501f3a;
+    font: inherit;
+    font-size: 15px;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+#auth-message {
+    min-height: 20px;
+    margin-top: 14px;
+    text-align: center;
+    font-size: 14px;
+}

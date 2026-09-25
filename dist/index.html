@@ -4,10 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="main.css">
+    <link rel="stylesheet" href="auth.css">
     <link rel="icon" href="./img/favicon.png">
     <title>// TO-DO</title>
 </head>
 <body>
+    <section class="auth-screen" id="auth-screen" aria-labelledby="auth-title">
+        <div class="auth-card">
+            <div class="auth-card__header">
+                <img src="img/logo.png" alt="// TO-DO" class="auth-card__logo">
+            </div>
+            <div class="auth-card__body">
+                <h1 id="auth-title">Sign in</h1>
+                <p class="auth-card__intro">Your tasks and notes in one place.</p>
+                <form id="auth-form">
+                    <label for="auth-email">Email</label>
+                    <input id="auth-email" type="email" autocomplete="email" required>
+                    <label for="auth-password">Password</label>
+                    <input id="auth-password" type="password" autocomplete="current-password" minlength="6" required>
+                    <button id="auth-submit" type="submit">Sign in</button>
+                </form>
+                <button class="auth-card__switch" id="auth-switch" type="button">Create an account</button>
+                <p id="auth-message" role="status" aria-live="polite"></p>
+            </div>
+        </div>
+    </section>
 
 
     <div class="overlay-edit overlay-edit-invisible">
@@ -16,8 +37,7 @@
         	<form class="edit-popup__entry">
         	            
         	            
-                <textarea class="edit-popup__input" id="edit-todo-title" name="edit-todo" 
-                maxlength="40" required>Title: Pay bills</textarea>
+                <textarea class="edit-popup__input" id="edit-todo-title" name="edit-todo" required>Title: Pay bills</textarea>
         	        
         	    
         
@@ -95,7 +115,7 @@
                     
                     
                     <textarea class="create-new__input" placeholder="Title: Pay bills" 
-                    id="new-todo-title" name="new-todo" maxlength="40" required></textarea>
+                    id="new-todo-title" name="new-todo" required></textarea>
                         
                     
 
@@ -141,7 +161,7 @@
                 <div class="create-new__project" id="new-project-menu">
 
                     <textarea class="create-new__project-input" placeholder="Title: House Renovation" 
-                    id="new-project-title" name="new-project" maxlength="40"></textarea>
+                    id="new-project-title" name="new-project"></textarea>
 
                     <div class="create-new__project-submit">Create Project</div>
                 </div>
@@ -150,7 +170,7 @@
                 <div class="create-new__note" id="new-note-menu">
 
                     <textarea class="create-new__note-input" placeholder="Title" 
-                    id="new-note-title" name="new-note" maxlength="30"></textarea>
+                    id="new-note-title" name="new-note"></textarea>
 
                     <textarea class="create-new__note-input create-new__note-input-big" placeholder="Details" 
                     id="new-note-text" name="new-note"></textarea>
@@ -165,13 +185,14 @@
         </form>
     </div>
 
-    <div class="content">
+    <div class="content" id="todo-app" hidden>
 
         
 
         
         <header class="header">
             <img src="img/logo.png" alt="logo" class="logo">
+            <button class="account-btn" id="logout-btn" type="button">Log out</button>
             <div class="menu-btn">
                 <div class="menu-btn__icon--before"></div>
                 <div class="menu-btn__icon"></div>
@@ -337,7 +358,7 @@
                     <div class="note">
                         <div class="note__close">&times;</div>
                         <div class="note__title"  
-                         contenteditable="true" spellcheck="false" name="" maxlength="40">Books to read 2</div>
+                         contenteditable="true" spellcheck="false" name="">Books to read 2</div>
                         
                         <div class="note__text" contenteditable="true" spellcheck="false" name="">
                             book1<br>
@@ -350,7 +371,7 @@
                     <div class="note">
                         <div class="note__close">&times;</div>
                         <div class="note__title"  
-                         contenteditable="true" spellcheck="false" name="" maxlength="40">Books to read 3</div>
+                         contenteditable="true" spellcheck="false" name="">Books to read 3</div>
                         
                         <div class="note__text" contenteditable="true" spellcheck="false" name="">
                             book1<br>
@@ -365,50 +386,7 @@
                     <div class="note">
                         <div class="note__close">&times;</div>
                         <div class="note__title"  
-                         contenteditable="true" spellcheck="false" name="" maxlength="40">Books to read 4</div>
-                        
-                        <div class="note__text" contenteditable="true" spellcheck="false" name="">
-                            book1<br>
-                            book2<br>
-                            book2<br>
-                            book3<br>
-                            book4<br>
-                        </div>
-                    </div>
-
-                    <div class="note">
-                        <div class="note__close">&times;</div>
-                        <div class="note__title"  
-                         contenteditable="true" spellcheck="false" name="" maxlength="40">Books to read 5</div>
-                        
-                        <div class="note__text" contenteditable="true" spellcheck="false" name="">
-                            book1<br>
-                            book1<br>
-                            book1<br>
-                            book1<br>
-                            book2<br>
-                            book2<br>
-                            book2<br>
-                            book3<br>
-                            book4<br>
-                        </div>
-                    </div>
-
-                    <div class="note">
-                        <div class="note__close">&times;</div>
-                        <div class="note__title"  
-                         contenteditable="true" spellcheck="false" name="" maxlength="40">Books to read 6</div>
-                        
-                        <div class="note__text" contenteditable="true" spellcheck="false" name="">
-                            book1<br>
-                            book4<br>
-                        </div>
-                    </div>
-
-                    <div class="note">
-                        <div class="note__close">&times;</div>
-                        <div class="note__title"  
-                         contenteditable="true" spellcheck="false" name="" maxlength="40">Books to read 7</div>
+                         contenteditable="true" spellcheck="false" name="">Books to read 4</div>
                         
                         <div class="note__text" contenteditable="true" spellcheck="false" name="">
                             book1<br>
@@ -422,7 +400,7 @@
                     <div class="note">
                         <div class="note__close">&times;</div>
                         <div class="note__title"  
-                         contenteditable="true" spellcheck="false" name="" maxlength="40">Books to read 8</div>
+                         contenteditable="true" spellcheck="false" name="">Books to read 5</div>
                         
                         <div class="note__text" contenteditable="true" spellcheck="false" name="">
                             book1<br>
@@ -440,7 +418,50 @@
                     <div class="note">
                         <div class="note__close">&times;</div>
                         <div class="note__title"  
-                         contenteditable="true" spellcheck="false" name="" maxlength="40">Books to read 9</div>
+                         contenteditable="true" spellcheck="false" name="">Books to read 6</div>
+                        
+                        <div class="note__text" contenteditable="true" spellcheck="false" name="">
+                            book1<br>
+                            book4<br>
+                        </div>
+                    </div>
+
+                    <div class="note">
+                        <div class="note__close">&times;</div>
+                        <div class="note__title"  
+                         contenteditable="true" spellcheck="false" name="">Books to read 7</div>
+                        
+                        <div class="note__text" contenteditable="true" spellcheck="false" name="">
+                            book1<br>
+                            book2<br>
+                            book2<br>
+                            book3<br>
+                            book4<br>
+                        </div>
+                    </div>
+
+                    <div class="note">
+                        <div class="note__close">&times;</div>
+                        <div class="note__title"  
+                         contenteditable="true" spellcheck="false" name="">Books to read 8</div>
+                        
+                        <div class="note__text" contenteditable="true" spellcheck="false" name="">
+                            book1<br>
+                            book1<br>
+                            book1<br>
+                            book1<br>
+                            book2<br>
+                            book2<br>
+                            book2<br>
+                            book3<br>
+                            book4<br>
+                        </div>
+                    </div>
+
+                    <div class="note">
+                        <div class="note__close">&times;</div>
+                        <div class="note__title"  
+                         contenteditable="true" spellcheck="false" name="">Books to read 9</div>
                         
                         <div class="note__text" contenteditable="true" spellcheck="false" name="">
                             book1<br>

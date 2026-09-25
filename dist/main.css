@@ -1711,3 +1711,94 @@ li {
   cursor: pointer;
 }
 /*# sourceMappingURL=main.css.map */
+
+.account-btn {
+    margin-left: auto;
+    margin-right: 16px;
+    padding: 8px 16px;
+    border: 1px solid white;
+    border-radius: 3px;
+    background: transparent;
+    color: white;
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.account-btn:hover {
+    background: white;
+    color: #501f3a;
+}
+
+.auth-dialog {
+    width: min(400px, calc(100vw - 24px));
+    padding: 32px;
+    border: 0;
+    border-top: 6px solid #c38d9e;
+    border-radius: 3px;
+    background: #f7f7f7;
+    color: #501f3a;
+    font-family: Lato, sans-serif;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, .35);
+}
+
+.auth-dialog::backdrop {
+    background: rgba(0, 0, 0, .55);
+}
+
+.auth-dialog h2 {
+    margin-bottom: 24px;
+}
+
+.auth-dialog form {
+    display: grid;
+    gap: 10px;
+}
+
+.auth-dialog input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #bbb;
+    border-radius: 3px;
+    font: inherit;
+}
+
+.auth-dialog__close {
+    float: right;
+    border: 0;
+    background: transparent;
+    color: #501f3a;
+    font-size: 28px;
+    cursor: pointer;
+}
+
+.auth-dialog__submit {
+    padding: 10px;
+    border: 0;
+    border-radius: 3px;
+    background: #c38d9e;
+    color: white;
+    font: inherit;
+    cursor: pointer;
+}
+
+.auth-dialog__submit:hover {
+    background: #501f3a;
+}
+
+.auth-dialog__switch {
+    display: block;
+    margin: 16px auto 0;
+    border: 0;
+    background: transparent;
+    color: #501f3a;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+#auth-message {
+    margin-top: 12px;
+    text-align: center;
+}

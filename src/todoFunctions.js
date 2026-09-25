@@ -1,3 +1,4 @@
+import { savePart } from './notebookStore.js';
 import {format} from "date-fns"
 import { el } from "date-fns/locale";
 import Colcade from 'colcade'
@@ -21,6 +22,7 @@ export const domManipulator = (function () {
         
         // dont render an empty list
         if (toDoList.length == 0) {
+            savePart("todos", todos);
             return
         }
 
@@ -101,7 +103,7 @@ export const domManipulator = (function () {
         })
 
         // save todos to local storage
-        localStorage.setItem("todos", JSON.stringify(todos));
+        savePart("todos", todos);
     }
 
     // render all to-dos from all projects 
@@ -192,7 +194,7 @@ export const domManipulator = (function () {
         }
 
         // save todos to local storage
-        localStorage.setItem("todos", JSON.stringify(toDoObject));
+        savePart("todos", toDoObject);
         
         
     }
@@ -483,7 +485,7 @@ export const domManipulator = (function () {
         console.log(toDoObject[project]);
     
         // save todos to local storage
-        localStorage.setItem("todos", JSON.stringify(toDoObject));
+        savePart("todos", toDoObject);
 
         // update project count
         renderProjectNames(toDoObject, display)
@@ -790,7 +792,7 @@ export const domManipulator = (function () {
             
             document.querySelector('.main').innerHTML = "";
             // save todos to local storage
-            localStorage.setItem("todos", JSON.stringify(todos));
+            savePart("todos", todos);
             renderProjectNames(todos, display);
             // change folder to home
             toDosManager.changeCurrentProject('home');
@@ -1014,7 +1016,7 @@ export const toDosManager = (function () {
         //check if a project is now empty, and delete the project if true
         checkEmptyProject(toDoList, display);
         // save todos to local storage
-        localStorage.setItem("todos", JSON.stringify(toDoList));
+        savePart("todos", toDoList);
         // update project name counter 
         domManipulator.renderProjectNames(toDoList, display);
 
@@ -1022,9 +1024,12 @@ export const toDosManager = (function () {
 
     // add new project to-dos object
     function addNewProject(e, todos, overlay, form, display) {
-        const newProject = (document.querySelector('.create-new__project-input')).value;
+        const enteredName = document.querySelector('.create-new__project-input').value.trim();
+        const existingName = Object.keys(todos).find(name => name.toLowerCase() === enteredName.toLowerCase());
+        const newProject = existingName || enteredName;
+        if (['__proto__', 'constructor', 'prototype'].includes(newProject)) return;
         // if text was entered in the input and project doesnt already exist
-        if (newProject && !(newProject.toLowerCase() in todos)) {
+        if (newProject && !(Object.prototype.hasOwnProperty.call(todos, newProject))) {
             todos[newProject] = [];
 
             // render project names in sidebar
@@ -1053,17 +1058,17 @@ export const toDosManager = (function () {
             domManipulator.projectNamesScrollBottom();
 
           // if the created project already exists, change folder to that project  
-        } else if (newProject && (newProject.toLowerCase() in todos)) {
+        } else if (newProject && (Object.prototype.hasOwnProperty.call(todos, newProject))) {
 
             // render all to-dos from all projects if on the home page. otherwise
             // only render the relevent to-do items
             if (newProject.toLowerCase() === 'home') {
                 console.log(`${newProject} already exists. changing folder to ${newProject}`);
-                changeCurrentProject(newProject.toLowerCase());
+                changeCurrentProject(newProject);
                 domManipulator.renderAllToDos(todos, display);
             } else {
                 console.log(`${newProject} already exists. changing folder to ${newProject}`);
-                changeCurrentProject(newProject.toLowerCase());
+                changeCurrentProject(newProject);
                 domManipulator.renderToDos(todos, display);
             }
             
@@ -1092,7 +1097,7 @@ export const toDosManager = (function () {
         domManipulator.renderEmptyProjectPlaceholder(todos, display);
 
         //update local storage
-        localStorage.setItem("todos", JSON.stringify(todos));
+        savePart("todos", todos);
 
     }
 
@@ -1273,7 +1278,7 @@ export const notesManager = (function () {
         })
 
         // save notes to local storage
-        localStorage.setItem("notes", JSON.stringify(notes));
+        savePart("notes", notes);
     }
 
     // delete selected note and refresh the notes
@@ -1284,7 +1289,7 @@ export const notesManager = (function () {
         arrangeNotes(notes);
 
         // save notes to local storage
-        localStorage.setItem("notes", JSON.stringify(notes));
+        savePart("notes", notes);
     }
 
     // edit note
@@ -1293,7 +1298,7 @@ export const notesManager = (function () {
         // toEdit returns "title" or "note" depending on what is changed
         const toEdit = e.target.classList[0].slice(6);
         const i = e.target.parentElement.dataset.index;
-        const newText = e.target.textContent;
+        const newText = e.target.innerText;
 
         if (toEdit === "title") {
             notes[i].title = newText;  
@@ -1303,7 +1308,7 @@ export const notesManager = (function () {
         // console.log('editing note');
 
         // save notes to local storage
-        localStorage.setItem("notes", JSON.stringify(notes));
+        savePart("notes", notes);
         
     }
 
