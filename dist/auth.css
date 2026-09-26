@@ -113,3 +113,27 @@
     text-align: center;
     font-size: 14px;
 }
+
+@media (max-width: 550px) {
+    .sync-bar {
+        width: calc(100vw - 16px);
+        flex-wrap: nowrap !important;
+        gap: 4px !important;
+        padding: 6px !important;
+    }
+
+    .sync-bar span {
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    .sync-bar button {
+        flex-shrink: 0;
+        padding: 5px !important;
+        font-size: 10px !important;
+        white-space: nowrap;
+    }
+}

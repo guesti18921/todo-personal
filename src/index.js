@@ -253,6 +253,7 @@ let polling = false;
 let changingAccount = false;
 
 const bar = document.createElement('div');
+bar.className = 'sync-bar';
 bar.style.cssText = 'position:fixed;bottom:8px;left:50%;transform:translateX(-50%);z-index:1000;max-width:96vw;padding:8px 12px;background:#f7f7f7;color:#501f3a;border:1px solid #c38d9e;border-radius:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font:13px sans-serif;';
 bar.hidden = true;
 const status = document.createElement('span');
@@ -267,7 +268,8 @@ function action(label, handler) {
     bar.append(button);
     return button;
 }
-action('Retry save', () => { flushNotebook(); });
+const retrySave = action('Retry save', () => { flushNotebook(); });
+retrySave.hidden = true;
 action('Download draft', () => {
     const draft = getDraft();
     if (!draft) return;
@@ -288,7 +290,10 @@ action('Load cloud copy', async () => {
     finally { todoApp.inert = !ready; }
 });
 document.body.append(bar);
-onSaveStatus(message => { status.textContent = message; });
+onSaveStatus(message => {
+    status.textContent = message;
+    retrySave.hidden = message === 'Saved' || message === 'Saving...';
+});
 
 function applyState(state) {
     for (const name of Object.keys(todos)) delete todos[name];
