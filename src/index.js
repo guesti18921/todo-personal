@@ -243,6 +243,9 @@ const authSwitch = document.querySelector('#auth-switch');
 const authTitle = document.querySelector('#auth-title');
 const authSubmit = document.querySelector('#auth-submit');
 const authMessage = document.querySelector('#auth-message');
+const authConfirm = document.querySelector('#auth-confirm');
+const authConfirmEmail = document.querySelector('#auth-confirm-email');
+const authConfirmBack = document.querySelector('#auth-confirm-back');
 const authPassword = document.querySelector('#auth-password');
 const logout = document.querySelector('#logout-btn');
 let registering = false;
@@ -358,6 +361,8 @@ supabase.auth.onAuthStateChange((_event, session) => {
     const ticket = ++generation;
     resetScreen();
     authScreen.hidden = false;
+    authConfirm.hidden = true;
+    authTitle.hidden = false;
     authForm.hidden = Boolean(id);
     authSwitch.hidden = Boolean(id);
     retryLoad.hidden = true;
@@ -376,6 +381,21 @@ authSwitch.addEventListener('click', () => {
     authSwitch.textContent = registering ? 'Already have an account? Sign in' : 'Create an account';
     authPassword.autocomplete = registering ? 'new-password' : 'current-password';
 });
+
+authConfirmBack.addEventListener('click', () => {
+    authConfirm.hidden = true;
+    authForm.hidden = false;
+    authSwitch.hidden = false;
+    authTitle.hidden = false;
+    authMessage.textContent = '';
+    authPassword.value = '';
+
+    registering = false;
+    authTitle.textContent = 'Sign in';
+    authSubmit.textContent = 'Sign in';
+    authSwitch.textContent = 'Create an account';
+    authPassword.autocomplete = 'current-password';
+});
 authForm.addEventListener('submit', async event => {
     event.preventDefault();
     const email = document.querySelector('#auth-email').value.trim();
@@ -388,7 +408,14 @@ authForm.addEventListener('submit', async event => {
             ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } })
             : await supabase.auth.signInWithPassword({ email, password });
         if (error) authMessage.textContent = error.message;
-        else if (signUp && !data.session) authMessage.textContent = 'Check your email to confirm your account.';
+        else if (signUp && !data.session) {
+    authForm.hidden = true;
+    authSwitch.hidden = true;
+    authTitle.hidden = true;
+    authMessage.textContent = '';
+    authConfirmEmail.textContent = email;
+    authConfirm.hidden = false;
+}
     } catch (_) { authMessage.textContent = 'Connection failed. Please try again.'; }
     finally { authSubmit.disabled = authSwitch.disabled = false; }
 });

@@ -147,3 +147,25 @@
         z-index: 10;
     }
 }
+
+.auth-confirm {
+    text-align: center;
+}
+
+.auth-confirm h2 {
+    margin-bottom: 16px;
+    color: #501f3a;
+    font-size: 26px;
+}
+
+.auth-confirm p {
+    margin-bottom: 14px;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.auth-confirm__email {
+    overflow-wrap: anywhere;
+    color: #501f3a;
+    font-weight: 700;
+}

@@ -25,6 +25,15 @@
                     <button id="auth-submit" type="submit">Sign in</button>
                 </form>
                 <button class="auth-card__switch" id="auth-switch" type="button">Create an account</button>
+                <div class="auth-confirm" id="auth-confirm" hidden>
+    <h2>Check your email</h2>
+    <p>We sent a confirmation link to:</p>
+    <p class="auth-confirm__email" id="auth-confirm-email"></p>
+    <p>Open the link in the email to confirm your account. Then come back and sign in.</p>
+    <button class="auth-card__switch" id="auth-confirm-back" type="button">
+        Back to sign in
+    </button>
+</div>
                 <p id="auth-message" role="status" aria-live="polite"></p>
             </div>
         </div>
