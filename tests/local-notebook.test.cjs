@@ -88,7 +88,9 @@ function fixture(existing = new Map()) {
             const store = await module(resolve(__dirname, '../src/notebookStore.js'));
             await store.evaluate();
             const local = modules.get(resolve(__dirname, '../src/localNotebook.js'));
-            return { store: store.namespace, local: local.namespace };
+            const mobile = await module(resolve(__dirname, '../src/mobileNotebook.js'));
+            await mobile.evaluate();
+            return { store: store.namespace, local: local.namespace, mobile: mobile.namespace };
         }
     };
 }
@@ -255,4 +257,46 @@ test('closing safely saved offline edits is allowed; failed local saves warn', a
     store.savePart('notes', [{ id: 'n', text: 'memory only edit' }]);
     f.listeners.get('beforeunload')({ preventDefault() { prevented = true; } });
     assert.equal(prevented, true);
+});
+
+test('Today filters overdue, timed and manually pinned records without pulling in every note', async () => {
+    const { mobile } = await fixture().load();
+    const state = { todos: { home: [
+        { id: 'late', name: 'late', date: '2026-10-05' },
+        { id: 'today-late', name: 'later', date: '2026-10-06', time: '18:00' },
+        { id: 'today-early', name: 'earlier', date: '2026-10-06', time: '09:00' },
+        { id: 'finished', date: '2026-10-05', checked: true },
+        { id: 'future', date: '2026-10-07' }
+    ], today: [{ id: 'legacy-pin', name: 'old today folder' }], week: [] }, notes: [{ id: 'plain', text: 'plain note' }, { id: 'pinned', text: 'pinned note', today: true }] };
+    const groups = mobile.todayGroups(mobile.listEntries(state.todos, state.notes), '2026-10-06');
+    assert.deepEqual(json(groups.overdue.map(record => record.entry.id)), ['late']);
+    assert.deepEqual(json(groups.today.map(record => record.entry.id)), ['today-early', 'today-late']);
+    assert.deepEqual(json(groups.pinned.map(record => record.entry.id)), ['legacy-pin', 'pinned']);
+});
+
+test('editing and moving a record between note/task preserves its ID, text and project peers', async () => {
+    const { mobile } = await fixture().load();
+    const state = { ...empty(), notes: [{ id: 'note', title: '日本語', text: '中文' }] };
+    const id = mobile.saveEntry(state.todos, state.notes, { type: 'task', text: '日本語', details: '中文', date: '', today: true }, mobile.listEntries(state.todos, state.notes)[0]);
+    assert.equal(id, 'note');
+    assert.equal(state.notes.length, 0);
+    assert.equal(state.todos.home[0].details, '中文');
+    assert.equal(state.todos.home[0].date, '');
+    mobile.saveEntry(state.todos, state.notes, { type: 'note', text: 'Deutsch', details: 'Español', date: '' }, mobile.listEntries(state.todos, state.notes)[0]);
+    assert.equal(state.todos.home.length, 0);
+    assert.equal(state.notes[0].id, 'note');
+    assert.equal(state.notes[0].text, 'Español');
+});
+
+test('completing and restoring tasks keeps the original deadline and disables reminders', async () => {
+    const { mobile } = await fixture().load();
+    const record = { type: 'task', entry: { id: 'task', date: '2026-10-05', checked: false, reminderAt: '2026-10-05T09:00:00Z' } };
+    mobile.toggleEntry(record);
+    assert.equal(record.entry.checked, true);
+    assert.ok(record.entry.completedAt);
+    assert.equal(record.entry.reminderAt, null);
+    mobile.toggleEntry(record);
+    assert.equal(record.entry.checked, false);
+    assert.equal(record.entry.date, '2026-10-05');
+    assert.equal(record.entry.reminderAt, null);
 });

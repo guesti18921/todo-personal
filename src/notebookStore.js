@@ -30,6 +30,7 @@ export function closeNotebook() {
     context = null;
 }
 export function hasPendingChanges() { return Boolean(context?.dirty); }
+export function isLocallySaved() { return Boolean(context?.localSaved); }
 export function getDraft() { return context ? copy(context.state) : null; }
 function stash(c) {
     c.localSaved = writeLocalNotebook(c.id, c);
@@ -100,7 +101,13 @@ export function savePart(part, value) {
     if (!c) return;
     if (!['todos', 'notes'].includes(part)) throw new Error('Invalid notebook section.');
     const next = normalizeNotebook({ ...c.state, [part]: value });
-    if (stable(c.state) === stable(next)) return;
+    if (stable(c.state) === stable(next)) {
+        if (!c.localSaved) {
+            const stored = stash(c);
+            report(c, stored ? c.dirty ? 'Saved locally — waiting for sync' : 'Saved locally' : 'Unsaved changes — keep this tab open');
+        }
+        return;
+    }
     c.state = next;
     c.dirty = true;
     const stored = stash(c);

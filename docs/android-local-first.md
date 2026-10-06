@@ -1,9 +1,15 @@
 # Android: first implementation stage
 
 This branch adds the storage foundation for the planned Android version. It
-keeps the existing interface and does not publish or produce an APK.
+keeps the existing colors, adds a mobile interface at widths up to 700px, and
+does not publish or produce an APK.
 
 ## Implemented
+
+- Mobile Today / All entries / Completed / Settings screens with a large +.
+- Fast task/note entry, optional date and time, manual pinning to Today,
+  account-scoped entry drafts, autosave of existing records and undo actions.
+- Existing desktop views handle tasks without a deadline.
 
 - Permanent, versioned local snapshots scoped to the authenticated account.
 - Cached notebooks open before a cloud request; pending edits survive reopening.
@@ -25,7 +31,8 @@ keeps the existing interface and does not publish or produce an APK.
 Run `npm test` for storage, migration, account isolation, restart, retry, Unicode
 and conflict scenarios. Tests use an isolated storage and cloud simulation; they
 do not contact a real Supabase account. Run `npm ci` and `npm run build` to compile
-the application.
+the application, then `npm run test:ui` for offline interface flows in a DOM
+simulation. These checks do not substitute for layout and Android device tests.
 
 ## Scope of offline support
 
@@ -41,10 +48,9 @@ snapshots remain account-scoped for later authenticated use on this device.
 
 ## Next stages
 
-1. Mobile Today / All entries / Completed / Settings screens and fast entry form.
-2. Android packaging and device testing, including full offline cold start.
-3. Google login and synchronization behavior under VPN/network switching.
-4. Local reminders, explicit confirmation of inferred dates and multilingual
+1. Android packaging and device testing, including full offline cold start.
+2. Google login and synchronization behavior under VPN/network switching.
+3. Local reminders, explicit confirmation of inferred dates and multilingual
    reminder parsing. Device timezone, not IP location, determines relative dates.
 
 The first Android release is tested by the project owner before publication.

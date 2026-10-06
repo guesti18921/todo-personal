@@ -1,5 +1,7 @@
-import { openNotebook, closeNotebook, savePart, onSaveStatus, flushNotebook, hasPendingChanges, readCloudChanges, getDraft, discardDraftAndReload } from './notebookStore.js';
+import { openNotebook, closeNotebook, savePart, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, discardDraftAndReload } from './notebookStore.js';
 import { supabase } from './supabaseClient.js';
+import { createMobileNotebook } from './mobileNotebook.js';
+let mobileUI = null;
 // all major functions are stored in these objects
 import {toDosManager, domManipulator, notesManager} from "./todoFunctions.js"
 
@@ -250,6 +252,7 @@ const authPassword = document.querySelector('#auth-password');
 const logout = document.querySelector('#logout-btn');
 let registering = false;
 let activeUser = null;
+let activeUserEmail = '';
 let generation = 0;
 let ready = false;
 let polling = false;
@@ -295,6 +298,7 @@ action('Load cloud copy', async () => {
 document.body.append(bar);
 onSaveStatus(message => {
     status.textContent = message;
+    mobileUI?.setStatus(message);
     retrySave.hidden = ['Saved', 'Saving...', 'Saved locally'].includes(message);
 });
 
@@ -307,6 +311,7 @@ function applyState(state) {
     domManipulator.renderProjectNames(todos, display);
     document.querySelectorAll('.nav__selected').forEach(el => el.classList.remove('nav__selected'));
     document.querySelector('.nav').children.item(0).classList.add('nav__selected');
+    mobileUI?.render();
 }
 function resetScreen() {
     ready = false;
@@ -357,8 +362,10 @@ async function loadAccount(id, ticket) {
 }
 supabase.auth.onAuthStateChange((_event, session) => {
     const id = session?.user?.id || null;
+    activeUserEmail = session?.user?.email || '';
     if (id === activeUser) return;
     activeUser = id;
+    mobileUI?.setAccount(id);
     const ticket = ++generation;
     resetScreen();
     authScreen.hidden = false;
@@ -438,6 +445,7 @@ async function refreshCloud() {
     if (!ready || polling || changingAccount || document.hidden || hasPendingChanges()) return;
     if (document.activeElement?.matches('input, textarea, [contenteditable="true"]')) return;
     if (document.querySelector('.create-new-open, .edit-popup-open, .details-popup-open')) return;
+    if (mobileUI?.isEditing()) return;
     polling = true;
     try {
         const state = await readCloudChanges();
@@ -446,3 +454,18 @@ async function refreshCloud() {
 }
 setInterval(refreshCloud, 10000);
 window.addEventListener('focus', refreshCloud);
+mobileUI = createMobileNotebook({
+    root: todoApp, todos, notes,
+    persist() {
+        savePart('todos', todos);
+        savePart('notes', notes);
+        domManipulator.renderAllToDos(todos, display);
+        domManipulator.renderProjectNames(todos, display);
+        mobileUI?.render();
+        return isLocallySaved();
+    },
+    logout: () => logout.click(),
+    getAccount: () => activeUserEmail
+});
+mobileUI.setAccount(activeUser);
+window.addEventListener('resize', () => mobileUI.render());
