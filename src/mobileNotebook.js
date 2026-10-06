@@ -135,7 +135,14 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         if (!id && !draft) main.querySelector('[name="text"]').focus();
     }
     function updateDate() {
-        const hasDate = Boolean(main.querySelector('[name="date"]').value);
+        const selectedDate = main.querySelector('[name="date"]').value;
+        const hasDate = Boolean(selectedDate);
+        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+        const preset = !hasDate ? 'none' : selectedDate === localDateString() ? 'today'
+            : selectedDate === localDateString(tomorrow) ? 'tomorrow' : null;
+        main.querySelectorAll('[data-date]').forEach(button => {
+            button.setAttribute('aria-pressed', String(button.dataset.date === preset));
+        });
         main.querySelector('[name="time"]').disabled = !hasDate;
         main.querySelector('[name="today"]').disabled = hasDate;
     }
@@ -190,7 +197,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     });
     shell.addEventListener('input', event => {
         if (event.target.id === 'mn-search') { query = event.target.value; renderList(); }
-        else if (editor) changed();
+        else if (editor) { if (event.target.name === 'date') updateDate(); changed(); }
     });
     shell.addEventListener('change', () => { if (editor) { updateDate(); changed(); } });
     window.addEventListener('beforeunload', event => {

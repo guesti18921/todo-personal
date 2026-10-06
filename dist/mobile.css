@@ -39,6 +39,7 @@
     .mn-filters, .mn-types { display: flex; gap: 6px; margin: 14px 0; flex-wrap: wrap; }
     .mn-filters button { padding: 6px 12px; border: 1px solid #cdb9c1; background: transparent; border-radius: 6px; font-size: 14px; }
     .mn-filters button[aria-pressed="true"] { background: #f0dfe5; }
+    .mn-filters button[data-date][aria-pressed="true"] { background: #fffdfb; }
     .mn-types { background: #eadfe2; padding: 4px; border-radius: 9px; margin: 20px 0; }
     .mn-types button { flex: 1; border: 0; background: transparent; border-radius: 6px; }
     .mn-types button[aria-pressed="true"] { background: #fffdfb; }

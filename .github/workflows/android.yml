@@ -1,8 +1,6 @@
 name: Build Android test APK
 
 on:
-  push:
-    branches: [android-local-first-2026-10-06]
   workflow_dispatch:
 
 permissions:
