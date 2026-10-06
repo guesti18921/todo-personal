@@ -77,10 +77,14 @@ test('native launch and running app deliver callbacks through the same handler',
         });
     }, { context });
     const native = new vm.SourceTextModule(readFileSync('src/nativeApp.js', 'utf8'), { context });
-    await native.link(name => name === '@capacitor/core' ? capacitor : app);
+    const opened = [];
+    const browser = new vm.SyntheticModule(['Browser'], function () { this.setExport('Browser', { async open(options) { opened.push(options.url); } }); }, { context });
+    await native.link(name => name === '@capacitor/core' ? capacitor : name === '@capacitor/browser' ? browser : app);
     await native.evaluate();
     await native.namespace.setupNativeApp({ ui: {}, onResume() {}, onAuthLink: async url => received.push(url) });
     assert.deepEqual(received, [callback]);
     events.get('appUrlOpen')({ url: callback });
     assert.deepEqual(received, [callback, callback]);
+    await native.namespace.openAuthBrowser('https://example.com');
+    assert.deepEqual(opened, ['https://example.com']);
 });

@@ -89,3 +89,10 @@
     .mn-copy-difference p { white-space: pre-wrap; overflow-wrap: anywhere; }
     .mn-setting h3 { font-size: 16px; margin: 15px 0 8px; }
 }
+
+/* Login controls share the existing notebook colours. */
+#auth-google-area[hidden] { display: none; }
+#auth-google { width: 100%; min-height: 48px; border: 1px solid #c38d9e; border-radius: 8px; background: #fff; color: #501f3a; font: inherit; cursor: pointer; }
+.auth-method-divider { margin: 14px 0; text-align: center; font-size: 14px; }
+#auth-password-toggle { margin: 4px 0 12px; min-height: 44px; }
+#auth-google:disabled { opacity: .6; cursor: wait; }

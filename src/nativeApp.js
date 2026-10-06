@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 import { App } from '@capacitor/app';
 
 export function isNativeApp() { return Capacitor.isNativePlatform(); }
@@ -21,4 +22,9 @@ export async function setupNativeApp({ ui, onResume, onAuthLink }) {
         }
         if (!ui.back()) App.minimizeApp();
     });
+}
+
+export async function openAuthBrowser(url, native = isNativeApp()) {
+    if (native) await Browser.open({ url });
+    else window.location.assign(url);
 }

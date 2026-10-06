@@ -290,3 +290,35 @@ test('relative suggestion is anchored across draft and record reopen, and combin
   assert.equal(doc.querySelector('[data-accept-reminder]').disabled, true, 'a past reminder cannot be enabled from the suggestion');
  } finally { dom.window.close(); }
 });
+
+test('login offers Google only when enabled, preserves email login and explains password errors', async () => {
+ let enabled = false;
+ const dom = boot([], false, async (request) => {
+  const url = String(request?.url || request);
+  if (url.includes('/auth/v1/settings')) return new Response(JSON.stringify({ external: { google: enabled } }), { status: 200 });
+  if (url.includes('/auth/v1/token')) return new Response(JSON.stringify({ code: 'invalid_credentials', error_code: 'invalid_credentials', msg: 'Invalid login credentials' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  if (url.includes('/auth/v1/signup')) return new Response(JSON.stringify({ user: { id, email: 'test@example.com', identities: [] }, session: null }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  throw Error('Unexpected request');
+ });
+ try {
+  const d = dom.window.document; await wait();
+  assert.equal(d.querySelector('#auth-google-area').hidden, true);
+  assert.equal(d.querySelector('#auth-form').hidden, false);
+  d.querySelector('#auth-password').value = 'long-enough';
+  d.querySelector('#auth-password-toggle').click();
+  assert.equal(d.querySelector('#auth-password').type, 'text');
+  assert.equal(d.querySelector('#auth-password-toggle').getAttribute('aria-pressed'), 'true');
+  d.querySelector('#auth-password-toggle').click(); assert.equal(d.querySelector('#auth-password').type, 'password');
+  enabled = true; dom.window.dispatchEvent(new dom.window.Event('focus')); await wait();
+  assert.equal(d.querySelector('#auth-google-area').hidden, false);
+  d.querySelector('#auth-email').value = 'test@example.com';
+  d.querySelector('#auth-form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await wait();
+  assert.match(d.querySelector('#auth-message').textContent, /Неверная почта или пароль/);
+  assert.equal(d.querySelector('#auth-google').disabled, false);
+  d.querySelector('#auth-switch').click();
+  d.querySelector('#auth-form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await wait();
+  assert.equal(d.querySelector('#auth-confirm').hidden, false);
+  assert.equal(d.querySelector('#auth-google-area').hidden, true);
+  d.querySelector('#auth-confirm-back').click(); assert.equal(d.querySelector('#auth-google-area').hidden, false);
+ } finally { dom.window.close(); }
+});

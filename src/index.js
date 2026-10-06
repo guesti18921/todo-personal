@@ -1,11 +1,13 @@
 import { openNotebook, closeNotebook, savePart, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, discardDraftAndReload, getSyncDetails, getRecoveryCopy, inspectConflict, resolveConflict } from './notebookStore.js';
-import { supabase } from './supabaseClient.js';
+import { supabase, SUPABASE_URL, SUPABASE_PUBLIC_KEY } from './supabaseClient.js';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { createReminderEngine } from './reminderEngine.js';
 import { listEntries, createMobileNotebook } from './mobileNotebook.js';
-import { isNativeApp, setupNativeApp } from './nativeApp.js';
+import { isNativeApp, setupNativeApp, openAuthBrowser } from './nativeApp.js';
 import { readCachedAccount } from './localAccount.js';
 import { AUTH_REDIRECT_URL, createAuthLinkHandler } from './authDeepLink.js';
+import { boundedFetch } from './networkFetch.js';
+import { authErrorMessage, createGoogleLogin, googleProviderEnabled } from './googleAuth.js';
 let mobileUI = null;
 let reminderEngine = null;
 // all major functions are stored in these objects
@@ -255,10 +257,51 @@ const authConfirm = document.querySelector('#auth-confirm');
 const authConfirmEmail = document.querySelector('#auth-confirm-email');
 const authConfirmBack = document.querySelector('#auth-confirm-back');
 const authPassword = document.querySelector('#auth-password');
+const authGoogle = document.querySelector('#auth-google');
+const authGoogleArea = document.querySelector('#auth-google-area');
+const passwordToggle = document.querySelector('#auth-password-toggle');
+let googleEnabled = false;
+let checkingGoogle = false;
 const logout = document.querySelector('#logout-btn');
 let registering = false;
 let activeUser = null;
 let activeUserEmail = '';
+function updateGoogleVisibility() { authGoogleArea.hidden = !googleEnabled || Boolean(activeUser) || authConfirm.hidden === false || authForm.hidden; }
+async function refreshGoogleProvider() {
+    if (checkingGoogle || activeUser) return;
+    checkingGoogle = true;
+    try { googleEnabled = await googleProviderEnabled({ fetch: boundedFetch, serverUrl: SUPABASE_URL, publicKey: SUPABASE_PUBLIC_KEY }); }
+    catch (_) { googleEnabled = false; }
+    finally { checkingGoogle = false; updateGoogleVisibility(); }
+}
+const googleLogin = createGoogleLogin({ auth: supabase.auth, native: isNativeApp(),
+    serverUrl: SUPABASE_URL,
+    redirectTo: isNativeApp() ? AUTH_REDIRECT_URL : location.origin + location.pathname,
+    open: openAuthBrowser,
+    onStatus(state, message) {
+        authGoogle.disabled = authSubmit.disabled = authSwitch.disabled = state === 'pending';
+        if (!activeUser) authMessage.textContent = state === 'pending' ? 'Открываем вход через Google…'
+            : state === 'opened' ? 'Завершите вход в окне Google. Если закрыли его, можно попробовать снова.' : message;
+    }
+});
+authGoogle.addEventListener('click', () => { if (googleEnabled) googleLogin.start(); });
+passwordToggle.addEventListener('click', () => {
+    const show = authPassword.type === 'password';
+    authPassword.type = show ? 'text' : 'password';
+    passwordToggle.textContent = show ? 'Скрыть пароль' : 'Показать пароль';
+    passwordToggle.setAttribute('aria-pressed', String(show));
+});
+const authReturnParams = new URLSearchParams(location.hash.slice(1));
+if (authReturnParams.has('error')) {
+    authMessage.textContent = authReturnParams.get('error') === 'access_denied'
+        ? 'Вход отменён. Можно попробовать снова или войти по почте.'
+        : 'Не удалось завершить вход. Попробуйте снова или войдите по почте.';
+    history.replaceState(null, '', location.pathname + location.search);
+}
+refreshGoogleProvider();
+window.addEventListener('focus', refreshGoogleProvider);
+window.addEventListener('online', refreshGoogleProvider);
+
 let generation = 0;
 let ready = false;
 let polling = false;
@@ -346,7 +389,7 @@ retryLoad.addEventListener('click', () => { if (activeUser) loadAccount(activeUs
 
 async function loadAccount(id, ticket) {
     retryLoad.disabled = true;
-    authMessage.textContent = 'Loading your notebook...';
+    authMessage.textContent = 'Открываем ваши записи…';
     try {
         const state = await openNotebook(id);
         if (ticket !== generation || !state) return;
@@ -385,9 +428,15 @@ supabase.auth.onAuthStateChange((_event, session) => {
     authTitle.hidden = false;
     authForm.hidden = Boolean(id);
     authSwitch.hidden = Boolean(id);
+    updateGoogleVisibility();
+    if (!id) refreshGoogleProvider();
     retryLoad.hidden = true;
     authForm.reset();
-    authMessage.textContent = id ? 'Loading your notebook...' : '';
+    authPassword.type = 'password';
+    passwordToggle.textContent = 'Показать пароль';
+    passwordToggle.setAttribute('aria-pressed', 'false');
+    if (id) authMessage.textContent = 'Открываем ваши записи…';
+    else if (_event !== 'INITIAL_SESSION') authMessage.textContent = '';
     // Run database calls outside the Supabase auth callback.
     if (id) setTimeout(() => { if (ticket === generation) loadAccount(id, ticket); }, 0);
 });
@@ -396,9 +445,9 @@ resetScreen();
 authSwitch.addEventListener('click', () => {
     registering = !registering;
     authMessage.textContent = '';
-    authTitle.textContent = registering ? 'Sign up' : 'Sign in';
-    authSubmit.textContent = registering ? 'Create account' : 'Sign in';
-    authSwitch.textContent = registering ? 'Already have an account? Sign in' : 'Create an account';
+    authTitle.textContent = registering ? 'Регистрация' : 'Войти';
+    authSubmit.textContent = registering ? 'Создать аккаунт' : 'Войти';
+    authSwitch.textContent = registering ? 'Уже есть аккаунт? Войти' : 'Создать аккаунт';
     authPassword.autocomplete = registering ? 'new-password' : 'current-password';
 });
 
@@ -406,14 +455,15 @@ authConfirmBack.addEventListener('click', () => {
     authConfirm.hidden = true;
     authForm.hidden = false;
     authSwitch.hidden = false;
+    updateGoogleVisibility();
     authTitle.hidden = false;
     authMessage.textContent = '';
     authPassword.value = '';
 
     registering = false;
-    authTitle.textContent = 'Sign in';
-    authSubmit.textContent = 'Sign in';
-    authSwitch.textContent = 'Create an account';
+    authTitle.textContent = 'Войти';
+    authSubmit.textContent = 'Войти';
+    authSwitch.textContent = 'Создать аккаунт';
     authPassword.autocomplete = 'current-password';
 });
 authForm.addEventListener('submit', async event => {
@@ -421,26 +471,27 @@ authForm.addEventListener('submit', async event => {
     const email = document.querySelector('#auth-email').value.trim();
     const password = authPassword.value;
     const signUp = registering;
-    authSubmit.disabled = authSwitch.disabled = true;
-    authMessage.textContent = 'Please wait...';
+    authGoogle.disabled = authSubmit.disabled = authSwitch.disabled = true;
+    authMessage.textContent = 'Подождите…';
     try {
         const { data, error } = signUp
             ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: isNativeApp() ? AUTH_REDIRECT_URL : location.origin + location.pathname } })
             : await supabase.auth.signInWithPassword({ email, password });
-        if (error) authMessage.textContent = error.message;
+        if (error) authMessage.textContent = authErrorMessage(error);
         else if (signUp && !data.session) {
     authForm.hidden = true;
     authSwitch.hidden = true;
+    updateGoogleVisibility();
     authTitle.hidden = true;
     authMessage.textContent = '';
     authConfirmEmail.textContent = email;
     document.querySelector('#auth-confirm-instructions').textContent = isNativeApp()
-        ? 'Open the link in the email to confirm your account and return to this app automatically.'
-        : 'Open the link in the email to confirm your account. Then come back and sign in.';
+        ? 'Откройте ссылку из письма: после подтверждения вы вернётесь в приложение.'
+        : 'Откройте ссылку из письма, затем вернитесь и войдите.';
     authConfirm.hidden = false;
 }
-    } catch (_) { authMessage.textContent = 'Connection failed. Please try again.'; }
-    finally { authSubmit.disabled = authSwitch.disabled = false; }
+    } catch (_) { authMessage.textContent = 'Нет соединения. Проверьте интернет и попробуйте снова.'; }
+    finally { authGoogle.disabled = authSubmit.disabled = authSwitch.disabled = false; }
 });
 logout.addEventListener('click', async () => {
     if (changingAccount) return;
@@ -535,15 +586,16 @@ if (!activeUser) {
         authScreen.hidden = false;
         authForm.hidden = true;
         authSwitch.hidden = true;
+    updateGoogleVisibility();
         loadAccount(cached.id, ticket);
     }
 }
 window.addEventListener('resize', () => mobileUI.render());
 const handleAuthLink = createAuthLinkHandler({ auth: supabase.auth, onStatus(result) {
-    if (result === 'pending') authMessage.textContent = 'Confirming your account...';
+    if (result === 'pending') authMessage.textContent = 'Завершаем вход…';
     if (result === 'error') {
         authConfirmBack.click();
-        authMessage.textContent = 'Could not complete confirmation. The link may have expired, or the connection failed. Try the link again or sign in if your email is already confirmed.';
+        authMessage.textContent = 'Не удалось завершить вход. Проверьте соединение и попробуйте снова. Если подтверждаете почту, откройте ссылку из письма ещё раз.';
     }
 } });
 setupNativeApp({ ui: mobileUI, onAuthLink: handleAuthLink, onResume: async () => {

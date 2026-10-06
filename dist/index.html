@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <link rel="stylesheet" href="main.css">
     <link rel="stylesheet" href="auth.css?v=2">
-    <link rel="stylesheet" href="mobile.css?v=5-sync">
+    <link rel="stylesheet" href="mobile.css?v=7-account">
     <link rel="icon" href="./img/favicon.png">
     <title>// TO-DO</title>
 </head>
@@ -16,23 +16,25 @@
                 <img src="img/logo.png" alt="// TO-DO" class="auth-card__logo">
             </div>
             <div class="auth-card__body">
-                <h1 id="auth-title">Sign in</h1>
-                <p class="auth-card__intro">Your tasks and notes in one place.</p>
+                <h1 id="auth-title">Войти</h1>
+                <p class="auth-card__intro">Задачи и заметки в одном месте.</p>
+                <div id="auth-google-area" hidden><button id="auth-google" type="button">Продолжить с Google</button><p class="auth-method-divider">или по почте</p></div>
                 <form id="auth-form">
                     <label for="auth-email">Email</label>
                     <input id="auth-email" type="email" autocomplete="email" required>
-                    <label for="auth-password">Password</label>
+                    <label for="auth-password">Пароль</label>
                     <input id="auth-password" type="password" autocomplete="current-password" minlength="6" required>
-                    <button id="auth-submit" type="submit">Sign in</button>
+                    <button id="auth-password-toggle" class="auth-card__switch" type="button" aria-controls="auth-password" aria-pressed="false">Показать пароль</button>
+                    <button id="auth-submit" type="submit">Войти</button>
                 </form>
-                <button class="auth-card__switch" id="auth-switch" type="button">Create an account</button>
+                <button class="auth-card__switch" id="auth-switch" type="button">Создать аккаунт</button>
                 <div class="auth-confirm" id="auth-confirm" hidden>
-    <h2>Check your email</h2>
-    <p>We sent a confirmation link to:</p>
+    <h2>Проверьте почту</h2>
+    <p>Ссылка для подтверждения отправлена на:</p>
     <p class="auth-confirm__email" id="auth-confirm-email"></p>
-    <p id="auth-confirm-instructions">Open the link in the email to confirm your account. Then come back and sign in.</p>
+    <p id="auth-confirm-instructions">Откройте ссылку из письма, затем вернитесь и войдите.</p>
     <button class="auth-card__switch" id="auth-confirm-back" type="button">
-        Back to sign in
+        Вернуться к входу
     </button>
 </div>
                 <p id="auth-message" role="status" aria-live="polite"></p>
@@ -484,6 +486,6 @@
 
     </div>
     
-    <script src="main.js?v=6-dates"></script>
+    <script src="main.js?v=7-account"></script>
 </body>
 </html>
