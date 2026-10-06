@@ -3,9 +3,12 @@ import { App } from '@capacitor/app';
 
 export function isNativeApp() { return Capacitor.isNativePlatform(); }
 
-export async function setupNativeApp({ ui, onResume }) {
+export async function setupNativeApp({ ui, onResume, onAuthLink }) {
     if (!isNativeApp()) return;
     document.documentElement.classList.add('native-app');
+    await App.addListener('appUrlOpen', ({ url }) => { onAuthLink(url); });
+    const launch = await App.getLaunchUrl();
+    if (launch?.url) await onAuthLink(launch.url);
     await App.addListener('appStateChange', ({ isActive }) => {
         if (isActive) onResume();
         else ui.saveDraft();

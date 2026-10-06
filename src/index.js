@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient.js';
 import { createMobileNotebook } from './mobileNotebook.js';
 import { isNativeApp, setupNativeApp } from './nativeApp.js';
 import { readCachedAccount } from './localAccount.js';
+import { AUTH_REDIRECT_URL, createAuthLinkHandler } from './authDeepLink.js';
 let mobileUI = null;
 // all major functions are stored in these objects
 import {toDosManager, domManipulator, notesManager} from "./todoFunctions.js"
@@ -418,7 +419,7 @@ authForm.addEventListener('submit', async event => {
     authMessage.textContent = 'Please wait...';
     try {
         const { data, error } = signUp
-            ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: isNativeApp() ? 'https://guesti18921.github.io/todo-personal/' : location.origin + location.pathname } })
+            ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: isNativeApp() ? AUTH_REDIRECT_URL : location.origin + location.pathname } })
             : await supabase.auth.signInWithPassword({ email, password });
         if (error) authMessage.textContent = error.message;
         else if (signUp && !data.session) {
@@ -427,6 +428,9 @@ authForm.addEventListener('submit', async event => {
     authTitle.hidden = true;
     authMessage.textContent = '';
     authConfirmEmail.textContent = email;
+    document.querySelector('#auth-confirm-instructions').textContent = isNativeApp()
+        ? 'Open the link in the email to confirm your account and return to this app automatically.'
+        : 'Open the link in the email to confirm your account. Then come back and sign in.';
     authConfirm.hidden = false;
 }
     } catch (_) { authMessage.textContent = 'Connection failed. Please try again.'; }
@@ -488,7 +492,14 @@ if (isNativeApp() && !activeUser) {
     }
 }
 window.addEventListener('resize', () => mobileUI.render());
-setupNativeApp({ ui: mobileUI, onResume: async () => {
+const handleAuthLink = createAuthLinkHandler({ auth: supabase.auth, onStatus(result) {
+    if (result === 'pending') authMessage.textContent = 'Confirming your account...';
+    if (result === 'error') {
+        authConfirmBack.click();
+        authMessage.textContent = 'Could not complete confirmation. The link may have expired, or the connection failed. Try the link again or sign in if your email is already confirmed.';
+    }
+} });
+setupNativeApp({ ui: mobileUI, onAuthLink: handleAuthLink, onResume: async () => {
     await flushNotebook();
     refreshCloud();
 } }).catch(error => { status.textContent = `Android integration unavailable: ${error.message}`; });

@@ -12,7 +12,21 @@ let manifest = fs.readFileSync(manifestPath, 'utf8');
 manifest = manifest.replace('android:allowBackup="true"', 'android:allowBackup="false"')
     .replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/todo_icon"')
     .replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/todo_icon"');
+if (!manifest.includes('android:scheme="todopersonal"')) {
+    manifest = manifest.replace('</activity>', `    <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="todopersonal" android:host="auth-callback" />
+            </intent-filter>
+        </activity>`);
+}
 fs.writeFileSync(manifestPath, manifest);
+const gradlePath = path.join(root, 'android/app/build.gradle');
+const gradle = fs.readFileSync(gradlePath, 'utf8')
+    .replace(/versionCode \d+/, 'versionCode 2')
+    .replace(/versionName "[^"]+"/, 'versionName "0.2.0-test"');
+fs.writeFileSync(gradlePath, gradle);
 const drawable = path.join(root, 'android/app/src/main/res/drawable');
 fs.mkdirSync(drawable, { recursive: true });
 fs.writeFileSync(path.join(drawable, 'todo_icon.xml'), `<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
