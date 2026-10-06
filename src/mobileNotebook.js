@@ -1,4 +1,5 @@
 import { createEntryId } from './localNotebook.js';
+import { suggestDeadline } from './deadlineParser.js';
 
 export function localDateString(date = new Date()) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
@@ -22,7 +23,7 @@ export function todayGroups(records, day = localDateString()) {
 export function saveEntry(todos, notes, fields, previous = null) {
     const id = previous?.entry.id || createEntryId();
     const stamp = new Date().toISOString();
-    const common = { ...(previous?.entry || {}), id, date: fields.date || '', time: fields.date ? fields.time || '' : '', today: !fields.date && Boolean(fields.today), updatedAt: stamp };
+    const common = { ...(previous?.entry || {}), id, date: fields.date || '', time: fields.date ? fields.time || '' : '', today: !fields.date && Boolean(fields.today), deadlineDismissed: fields.deadlineDismissed || '', updatedAt: stamp };
     if (previous && previous.type !== fields.type) {
         if (previous.type === 'note') notes.splice(notes.findIndex(entry => entry.id === id), 1);
         else todos[previous.project] = todos[previous.project].filter(entry => entry.id !== id);
@@ -64,6 +65,13 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     const records = () => listEntries(todos, notes);
     const find = id => records().find(record => record.entry.id === id);
     const draftKey = () => `todo-personal:entry-draft:${account}`;
+    const preferencesKey = () => `todo-personal:preferences:${account}`;
+    let smartDates = true, dismissedDeadline = '', suggestion = null;
+    const suggestionKey = value => value ? `${value.date}|${value.time}` : '';
+    function readPreferences() {
+        try { smartDates = JSON.parse(localStorage.getItem(preferencesKey()))?.smartDates !== false; }
+        catch (_) { smartDates = true; }
+    }
     const say = text => { message.textContent = text; };
     function offerUndo(text, action) {
         clearTimeout(undoTimer);
@@ -72,7 +80,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         undoTimer = setTimeout(() => { if (undo === action) { undo = null; say(''); } }, 8000);
     }
     function fields() {
-        return { type, text: main.querySelector('[name="text"]').value, details: main.querySelector('[name="details"]').value, date: main.querySelector('[name="date"]').value, time: main.querySelector('[name="time"]').value, today: main.querySelector('[name="today"]').checked };
+        return { type, text: main.querySelector('[name="text"]').value, details: main.querySelector('[name="details"]').value, date: main.querySelector('[name="date"]').value, time: main.querySelector('[name="time"]').value, today: main.querySelector('[name="today"]').checked, deadlineDismissed: dismissedDeadline };
     }
     function stashDraft() {
         if (!editor || editingId || !account) return;
@@ -88,9 +96,12 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         const details = kind === 'task' ? entry.details : entry.title ? entry.text : '';
         const labels = [];
         const dueDate = entry.date ? new Date(entry.date + 'T12:00:00') : null;
-        if (dueDate && !Number.isNaN(dueDate.getTime())) labels.push(entry.date === localDateString() ? 'Сегодня' : new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'short' }).format(dueDate));
+        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+        if (dueDate && !Number.isNaN(dueDate.getTime())) labels.push(entry.date === localDateString() ? 'Сегодня' : entry.date === localDateString(tomorrow) ? 'Завтра' : new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'short', year: dueDate.getFullYear() !== tomorrow.getFullYear() ? 'numeric' : undefined }).format(dueDate));
+        if (!entry.checked && entry.date && entry.date < localDateString()) labels.push('Просрочено');
         if (entry.time) labels.push(entry.time);
         if (!entry.date) labels.push('Без срока');
+        if (!entry.date && (entry.today || (entry.today === undefined && project === 'today'))) labels.push('В Сегодня');
         if (project && !['home', 'today', 'week'].includes(project)) labels.push(project);
         return `<article class="mn-card ${entry.checked ? 'mn-completed' : ''}">${kind === 'task' ? `<button class="mn-check" type="button" data-check="${escape(entry.id)}" aria-label="${entry.checked ? 'Вернуть в активные' : 'Выполнить'}: ${escape(text)}">${entry.checked ? '✓' : '○'}</button>` : '<span class="mn-note-label">Заметка</span>'}<button class="mn-open" type="button" data-open="${escape(entry.id)}"><span class="mn-title" dir="auto">${escape(text)}</span>${details ? `<span class="mn-details" dir="auto">${escape(details)}</span>` : ''}<span class="mn-meta">${escape(labels.join(' · '))}</span></button></article>`;
     }
@@ -112,7 +123,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         nav.hidden = false; add.hidden = view === 'settings';
         nav.querySelectorAll('button').forEach(button => { if (button.dataset.view === view) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
         if (view === 'settings') {
-            main.innerHTML = `<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button></section><section class="mn-setting"><h2>Сохранение</h2><p class="mn-settings-status">${escape(statusText)}</p><p>Записи сохраняются на этом устройстве и синхронизируются при доступном соединении.</p></section>`;
+            main.innerHTML = `<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button></section><section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Работают на устройстве. Срок применяется только с вашего подтверждения. Настройка сохраняется для этого аккаунта в этом браузере или приложении.</p><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Это подсказки срока; уведомления пока не включены.</p></section><section class="mn-setting"><h2>Сохранение</h2><p class="mn-settings-status">${escape(statusText)}</p><p>Записи сохраняются на этом устройстве и синхронизируются при доступном соединении.</p></section>`;
             return;
         }
         main.innerHTML = `<h1>${{ today: 'Сегодня', all: 'Все записи', done: 'Выполнено' }[view]}</h1><p class="mn-date">${new Intl.DateTimeFormat('ru', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())}</p><label class="mn-search-label" for="mn-search">Поиск</label><input id="mn-search" class="mn-input" type="search" placeholder="Найти запись" value="${escape(query)}">${view === 'all' ? `<div class="mn-filters">${[['all', 'Все'], ['task', 'Задачи'], ['note', 'Заметки']].map(([value, label]) => `<button type="button" data-filter="${value}" aria-pressed="${filter === value}">${label}</button>`).join('')}</div>` : ''}<div class="mn-list"></div>`;
@@ -129,8 +140,9 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         const text = entry ? previous.type === 'task' ? entry.name : entry.title || entry.text : draft?.text || '';
         const details = entry ? previous.type === 'task' ? entry.details : entry.title ? entry.text : '' : draft?.details || '';
         type = previous?.type || (draft?.type === 'note' ? 'note' : 'task');
+        dismissedDeadline = entry?.deadlineDismissed || draft?.deadlineDismissed || '';
         nav.hidden = true; add.hidden = true;
-        main.innerHTML = `<div class="mn-editor-header"><button type="button" class="mn-back" data-back>← Назад</button><button type="button" class="mn-primary" data-save>Сохранить</button></div><h1>${previous ? 'Запись' : 'Новая запись'}</h1><div class="mn-types">${[['task', 'Задача'], ['note', 'Заметка']].map(([value, label]) => `<button type="button" data-type="${value}" aria-pressed="${type === value}">${label}</button>`).join('')}</div><label for="mn-text">Что записать?</label><textarea class="mn-input mn-text" id="mn-text" name="text" dir="auto" placeholder="Запишите мысль или задачу">${escape(text)}</textarea><details ${details ? 'open' : ''}><summary>Подробности</summary><label for="mn-details">Дополнительный текст</label><textarea class="mn-input" id="mn-details" name="details" dir="auto">${escape(details)}</textarea></details><label for="mn-date">Срок · необязательно</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-date" name="date" value="${escape(entry?.date || draft?.date || '')}"><input class="mn-input" type="time" name="time" aria-label="Время срока" value="${escape(entry?.time || draft?.time || '')}"></div><div class="mn-filters"><button type="button" data-date="today">Сегодня</button><button type="button" data-date="tomorrow">Завтра</button><button type="button" data-date="none">Без срока</button></div><label class="mn-pin"><input type="checkbox" name="today" ${(entry ? (entry.today ?? (previous?.project === 'today')) : draft?.today) ? 'checked' : ''}>Добавить в Сегодня без срока</label>${previous?.type === 'task' ? `<button type="button" class="mn-secondary" data-complete="${escape(id)}">${entry.checked ? 'Вернуть в активные' : 'Выполнить задачу'}</button>` : ''}${previous ? `<button type="button" class="mn-delete" data-delete="${escape(id)}">Удалить запись</button>` : ''}`;
+        main.innerHTML = `<div class="mn-editor-header"><button type="button" class="mn-back" data-back>← Назад</button><button type="button" class="mn-primary" data-save>Сохранить</button></div><h1>${previous ? 'Запись' : 'Новая запись'}</h1><div class="mn-types">${[['task', 'Задача'], ['note', 'Заметка']].map(([value, label]) => `<button type="button" data-type="${value}" aria-pressed="${type === value}">${label}</button>`).join('')}</div><label for="mn-text">Что записать?</label><textarea class="mn-input mn-text" id="mn-text" name="text" dir="auto" placeholder="Запишите мысль или задачу">${escape(text)}</textarea><aside class="mn-suggestion" aria-label="Предложенный срок" aria-live="polite" hidden></aside><details ${details ? 'open' : ''}><summary>Подробности</summary><label for="mn-details">Дополнительный текст</label><textarea class="mn-input" id="mn-details" name="details" dir="auto">${escape(details)}</textarea></details><label for="mn-date">Срок · необязательно</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-date" name="date" value="${escape(entry?.date || draft?.date || '')}"><input class="mn-input" type="time" name="time" aria-label="Время срока" value="${escape(entry?.time || draft?.time || '')}"></div><div class="mn-filters"><button type="button" data-date="today">Сегодня</button><button type="button" data-date="tomorrow">Завтра</button><button type="button" data-date="none">Без срока</button></div><p class="mn-deadline-help"></p><label class="mn-pin"><input type="checkbox" name="today" ${(entry ? (entry.today ?? (previous?.project === 'today')) : draft?.today) ? 'checked' : ''}>Также показать в «Сегодня» без срока</label>${previous?.type === 'task' ? `<button type="button" class="mn-secondary" data-complete="${escape(id)}">${entry.checked ? 'Вернуть в активные' : 'Выполнить задачу'}</button>` : ''}${previous ? `<button type="button" class="mn-delete" data-delete="${escape(id)}">Удалить запись</button>` : ''}`;
         updateDate();
         if (!id && !draft) main.querySelector('[name="text"]').focus();
     }
@@ -144,7 +156,27 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
             button.setAttribute('aria-pressed', String(button.dataset.date === preset));
         });
         main.querySelector('[name="time"]').disabled = !hasDate;
-        main.querySelector('[name="today"]').disabled = hasDate;
+        const pin = main.querySelector('[name="today"]');
+        pin.disabled = hasDate;
+        if (hasDate) pin.checked = false;
+        main.querySelector('.mn-pin').hidden = hasDate;
+        main.querySelector('.mn-deadline-help').textContent = !hasDate
+            ? 'Без срока запись остаётся во «Все записи». Галочка ниже также покажет её в «Сегодня».'
+            : preset === 'today' ? 'Запись появится в «Сегодня» автоматически по выбранной дате.'
+            : selectedDate < localDateString() ? 'Этот срок уже прошёл. Запись появится в «Сегодня» в разделе «Просрочено».'
+            : 'Запись доступна во «Все записи» и появится в «Сегодня», когда наступит выбранная дата.';
+        renderSuggestion();
+    }
+    function renderSuggestion() {
+        const area = main.querySelector('.mn-suggestion');
+        if (!area) return;
+        suggestion = smartDates ? suggestDeadline(main.querySelector('[name="text"]').value) : null;
+        const current = fields();
+        const alreadySet = suggestion && current.date === suggestion.date && current.time === suggestion.time;
+        area.hidden = !suggestion || alreadySet || suggestionKey(suggestion) === dismissedDeadline;
+        if (area.hidden) { area.replaceChildren(); return; }
+        const label = new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(suggestion.date + 'T12:00:00'));
+        area.innerHTML = `<p class="mn-suggestion-title">Срок из текста: <strong>${escape(label)}${suggestion.time ? ` · ${escape(suggestion.time)}` : ''}</strong></p><p>${suggestion.inferredDate ? 'Указано только время — предлагаем ближайшую дату. ' : ''}${suggestion.past ? 'Этот срок уже прошёл. ' : ''}Текст записи сохранится целиком. ${current.date ? 'Применение заменит выбранный срок.' : 'Срок изменится только после подтверждения.'}</p><div class="mn-suggestion-actions"><button type="button" class="mn-primary" data-accept-deadline>Применить</button><button type="button" class="mn-secondary" data-dismiss-deadline>Не нужно</button></div>`;
     }
     function commit(close = true) {
         const value = fields();
@@ -176,10 +208,19 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         else if (button.hasAttribute('data-filter')) { filter = button.dataset.filter; render(); }
         else if (button.hasAttribute('data-type')) { type = button.dataset.type; main.querySelectorAll('[data-type]').forEach(item => item.setAttribute('aria-pressed', String(item.dataset.type === type))); const complete = main.querySelector('[data-complete]'); if (complete) complete.hidden = type !== 'task'; changed(); }
         else if (button.hasAttribute('data-date')) {
+            dismissedDeadline = suggestionKey(suggestDeadline(main.querySelector('[name="text"]').value));
             const date = new Date(); if (button.dataset.date === 'tomorrow') date.setDate(date.getDate() + 1);
             main.querySelector('[name="date"]').value = button.dataset.date === 'none' ? '' : localDateString(date);
             if (button.dataset.date === 'none') main.querySelector('[name="time"]').value = '';
             updateDate(); changed();
+        } else if (button.hasAttribute('data-accept-deadline') && suggestion) {
+            main.querySelector('[name="date"]').value = suggestion.date;
+            main.querySelector('[name="time"]').value = suggestion.time;
+            dismissedDeadline = '';
+            updateDate(); changed();
+        } else if (button.hasAttribute('data-dismiss-deadline')) {
+            dismissedDeadline = suggestionKey(suggestion);
+            renderSuggestion(); changed();
         } else if (button.hasAttribute('data-check') || button.hasAttribute('data-complete')) {
             const record = find(button.dataset.check || button.dataset.complete); if (!record || record.type !== 'task') return;
             const before = { ...record.entry };
@@ -197,9 +238,26 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     });
     shell.addEventListener('input', event => {
         if (event.target.id === 'mn-search') { query = event.target.value; renderList(); }
-        else if (editor) { if (event.target.name === 'date') updateDate(); changed(); }
+        else if (editor) {
+            if (['date', 'time'].includes(event.target.name)) {
+                dismissedDeadline = suggestionKey(suggestDeadline(main.querySelector('[name="text"]').value));
+                updateDate();
+            } else if (event.target.name === 'text') renderSuggestion();
+            changed();
+        }
     });
-    shell.addEventListener('change', () => { if (editor) { updateDate(); changed(); } });
+    shell.addEventListener('change', event => {
+        if (event.target.hasAttribute('data-smart-dates')) {
+            try {
+                localStorage.setItem(preferencesKey(), JSON.stringify({ smartDates: event.target.checked }));
+                smartDates = event.target.checked;
+                say(smartDates ? 'Подсказки сроков включены.' : 'Подсказки сроков выключены. Уже выбранные сроки сохранены.');
+            } catch (_) { event.target.checked = smartDates; say('Не удалось сохранить настройку на устройстве.'); }
+        } else if (editor) {
+            if (['date', 'time'].includes(event.target.name)) dismissedDeadline = suggestionKey(suggestDeadline(main.querySelector('[name="text"]').value));
+            updateDate(); changed();
+        }
+    });
     window.addEventListener('beforeunload', event => {
         if (editor && !editingId) stashDraft();
         if (!draftSafe) { event.preventDefault(); event.returnValue = ''; }
@@ -214,7 +272,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
             return false;
         },
         isEditing: () => editor || Boolean(undo),
-        setAccount(id) { if (account !== id) { clearTimeout(undoTimer); account = id; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
+        setAccount(id) { if (account !== id) { clearTimeout(undoTimer); account = id; readPreferences(); dismissedDeadline = ''; suggestion = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
         setStatus(text) {
             const labels = { 'Saved': 'Синхронизировано', 'Saved locally': 'Сохранено на устройстве', 'Saved locally — waiting for sync': 'На устройстве · ожидает синхронизации', 'Saving...': 'Синхронизация…', 'Saved locally — connection unavailable': 'На устройстве · нет соединения', 'Saved locally — connection unavailable; sync will retry': 'На устройстве · ожидает соединения' };
             statusText = labels[text] || text;

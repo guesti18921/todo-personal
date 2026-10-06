@@ -110,3 +110,58 @@ test('mobile notebook core flows persist across offline restart', async () => {
   console.log('PASS: mobile Today/create/edit/complete/restore/search/delete/undo, Unicode draft restart, optional deadline and account display; network unavailable, no JS errors.');
  } finally { dom.window.close(); }
 });
+
+test('deadline suggestions require confirmation, remember rejection and respect account settings', async () => {
+ const exp = Math.floor(Date.now() / 1000) + 86400;
+ const jwt = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url') + '.' + Buffer.from(JSON.stringify({ sub: id, exp, role: 'authenticated' })).toString('base64url') + '.test';
+ let dom = boot([['sb-ihvwqqvndmwtislvgamd-auth-token', JSON.stringify({ access_token: jwt, refresh_token: 'test-only', expires_at: exp, expires_in: 86400, token_type: 'bearer', user: { id, email: 'test@example.com' } })], [cacheKey, JSON.stringify({ schemaVersion: 1, state: { todos: { home: [], today: [], week: [] }, notes: [] }, revision: 0, dirty: false })]]);
+ const doc = () => dom.window.document;
+ const click = selector => doc().querySelector(selector).click();
+ const input = (selector, value) => { const el = doc().querySelector(selector); el.value = value; el.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
+ const snapshot = () => Array.from({ length: dom.window.localStorage.length }, (_, i) => { const key = dom.window.localStorage.key(i); return [key, dom.window.localStorage.getItem(key)]; });
+ const disk = () => JSON.parse(dom.window.localStorage.getItem(cacheKey));
+ try {
+  await wait();
+  click('.mn-add'); input('#mn-text', 'Завтра в 18:00 позвонить');
+  assert.equal(doc().querySelector('[name="date"]').value, '', 'typing never changes the deadline');
+  assert.equal(doc().querySelector('.mn-suggestion').hidden, false);
+  click('[data-accept-deadline]');
+  const acceptedDate = doc().querySelector('[name="date"]').value;
+  assert.ok(acceptedDate);
+  assert.equal(doc().querySelector('[name="time"]').value, '18:00');
+  assert.equal(doc().querySelector('.mn-pin').hidden, true);
+  assert.match(doc().querySelector('.mn-deadline-help').textContent, /когда наступит/);
+  click('[data-date="none"]');
+  assert.equal(doc().querySelector('.mn-pin').hidden, false);
+  assert.equal(doc().querySelector('.mn-suggestion').hidden, true, 'explicit no-deadline choice is respected');
+  click('[name="today"]'); click('[data-save]');
+  assert.equal(disk().state.todos.home[0].today, true);
+  assert.match(doc().querySelector('.mn-meta').textContent, /В Сегодня/);
+  click('[data-open]');
+  assert.equal(doc().querySelector('.mn-suggestion').hidden, true, 'dismissal survives saved record reopening');
+  input('#mn-text', 'Сегодня в 19:00 позвонить');
+  assert.equal(doc().querySelector('.mn-suggestion').hidden, false, 'a different deadline can be suggested');
+  click('[data-dismiss-deadline]'); click('[data-back]');
+  click('[data-view="settings"]');
+  click('[data-smart-dates]');
+  assert.equal(JSON.parse(dom.window.localStorage.getItem('todo-personal:preferences:' + id)).smartDates, false);
+  const saved = snapshot(); dom.window.close(); dom = boot(saved); await wait();
+  click('.mn-add'); input('#mn-text', 'Tomorrow at 6 pm call');
+  assert.equal(doc().querySelector('.mn-suggestion').hidden, true, 'disabled preference survives offline restart');
+  click('[data-back]'); click('[data-view="settings"]'); click('[data-smart-dates]');
+  click('[data-view="all"]'); click('.mn-add');
+  assert.equal(doc().querySelector('.mn-suggestion').hidden, false, 'enabled preference applies to the existing draft');
+  click('[data-dismiss-deadline]'); click('[data-back]'); click('.mn-add');
+  assert.equal(doc().querySelector('.mn-suggestion').hidden, true, 'draft remembers rejection');
+  input('#mn-text', '明日午後6時電話する');
+  // Same deadline remains dismissed even when the same intent is rephrased.
+  assert.equal(doc().querySelector('.mn-suggestion').hidden, true);
+  input('#mn-text', '明日午後7時電話する');
+  assert.equal(doc().querySelector('.mn-suggestion').hidden, false);
+  click('[data-accept-deadline]'); click('[data-save]');
+  assert.equal(disk().state.todos.home[1].time, '19:00');
+  assert.equal(disk().state.todos.home[1].name, '明日午後7時電話する', 'original Unicode text is preserved');
+  assert.equal(disk().state.todos.home[1].date, acceptedDate);
+  assert.deepEqual(errors, []);
+ } finally { dom.window.close(); }
+});

@@ -4,7 +4,7 @@
   "description": "",
   "main": "script.js",
   "scripts": {
-    "test": "node --experimental-vm-modules --test tests/local-notebook.test.cjs tests/auth-deep-link.test.cjs",
+    "test": "node --experimental-vm-modules --test tests/local-notebook.test.cjs tests/auth-deep-link.test.cjs tests/deadline-parser.test.cjs",
     "build": "webpack",
     "test:ui": "node --test tests/mobile-ui.test.cjs",
     "android:prepare": "node scripts/prepare-android.cjs",
