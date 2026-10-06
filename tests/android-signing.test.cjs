@@ -110,6 +110,11 @@ test('isolated workflow signer keeps keys private, verifies the expected certifi
             assert.equal(fs.readFileSync(path.join(f.root, 'signed/certificate-sha256.txt'), 'utf8').trim(), expected);
         } else {
             assert.notEqual(result.status, 0); assert.equal(fs.existsSync(path.join(f.root, 'signed')), false);
+            if (mode === 'mismatch' || mode === 'range-mismatch') {
+                assert.ok(result.stderr.includes('Public expected certificate SHA-256: ' + expected));
+                assert.ok(result.stderr.includes('Public APK certificate digest fields:'));
+                assert.equal(result.stderr.includes('CN=Test fixture'), false);
+            }
         }
     };
     for (const mode of ['good', 'sdk-ranges', 'missing', 'wrong', 'mismatch', 'range-mismatch']) run(mode);
