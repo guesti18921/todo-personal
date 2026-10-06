@@ -66,3 +66,32 @@ test('dotted clock notation after a time preposition does not consume calendar d
  assert.equal(parse('Сдать 07.10.2026', now)?.date, '2026-10-07');
  assert.equal(parse('Завтра в 25.00', now), null); assert.equal(parse('Завтра в 18.99', now), null);
 });
+
+test('numeric durations in ten languages calculate hours, calendar days and weeks without network', async () => {
+ const parse = await parser();
+ for (const text of ['Через 2 часа позвонить', 'Call in 2 hours', 'In 2 Stunden anrufen', 'Tra 2 ore chiamare', 'Llamar dentro de 2 horas', 'Dans 2 heures appeler', 'Daqui a 2 horas ligar', '2小时后打电话', '2時間後電話する', '2시간 후 전화']) {
+  assert.equal(parse(text, now)?.date, '2026-10-06', text); assert.equal(parse(text, now)?.time, '19:30', text); assert.equal(parse(text, now)?.interpretation, 'relative');
+ }
+ for (const text of ['через 3 дня', 'in 3 days', 'in 3 Tagen', 'tra 3 giorni', 'en 3 días', 'dans 3 jours', 'em 3 dias', '3天后', '3日後', '3일 후']) {
+  assert.equal(parse(text, now)?.date, '2026-10-09', text); assert.equal(parse(text, now)?.time, '', text);
+ }
+ assert.equal(parse('через 2 недели', now)?.date, '2026-10-20');
+ assert.equal(parse('Через 30 минут', new Date(2026, 9, 6, 23, 50))?.date, '2026-10-07');
+ assert.equal(parse('Через 1 минуту', new Date(2026, 9, 6, 17, 30, 59))?.time, '17:32');
+ assert.equal(parse('Через 3 дня в 18:00', now)?.time, '18:00');
+});
+test('weekdays in ten languages distinguish nearest, next and current calendar weeks', async () => {
+ const parse = await parser();
+ for (const text of ['В пятницу в 18:00', 'Friday at 18:00', 'Freitag um 18:00', 'Venerdì alle 18:00', 'Viernes a las 18:00', 'Vendredi à 18:00', 'Sexta-feira às 18:00', '星期五18:00', '金曜日18:00', '금요일 18:00']) {
+  assert.equal(parse(text, now)?.date, '2026-10-09', text); assert.equal(parse(text, now)?.time, '18:00', text);
+ }
+ for (const text of ['В следующую пятницу', 'Next Friday', 'Nächsten Freitag', 'Venerdì prossimo', 'Próximo viernes', 'Vendredi prochain', 'Na próxima sexta-feira', '下周五', '来週の金曜日', '다음 주 금요일']) assert.equal(parse(text, now)?.date, '2026-10-16', text);
+ assert.equal(parse('This Monday', now)?.date, '2026-10-05'); assert.equal(parse('This Monday', now)?.past, true);
+ assert.equal(parse('Во вторник в 16:00', now)?.date, '2026-10-13');
+ assert.equal(parse('Во вторник в 18:00', now)?.date, '2026-10-06');
+ assert.equal(parse('2026-10-06 Tuesday at 16:00', now)?.date, '2026-10-06', 'explicit calendar date does not shift automatically');
+});
+test('invalid, competing and unsupported compound durations never create partial suggestions', async () => {
+ const parse = await parser();
+ for (const text of ['через 0 минут', 'через -1 час', 'через 1.5 дня', 'in 999999999 days', 'через 1 час 30 минут', 'in 1 hour and 30 minutes', 'через 2 часа или через 3 часа', 'Monday or Friday', 'Завтра в пятницу']) assert.equal(parse(text, now), null, text);
+});

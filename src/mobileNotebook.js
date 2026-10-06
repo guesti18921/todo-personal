@@ -25,7 +25,7 @@ export function todayGroups(records, day = localDateString()) {
 export function saveEntry(todos, notes, fields, previous = null) {
     const id = previous?.entry.id || createEntryId();
     const stamp = new Date().toISOString();
-    const common = { ...(previous?.entry || {}), id, date: fields.date || '', time: fields.date ? fields.time || '' : '', today: !fields.date && Boolean(fields.today), deadlineDismissed: fields.deadlineDismissed || '', updatedAt: stamp };
+    const common = { ...(previous?.entry || {}), id, date: fields.date || '', time: fields.date ? fields.time || '' : '', today: !fields.date && Boolean(fields.today), deadlineDismissed: fields.deadlineDismissed || '', deadlineAnchor: fields.deadlineAnchor || previous?.entry.deadlineAnchor || null, updatedAt: stamp };
     common.reminder = normalizeReminder(fields.reminder ?? previous?.entry.reminder);
     if (previous && previous.type !== fields.type) {
         if (previous.type === 'note') notes.splice(notes.findIndex(entry => entry.id === id), 1);
@@ -77,7 +77,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     const find = id => records().find(record => record.entry.id === id);
     const draftKey = () => `todo-personal:entry-draft:${account}`;
     const preferencesKey = () => `todo-personal:preferences:${account}`;
-    let smartDates = true, dismissedDeadline = '', suggestion = null;
+    let smartDates = true, dismissedDeadline = '', suggestion = null, deadlineAnchor = null;
     let syncDetails = null, syncBusy = false, syncPreview = null, syncError = '', offlineReady = false;
     let reminderState = { native: false, enabled: false, permission: 'unknown', exact: false, scheduled: 0, error: '' }, reminderQueue = [], reminderBusy = false;
     const suggestionKey = value => value ? `${value.date}|${value.time}` : '';
@@ -93,7 +93,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         undoTimer = setTimeout(() => { if (undo === action) { undo = null; say(''); } }, 8000);
     }
     function fields() {
-        return { type, text: main.querySelector('[name="text"]').value, details: main.querySelector('[name="details"]').value, date: main.querySelector('[name="date"]').value, time: main.querySelector('[name="time"]').value, today: main.querySelector('[name="today"]').checked, deadlineDismissed: dismissedDeadline,
+        return { type, text: main.querySelector('[name="text"]').value, details: main.querySelector('[name="details"]').value, date: main.querySelector('[name="date"]').value, time: main.querySelector('[name="time"]').value, today: main.querySelector('[name="today"]').checked, deadlineDismissed: dismissedDeadline, deadlineAnchor,
             reminder: normalizeReminder({ mode: main.querySelector('[name="reminderMode"]').value, date: main.querySelector('[name="reminderDate"]').value, time: main.querySelector('[name="reminderTime"]').value }) };
     }
     function stashDraft() {
@@ -194,11 +194,14 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         const entry = previous?.entry;
         const text = entry ? previous.type === 'task' ? entry.name : entry.title || entry.text : draft?.text || '';
         const details = entry ? previous.type === 'task' ? entry.details : entry.title ? entry.text : '' : draft?.details || '';
+        const savedAnchor = entry?.deadlineAnchor || draft?.deadlineAnchor;
+        deadlineAnchor = savedAnchor?.text === text && !Number.isNaN(new Date(savedAnchor.at).getTime())
+            ? savedAnchor : { text, at: new Date().toISOString() };
         const reminder = normalizeReminder(entry?.reminder || draft?.reminder);
         type = previous?.type || (draft?.type === 'note' ? 'note' : 'task');
         dismissedDeadline = entry?.deadlineDismissed || draft?.deadlineDismissed || '';
         nav.hidden = true; add.hidden = true;
-        main.innerHTML = `<div class="mn-editor-header"><button type="button" class="mn-back" data-back>← Назад</button><button type="button" class="mn-primary" data-save>Сохранить</button></div><h1>${previous ? 'Запись' : 'Новая запись'}</h1><div class="mn-types">${[['task', 'Задача'], ['note', 'Заметка']].map(([value, label]) => `<button type="button" data-type="${value}" aria-pressed="${type === value}">${label}</button>`).join('')}</div><p class="mn-type-help">${type === 'task' ? 'Задача — дело, которое можно отметить выполненным.' : 'Заметка — мысль или информация, которую нужно сохранить.'} У обоих типов можно выбрать срок и напоминание.</p><label for="mn-text">Что записать?</label><textarea class="mn-input mn-text" id="mn-text" name="text" dir="auto" placeholder="Запишите мысль или задачу">${escape(text)}</textarea><aside class="mn-suggestion" aria-label="Предложенный срок" aria-live="polite" hidden></aside><details ${details ? 'open' : ''}><summary>Подробности</summary><label for="mn-details">Дополнительный текст</label><textarea class="mn-input" id="mn-details" name="details" dir="auto">${escape(details)}</textarea></details><label for="mn-date">Срок · необязательно</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-date" name="date" value="${escape(entry?.date || draft?.date || '')}"><input class="mn-input" type="time" name="time" aria-label="Время срока" value="${escape(entry?.time || draft?.time || '')}"></div><div class="mn-filters"><button type="button" data-date="today">Сегодня</button><button type="button" data-date="tomorrow">Завтра</button><button type="button" data-date="none">Без срока</button></div><p class="mn-deadline-help"></p><label class="mn-pin"><input type="checkbox" name="today" ${(entry ? (entry.today ?? (previous?.project === 'today')) : draft?.today) ? 'checked' : ''}>Также показать в «Сегодня» без срока</label><section class="mn-reminder-form"><h2>Напоминание</h2><label for="mn-reminder-mode">Когда напомнить?</label><select class="mn-input" id="mn-reminder-mode" name="reminderMode">${REMINDER_OPTIONS.map(([value, label]) => `<option value="${value}" ${reminder.mode === value ? 'selected' : ''}>${label}</option>`).join('')}</select><div class="mn-reminder-custom" hidden><label for="mn-reminder-date">Дата напоминания</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-reminder-date" name="reminderDate" value="${escape(reminder.date)}"><input class="mn-input" type="time" name="reminderTime" aria-label="Время напоминания" value="${escape(reminder.time)}"></div></div><p class="mn-reminder-preview" aria-live="polite"></p><p class="mn-reminder-device"></p><button type="button" class="mn-secondary" data-enable-reminders>Включить напоминания на этом устройстве</button></section>${previous?.type === 'task' ? `<button type="button" class="mn-secondary" data-complete="${escape(id)}">${entry.checked ? 'Вернуть в активные' : 'Выполнить задачу'}</button>` : ''}${previous ? `<button type="button" class="mn-delete" data-delete="${escape(id)}">Удалить запись</button>` : ''}`;
+        main.innerHTML = `<div class="mn-editor-header"><button type="button" class="mn-back" data-back>← Назад</button><button type="button" class="mn-primary" data-save>Сохранить</button></div><h1>${previous ? 'Запись' : 'Новая запись'}</h1><div class="mn-types">${[['task', 'Задача'], ['note', 'Заметка']].map(([value, label]) => `<button type="button" data-type="${value}" aria-pressed="${type === value}">${label}</button>`).join('')}</div><p class="mn-type-help">${type === 'task' ? 'Задача — дело, которое можно отметить выполненным.' : 'Заметка — мысль или информация, которую нужно сохранить.'} У обоих типов можно выбрать срок и напоминание.</p><label for="mn-text">Что записать?</label><textarea class="mn-input mn-text" id="mn-text" name="text" dir="auto" placeholder="Запишите мысль или задачу">${escape(text)}</textarea><aside class="mn-suggestion" aria-label="Предложенный срок" aria-live="polite" hidden></aside><details class="mn-language-examples"><summary>Как указать срок словами</summary><p>Можно написать день недели или срок через число минут, часов, дней или недель. Проверьте предложенную дату перед применением.</p><ul>${[['Русский', 'в пятницу в 18:00; через 2 часа'], ['English', 'Friday at 6 pm; in 2 hours'], ['Deutsch', 'Freitag um 18:00; in 2 Stunden'], ['Italiano', 'venerdì alle 18:00; tra 2 ore'], ['Español', 'viernes a las 18:00; en 2 horas'], ['Français', 'vendredi à 18:00; dans 2 heures'], ['Português', 'sexta-feira às 18:00; daqui a 2 horas'], ['中文', '星期五18:00; 2小时后'], ['日本語', '金曜日18:00; 2時間後'], ['한국어', '금요일 18:00; 2시간 후']].map(([language, sample]) => `<li><strong>${language}:</strong> ${sample}</li>`).join('')}</ul><p>«Следующая пятница» означает пятницу следующей недели. «Через 2 часа» отсчитывается от ввода фразы. Текст записи не сокращается и не переводится.</p></details><details ${details ? 'open' : ''}><summary>Подробности</summary><label for="mn-details">Дополнительный текст</label><textarea class="mn-input" id="mn-details" name="details" dir="auto">${escape(details)}</textarea></details><label for="mn-date">Срок · необязательно</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-date" name="date" value="${escape(entry?.date || draft?.date || '')}"><input class="mn-input" type="time" name="time" aria-label="Время срока" value="${escape(entry?.time || draft?.time || '')}"></div><div class="mn-filters"><button type="button" data-date="today">Сегодня</button><button type="button" data-date="tomorrow">Завтра</button><button type="button" data-date="none">Без срока</button></div><p class="mn-deadline-help"></p><label class="mn-pin"><input type="checkbox" name="today" ${(entry ? (entry.today ?? (previous?.project === 'today')) : draft?.today) ? 'checked' : ''}>Также показать в «Сегодня» без срока</label><section class="mn-reminder-form"><h2>Напоминание</h2><label for="mn-reminder-mode">Когда напомнить?</label><select class="mn-input" id="mn-reminder-mode" name="reminderMode">${REMINDER_OPTIONS.map(([value, label]) => `<option value="${value}" ${reminder.mode === value ? 'selected' : ''}>${label}</option>`).join('')}</select><div class="mn-reminder-custom" hidden><label for="mn-reminder-date">Дата напоминания</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-reminder-date" name="reminderDate" value="${escape(reminder.date)}"><input class="mn-input" type="time" name="reminderTime" aria-label="Время напоминания" value="${escape(reminder.time)}"></div></div><p class="mn-reminder-preview" aria-live="polite"></p><p class="mn-reminder-device"></p><button type="button" class="mn-secondary" data-enable-reminders>Включить напоминания на этом устройстве</button></section>${previous?.type === 'task' ? `<button type="button" class="mn-secondary" data-complete="${escape(id)}">${entry.checked ? 'Вернуть в активные' : 'Выполнить задачу'}</button>` : ''}${previous ? `<button type="button" class="mn-delete" data-delete="${escape(id)}">Удалить запись</button>` : ''}`;
         updateDate();
         if (!id && !draft) main.querySelector('[name="text"]').focus();
     }
@@ -260,16 +263,29 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         const text = record.type === 'task' ? record.entry.name : record.entry.title || record.entry.text;
         reminderBanner.innerHTML = `<h2>Время напоминания</h2><p dir="auto">${escape(text)}</p><div><button type="button" class="mn-secondary" data-reminder-open>Открыть</button><button type="button" class="mn-secondary" data-reminder-snooze>Отложить на 10 минут</button>${record.type === 'task' ? '<button type="button" class="mn-primary" data-reminder-done>Выполнено</button>' : ''}<button type="button" class="mn-secondary" data-reminder-close>Закрыть</button></div>`;
     }
+    function parseSuggestion() {
+        const text = main.querySelector('[name="text"]').value;
+        if (deadlineAnchor?.text !== text || Number.isNaN(new Date(deadlineAnchor?.at).getTime())) deadlineAnchor = { text, at: new Date().toISOString() };
+        const value = suggestDeadline(text, new Date(deadlineAnchor.at));
+        if (value) {
+            const current = new Date();
+            const clock = `${String(current.getHours()).padStart(2, '0')}:${String(current.getMinutes()).padStart(2, '0')}`;
+            value.past = value.date < localDateString(current) || Boolean(value.date === localDateString(current) && value.time && value.time < clock);
+        }
+        return value;
+    }
     function renderSuggestion() {
         const area = main.querySelector('.mn-suggestion');
         if (!area) return;
-        suggestion = smartDates ? suggestDeadline(main.querySelector('[name="text"]').value) : null;
+        suggestion = smartDates ? parseSuggestion() : null;
         const current = fields();
         const alreadySet = suggestion && current.date === suggestion.date && current.time === suggestion.time;
         area.hidden = !suggestion || alreadySet || suggestionKey(suggestion) === dismissedDeadline;
         if (area.hidden) { area.replaceChildren(); return; }
         const label = new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(suggestion.date + 'T12:00:00'));
-        area.innerHTML = `<p class="mn-suggestion-title">Срок из текста: <strong>${escape(label)}${suggestion.time ? ` · ${escape(suggestion.time)}` : ''}</strong></p><p>${suggestion.inferredDate ? 'Указано только время — предлагаем ближайшую дату. ' : ''}${suggestion.past ? 'Этот срок уже прошёл. ' : ''}Текст записи сохранится целиком. ${current.date ? 'Применение заменит выбранный срок.' : 'Срок изменится только после подтверждения.'}</p><div class="mn-suggestion-actions"><button type="button" class="mn-primary" data-accept-deadline>Применить</button><button type="button" class="mn-secondary" data-dismiss-deadline>Не нужно</button></div>`;
+        const at = new Date(suggestion.date + 'T' + (suggestion.time || '09:00'));
+        const interpretation = { relative: 'Отсчитываем от момента ввода этой фразы. ', weekday: 'Предлагаем ближайший подходящий день недели. ', 'next-week': 'Под «следующим» понимаем день следующей недели, которая начинается с понедельника. ', 'this-week': 'Предлагаем день текущей недели, которая начинается с понедельника. ' }[suggestion.interpretation] || '';
+        area.innerHTML = `<p class="mn-suggestion-title">Срок из текста: <strong>${escape(label)}${suggestion.time ? ` · ${escape(suggestion.time)}` : ''}</strong></p><p>${escape(interpretation)}${suggestion.roundedToMinute ? 'Время округлено до минуты вверх. ' : ''}${suggestion.inferredDate ? 'Указано только время — предлагаем ближайшую дату. ' : ''}${suggestion.past ? 'Этот срок уже прошёл. ' : ''}Текст записи сохранится целиком. ${current.date ? 'Применение заменит выбранный срок.' : 'Срок изменится только после подтверждения.'}</p><div class="mn-suggestion-actions"><button type="button" class="mn-primary" data-accept-deadline>Применить</button><button type="button" class="mn-primary" data-accept-reminder ${at <= new Date() ? 'disabled' : ''}>${suggestion.time ? 'Применить срок и напомнить' : 'Применить и напомнить в 09:00'}</button><button type="button" class="mn-secondary" data-dismiss-deadline>Не нужно</button></div><p>${at <= new Date() ? 'Для напоминания выберите будущее время ниже в форме.' : reminderState.enabled ? 'Напомним в выбранный срок. Уже выбранное напоминание заменится.' : 'Второе действие также включит напоминания на этом устройстве. В Android потребуется разрешение на уведомления.'}</p>`;
     }
     function commit(close = true) {
         const value = fields();
@@ -330,16 +346,24 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         else if (button.hasAttribute('data-filter')) { filter = button.dataset.filter; render(); }
         else if (button.hasAttribute('data-type')) { type = button.dataset.type; main.querySelector('.mn-type-help').textContent = (type === 'task' ? 'Задача — дело, которое можно отметить выполненным.' : 'Заметка — мысль или информация, которую нужно сохранить.') + ' У обоих типов можно выбрать срок и напоминание.'; main.querySelectorAll('[data-type]').forEach(item => item.setAttribute('aria-pressed', String(item.dataset.type === type))); const complete = main.querySelector('[data-complete]'); if (complete) complete.hidden = type !== 'task'; changed(); }
         else if (button.hasAttribute('data-date')) {
-            dismissedDeadline = suggestionKey(suggestDeadline(main.querySelector('[name="text"]').value));
+            dismissedDeadline = suggestionKey(parseSuggestion());
             const date = new Date(); if (button.dataset.date === 'tomorrow') date.setDate(date.getDate() + 1);
             main.querySelector('[name="date"]').value = button.dataset.date === 'none' ? '' : localDateString(date);
             if (button.dataset.date === 'none') main.querySelector('[name="time"]').value = '';
             updateDate(); changed();
-        } else if (button.hasAttribute('data-accept-deadline') && suggestion) {
+        } else if ((button.hasAttribute('data-accept-deadline') || button.hasAttribute('data-accept-reminder')) && suggestion) {
             main.querySelector('[name="date"]').value = suggestion.date;
-            main.querySelector('[name="time"]').value = suggestion.time;
+            const withReminder = button.hasAttribute('data-accept-reminder');
+            main.querySelector('[name="time"]').value = suggestion.time || (withReminder ? '09:00' : '');
+            if (withReminder) main.querySelector('[name="reminderMode"]').value = 'at';
             dismissedDeadline = '';
             updateDate(); changed();
+            if (withReminder) {
+                say('Срок и напоминание выбраны. Сохраните запись.');
+                if (!reminderState.enabled) Promise.resolve(configureReminders?.(true))
+                    .then(enabled => { if (enabled === false) say('Срок выбран. Разрешите уведомления на устройстве, чтобы напоминание сработало.'); })
+                    .catch(() => say('Срок выбран, но включить напоминания не удалось. Повторите включение ниже в форме.'));
+            }
         } else if (button.hasAttribute('data-dismiss-deadline')) {
             dismissedDeadline = suggestionKey(suggestion);
             renderSuggestion(); changed();
@@ -362,7 +386,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         if (event.target.id === 'mn-search') { query = event.target.value; renderList(); }
         else if (editor) {
             if (['date', 'time'].includes(event.target.name)) {
-                dismissedDeadline = suggestionKey(suggestDeadline(main.querySelector('[name="text"]').value));
+                dismissedDeadline = suggestionKey(parseSuggestion());
                 updateDate();
             } else if (event.target.name === 'text') renderSuggestion();
             else if (['reminderMode', 'reminderDate', 'reminderTime'].includes(event.target.name)) updateReminder();
@@ -377,7 +401,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
                 say(smartDates ? 'Подсказки сроков включены.' : 'Подсказки сроков выключены. Уже выбранные сроки сохранены.');
             } catch (_) { event.target.checked = smartDates; say('Не удалось сохранить настройку на устройстве.'); }
         } else if (editor) {
-            if (['date', 'time'].includes(event.target.name)) dismissedDeadline = suggestionKey(suggestDeadline(main.querySelector('[name="text"]').value));
+            if (['date', 'time'].includes(event.target.name)) dismissedDeadline = suggestionKey(parseSuggestion());
             updateDate(); changed();
         }
     });
@@ -408,7 +432,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
             return false;
         },
         isEditing: () => editor || Boolean(undo),
-        setAccount(id) { if (account !== id) { clearTimeout(undoTimer); account = id; reminderQueue = []; syncDetails = null; syncBusy = false; syncPreview = null; syncError = ''; updateSyncNotice(); readPreferences(); dismissedDeadline = ''; suggestion = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
+        setAccount(id) { if (account !== id) { clearTimeout(undoTimer); account = id; reminderQueue = []; syncDetails = null; syncBusy = false; syncPreview = null; syncError = ''; updateSyncNotice(); readPreferences(); dismissedDeadline = ''; suggestion = null; deadlineAnchor = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
         setOfflineReady(value) {
             offlineReady = value;
             if (!editor && ['settings', 'sync'].includes(view)) render();

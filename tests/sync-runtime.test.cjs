@@ -21,7 +21,7 @@ function worker() {
 test('offline shell caches public files and falls back for preview navigation, never Supabase or account URLs', async () => {
  const w = worker(); let install;
  w.listeners.get('install')({ waitUntil: p => { install = p; } }); await install;
- assert.ok(w.requests.some(url => url.endsWith('main.js?v=5-sync'))); assert.ok(w.requests.every(url => url.startsWith('https://todo.test/mobile-preview/')));
+ assert.ok(w.requests.some(url => /main\.js\?v=/.test(url))); assert.ok(w.requests.every(url => url.startsWith('https://todo.test/mobile-preview/')));
  w.offline = true; let response;
  w.listeners.get('fetch')({ request: { url: 'https://todo.test/mobile-preview/?code=private', method: 'GET', mode: 'navigate' }, respondWith: p => { response = p; } });
  assert.match(await (await response).text(), /cached:.*index.html/); assert.ok(w.requests.every(url => !url.includes('private')));

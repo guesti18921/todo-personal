@@ -40,3 +40,15 @@ The no-deadline Today pin is shown only when date is empty. Choosing a date
 clears the pin and explains automatic Today placement. Undated pins stay in
 Today until manually removed. Cards distinguish Tomorrow, overdue dates and
 undated Today pins. Android notifications remain a separate later stage.
+
+## Weekdays and numeric durations
+
+Weekdays and numeric minute/hour/day/week expressions are supported in the ten existing languages. Examples: “в пятницу в 18:00”, “Friday at 6 pm”, “in 2 Stunden”, “tra 2 ore”, “en 3 días”, “vendredi prochain”, “2小时后”, “来週の金曜日”, “2시간 후”. The editor includes a collapsed example list.
+
+A bare weekday means its next suitable occurrence, including today if the specified time has not passed. “Next Friday” means Friday of the next Monday-based calendar week; “this Monday” may be past. The actual interpretation and resulting date are shown before acceptance. An explicit calendar date is never shifted because its time has passed.
+
+Hour/minute durations use elapsed time, rounded up to a minute so a reminder is not early. Day/week durations use local calendar arithmetic and do not invent a time. Non-positive, fractional, excessive and competing durations are rejected. Compound phrases such as “in 1 hour and 30 minutes” are not partially interpreted; they need a manual deadline. Word numbers and many less common grammatical variants remain unsupported.
+
+The editor saves an anchor containing the text and input time in drafts and records. Unchanged text keeps its anchor across reopen; changing the text resets it. Deadline helpers compare the resulting time against the current clock for past warnings. Existing records without anchors use their first editor open as the anchor. This is rule-based local recognition, not automatic translation or general language understanding.
+
+“Apply deadline and remind” is an explicit separate action. It sets at-deadline reminder mode, shows 09:00 when the phrase contains only a date, and enables the device switch if off (requesting Android notification permission where applicable). Past reminder times disable this action; the user can still accept a past deadline separately. Refusing device permission retains the chosen fields and explains why delivery is disabled. The original text remains intact.

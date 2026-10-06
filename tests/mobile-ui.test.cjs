@@ -259,3 +259,34 @@ test('browser can reopen cached records while an expired session refresh cannot 
  try { await ready(dom); dom.window.document.querySelector('[data-view="all"]').click(); assert.match(dom.window.document.querySelector('.mn-list').textContent, /Офлайн-копия/); }
  finally { dom.window.close(); }
 });
+
+test('relative suggestion is anchored across draft and record reopen, and combined acceptance enables a due reminder', async () => {
+ const exp = Math.floor(Date.now() / 1000) + 86400;
+ const jwt = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url') + '.' + Buffer.from(JSON.stringify({ sub: id, exp, role: 'authenticated' })).toString('base64url') + '.test';
+ const dom = boot([['sb-ihvwqqvndmwtislvgamd-auth-token', JSON.stringify({ access_token: jwt, refresh_token: 'test-only', expires_at: exp, expires_in: 86400, token_type: 'bearer', user: { id, email: 'test@example.com' } })], [cacheKey, JSON.stringify({ schemaVersion: 1, state: { todos: { home: [], today: [], week: [] }, notes: [] }, revision: 0, dirty: false })]]);
+ const w = dom.window, doc = w.document;
+ const click = selector => { assert.ok(doc.querySelector(selector), selector); doc.querySelector(selector).click(); };
+ const input = (selector, value) => { const el = doc.querySelector(selector); el.value = value; el.dispatchEvent(new w.Event('input', { bubbles: true })); };
+ const disk = () => JSON.parse(w.localStorage.getItem(cacheKey));
+ try {
+  await ready(dom); const Original = w.Date; let clock = new Original(2026, 9, 6, 17, 30, 20);
+  w.Date = class extends Original { constructor(...args) { super(...(args.length ? args : [clock.getTime()])); } static now() { return clock.getTime(); } };
+  click('.mn-add'); input('#mn-text', 'Через 2 часа позвонить');
+  const suggestion = doc.querySelector('.mn-suggestion-title').textContent; assert.match(suggestion, /19:31/);
+  const anchor = JSON.parse(w.localStorage.getItem(draftKey)).deadlineAnchor.at;
+  click('[data-back]'); clock = new Original(clock.getTime() + 5 * 60000); click('.mn-add');
+  assert.equal(doc.querySelector('.mn-suggestion-title').textContent, suggestion, 'opening the draft never shifts the relative deadline');
+  click('[data-accept-reminder]'); await wait();
+  assert.equal(doc.querySelector('[name="time"]').value, '19:31'); assert.equal(doc.querySelector('[name="reminderMode"]').value, 'at');
+  assert.equal(w.localStorage.getItem('todo-personal:reminders-enabled:' + id), 'true');
+  click('[data-save]'); assert.equal(disk().state.todos.home[0].name, 'Через 2 часа позвонить'); assert.equal(disk().state.todos.home[0].deadlineAnchor.at, anchor);
+  click('[data-view="all"]'); clock = new Original(clock.getTime() + 5 * 60000); click('[data-open]');
+  assert.equal(doc.querySelector('[name="time"]').value, '19:31'); assert.equal(doc.querySelector('.mn-suggestion').hidden, true, 'saved anchored deadline is not proposed again');
+  input('#mn-text', 'Через 3 часа позвонить'); assert.match(doc.querySelector('.mn-suggestion-title').textContent, /20:41/);
+  click('[data-accept-reminder]'); click('[data-save]');
+  clock = new Original(2026, 9, 6, 20, 42); w.dispatchEvent(new w.Event('focus')); await wait();
+  assert.equal(doc.querySelector('.mn-reminder-banner').hidden, false, 'the combined action creates a functioning reminder');
+  click('[data-reminder-close]'); click('[data-open]'); input('#mn-text', 'Вчера в 18:00');
+  assert.equal(doc.querySelector('[data-accept-reminder]').disabled, true, 'a past reminder cannot be enabled from the suggestion');
+ } finally { dom.window.close(); }
+});
