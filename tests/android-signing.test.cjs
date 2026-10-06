@@ -56,7 +56,7 @@ test('wrong password removes the temporary key and never exposes secret contents
 });
 test('APK verification rejects a different signer and unsigned APKs before upload', () => {
     const f = fixture(), expected = configure(f.root, f.env);
-    const sdk = path.join(f.runner, 'sdk'), executable = path.join(sdk, 'build-tools/36.0.0/apksigner');
+    const sdk = path.join(f.runner, 'sdk'), executable = path.join(sdk, 'build-tools/37.0.0/apksigner');
     fs.mkdirSync(path.dirname(executable), { recursive: true });
     const apkFolder = path.join(f.root, 'android/app/build/outputs/apk/release');
     fs.mkdirSync(apkFolder, { recursive: true }); fs.writeFileSync(path.join(apkFolder, 'app-release.apk'), 'test-only');
@@ -88,12 +88,20 @@ test('isolated workflow signer keeps keys private, verifies the expected certifi
     const script = workflow.split("          node <<'NODE'\n")[1].split('\n          NODE')[0].split('\n').map(line => line.replace(/^          /, '')).join('\n');
     const run = (mode) => {
         const f = fixture(), expected = configure(f.root, f.env);
-        const sdk = path.join(f.runner, 'sdk'), executable = path.join(sdk, 'build-tools/36.0.0/apksigner');
+        const sdk = path.join(f.runner, 'sdk'), executable = path.join(sdk, 'build-tools/37.0.0/apksigner');
         fs.mkdirSync(path.dirname(executable), { recursive: true });
         fs.writeFileSync(executable, '#!/usr/bin/env node\nconst fs = require("node:fs"); const a = process.argv.slice(2); if (a[0] === "sign") { fs.copyFileSync(a.at(-1), a[a.indexOf("--out")+1]); } else { console.log("Signer #1 certificate SHA-256 digest: ' + (mode === 'mismatch' ? '0'.repeat(64) : expected) + '"); }\n', { mode: 0o700 });
         fs.mkdirSync(path.join(f.root, 'unsigned')); fs.writeFileSync(path.join(f.root, 'unsigned/app-release-unsigned.apk'), 'simulation-only');
         const scriptPath = path.join(f.root, 'isolated-sign.cjs'); fs.writeFileSync(scriptPath, script);
         const env = { ...f.env, ANDROID_HOME: sdk };
+        if (mode === 'modern' || mode === 'modern-mismatch' || mode === 'source-stamp-only' || mode === 'modern-with-stamp' || mode === 'public-key-only') {
+            const digest = mode === 'modern-mismatch' ? '0'.repeat(64) : expected;
+            let report = 'V3.0 Signer: certificate SHA-256 digest: ' + digest;
+            if (mode === 'source-stamp-only') report = 'Source Stamp Signer: certificate SHA-256 digest: ' + expected;
+            if (mode === 'modern-with-stamp') report += '\nSource Stamp Signer: certificate SHA-256 digest: ' + '0'.repeat(64);
+            if (mode === 'public-key-only') report = 'V3.0 Signer: public key SHA-256 digest: ' + expected;
+            fs.writeFileSync(executable, '#!/usr/bin/env node\nconst fs = require("node:fs"); const a = process.argv.slice(2); if (a[0] === "sign") fs.copyFileSync(a.at(-1), a[a.indexOf("--out")+1]); else console.log(' + JSON.stringify(report) + ');\n');
+        }
         if (mode === 'sdk-ranges' || mode === 'range-mismatch') {
             const second = mode === 'range-mismatch' ? '0'.repeat(64) : expected;
             const report = 'Signer (minSdkVersion=33, maxSdkVersion=2147483647) certificate SHA-256 digest: ' + expected + '\nSigner (minSdkVersion=24, maxSdkVersion=32) certificate SHA-256 digest: ' + second;
@@ -105,7 +113,7 @@ test('isolated workflow signer keeps keys private, verifies the expected certifi
         assert.equal(fs.existsSync(path.join(f.runner, 'todo-personal-release.p12')), false);
         assert.equal((result.stdout + result.stderr).includes(password), false);
         assert.equal((result.stdout + result.stderr).includes(f.env.ANDROID_KEYSTORE_BASE64), false);
-        if (mode === 'good' || mode === 'sdk-ranges') {
+        if (['good', 'sdk-ranges', 'modern', 'modern-with-stamp'].includes(mode)) {
             assert.equal(result.status, 0, result.stderr);
             assert.equal(fs.readFileSync(path.join(f.root, 'signed/certificate-sha256.txt'), 'utf8').trim(), expected);
         } else {
@@ -117,5 +125,34 @@ test('isolated workflow signer keeps keys private, verifies the expected certifi
             }
         }
     };
-    for (const mode of ['good', 'sdk-ranges', 'missing', 'wrong', 'mismatch', 'range-mismatch']) run(mode);
+    for (const mode of ['good', 'sdk-ranges', 'modern', 'modern-with-stamp', 'source-stamp-only', 'public-key-only', 'missing', 'wrong', 'mismatch', 'range-mismatch', 'modern-mismatch']) run(mode);
+});
+
+test('real Android tools sign the reviewed APK twice and reject a wrong certificate or damaged APK', {
+    skip: !process.env.TODO_SIGNING_TEST_SDK || !process.env.TODO_SIGNING_TEST_UNSIGNED_APK,
+}, () => {
+    const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/android-signed.yml'), 'utf8');
+    const script = workflow.split("          node <<'NODE'\n")[1].split('\n          NODE')[0].split('\n').map(line => line.replace(/^          /, '')).join('\n');
+    const fingerprints = [];
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const f = fixture(), expected = configure(f.root, f.env);
+        const env = { ...f.env, ANDROID_HOME: process.env.TODO_SIGNING_TEST_SDK };
+        fs.mkdirSync(path.join(f.root, 'unsigned'));
+        fs.copyFileSync(process.env.TODO_SIGNING_TEST_UNSIGNED_APK, path.join(f.root, 'unsigned/app-release-unsigned.apk'));
+        const scriptPath = path.join(f.root, 'sign.cjs'); fs.writeFileSync(scriptPath, script);
+        const result = require('node:child_process').spawnSync(process.execPath, [scriptPath], { cwd: f.root, env, encoding: 'utf8' });
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(fs.existsSync(path.join(f.runner, 'todo-personal-release.p12')), false);
+        fingerprints.push(fs.readFileSync(path.join(f.root, 'signed/certificate-sha256.txt'), 'utf8').trim());
+        assert.equal(fingerprints.at(-1), expected);
+        const apk = path.join(f.root, 'android/app/build/outputs/apk/release/app-release.apk');
+        fs.mkdirSync(path.dirname(apk), { recursive: true }); fs.copyFileSync(path.join(f.root, 'signed/todo-personal.apk'), apk);
+        assert.equal(verify(f.root, env), expected);
+        fs.writeFileSync(path.join(f.runner, 'todo-personal-certificate-sha256.txt'), '0'.repeat(64));
+        assert.throws(() => verify(f.root, env), /different certificate/);
+        fs.writeFileSync(path.join(f.runner, 'todo-personal-certificate-sha256.txt'), expected);
+        const damaged = fs.readFileSync(apk); damaged[100] ^= 1; fs.writeFileSync(apk, damaged);
+        assert.throws(() => verify(f.root, env), /signature verification failed/);
+    }
+    assert.equal(fingerprints[0], fingerprints[1]);
 });
