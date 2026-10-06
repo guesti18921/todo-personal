@@ -70,7 +70,7 @@ keytool -genkeypair -storetype PKCS12 -keystore "$env:USERPROFILE\Documents\Todo
 После добавления ключа очисти буфер обмена:
 
 ```powershell
-Set-Clipboard -Value ""
+Set-Clipboard -Value "Готово"
 ```
 
 ## 4. Сборка и переход со старого APK
