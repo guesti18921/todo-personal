@@ -2,7 +2,8 @@
 
 This branch adds the storage foundation for the planned Android version. It
 keeps the existing colors, adds a mobile interface at widths up to 700px, and
-does not publish or produce an APK.
+does not publish the website. Android test APK builds are now configured; see
+`docs/android-testing.md` for build and device test steps.
 
 ## Implemented
 
@@ -48,7 +49,7 @@ snapshots remain account-scoped for later authenticated use on this device.
 
 ## Next stages
 
-1. Android packaging and device testing, including full offline cold start.
+1. Android device testing, including full offline cold start.
 2. Google login and synchronization behavior under VPN/network switching.
 3. Local reminders, explicit confirmation of inferred dates and multilingual
    reminder parsing. Device timezone, not IP location, determines relative dates.

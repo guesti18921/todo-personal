@@ -12,11 +12,12 @@ virtualConsole.on('jsdomError', error => errors.push(error.message));
 const id = '11111111-1111-4111-8111-111111111111';
 const cacheKey = 'todo-personal:local:' + id, draftKey = 'todo-personal:entry-draft:' + id;
 const wait = () => new Promise(resolve => setTimeout(resolve, 100));
-function boot(entries) {
+function boot(entries, native = false) {
  const dom = new JSDOM(html, { url: 'https://test.local/', runScripts: 'outside-only', virtualConsole });
  const w = dom.window;
  Object.defineProperty(w, 'crypto', { value: webcrypto });
  Object.assign(w, { TextEncoder, TextDecoder, fetch: async () => { throw new TypeError('Network unavailable'); }, Request, Response, Headers });
+ if (native) w.androidBridge = { postMessage() {} };
  for (const [key, value] of entries) w.localStorage.setItem(key, value);
  w.eval(bundle);
  return dom;
@@ -87,6 +88,14 @@ test('mobile notebook core flows persist across offline restart', async () => {
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   click('[data-view="settings"]');
   assert.match(doc().querySelector('.mn-setting').textContent, /test@example.com/);
+  const expired = snapshot().map(([key, value]) => {
+   if (key !== 'sb-ihvwqqvndmwtislvgamd-auth-token') return [key, value];
+   const session = JSON.parse(value); session.expires_at = 1;
+   return [key, JSON.stringify(session)];
+  });
+  dom.window.close(); dom = boot(expired, true); await wait();
+  assert.equal(doc().querySelector('#todo-app').hidden, false, 'native cold start works while expired session refresh cannot reach the network');
+  assert.ok(doc().querySelector('.mobile-notebook'));
   assert.deepEqual(errors, []);
   console.log('PASS: mobile Today/create/edit/complete/restore/search/delete/undo, Unicode draft restart, optional deadline and account display; network unavailable, no JS errors.');
  } finally { dom.window.close(); }

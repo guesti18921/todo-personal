@@ -200,6 +200,12 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     document.addEventListener('visibilitychange', () => { if (document.hidden && editor && !editingId) stashDraft(); });
     return {
         render,
+        saveDraft: stashDraft,
+        back() {
+            if (editor) { back(); return true; }
+            if (view !== 'today' || query) { view = 'today'; query = ''; filter = 'all'; undo = null; say(''); render(); return true; }
+            return false;
+        },
         isEditing: () => editor || Boolean(undo),
         setAccount(id) { if (account !== id) { clearTimeout(undoTimer); account = id; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
         setStatus(text) {

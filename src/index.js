@@ -1,6 +1,8 @@
 import { openNotebook, closeNotebook, savePart, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, discardDraftAndReload } from './notebookStore.js';
 import { supabase } from './supabaseClient.js';
 import { createMobileNotebook } from './mobileNotebook.js';
+import { isNativeApp, setupNativeApp } from './nativeApp.js';
+import { readCachedAccount } from './localAccount.js';
 let mobileUI = null;
 // all major functions are stored in these objects
 import {toDosManager, domManipulator, notesManager} from "./todoFunctions.js"
@@ -362,6 +364,9 @@ async function loadAccount(id, ticket) {
 }
 supabase.auth.onAuthStateChange((_event, session) => {
     const id = session?.user?.id || null;
+    // Offline Android startup can use this device's last authenticated data
+    // while Supabase is still trying to refresh an expired access token.
+    if (_event === 'INITIAL_SESSION' && !id && isNativeApp() && readCachedAccount()?.id === activeUser) return;
     activeUserEmail = session?.user?.email || '';
     if (id === activeUser) return;
     activeUser = id;
@@ -413,7 +418,7 @@ authForm.addEventListener('submit', async event => {
     authMessage.textContent = 'Please wait...';
     try {
         const { data, error } = signUp
-            ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } })
+            ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: isNativeApp() ? 'https://guesti18921.github.io/todo-personal/' : location.origin + location.pathname } })
             : await supabase.auth.signInWithPassword({ email, password });
         if (error) authMessage.textContent = error.message;
         else if (signUp && !data.session) {
@@ -468,4 +473,22 @@ mobileUI = createMobileNotebook({
     getAccount: () => activeUserEmail
 });
 mobileUI.setAccount(activeUser);
+if (isNativeApp() && !activeUser) {
+    const cached = readCachedAccount();
+    if (cached && localStorage.getItem(`todo-personal:local:${cached.id}`)) {
+        activeUser = cached.id;
+        activeUserEmail = cached.email;
+        const ticket = ++generation;
+        resetScreen();
+        mobileUI.setAccount(cached.id);
+        authScreen.hidden = false;
+        authForm.hidden = true;
+        authSwitch.hidden = true;
+        loadAccount(cached.id, ticket);
+    }
+}
 window.addEventListener('resize', () => mobileUI.render());
+setupNativeApp({ ui: mobileUI, onResume: async () => {
+    await flushNotebook();
+    refreshCloud();
+} }).catch(error => { status.textContent = `Android integration unavailable: ${error.message}`; });
