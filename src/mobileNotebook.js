@@ -286,6 +286,16 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     function reminderSettings() {
         return `<section class="mn-setting"><h2>Напоминания на этом устройстве</h2><p>${escape(deviceReminderHelp())}</p><button class="mn-secondary" type="button" data-toggle-reminders ${reminderBusy ? 'disabled' : ''}>${reminderState.enabled ? 'Выключить напоминания' : 'Включить напоминания'}</button>${reminderState.native && reminderState.enabled && !reminderState.exact ? '<button type="button" class="mn-secondary" data-exact-reminders>Разрешить точное время</button>' : ''}<p>Напоминаний запланировано: ${reminderState.scheduled}. Выключение отменит уведомления здесь; время в записях сохранится.</p><button class="mn-secondary" type="button" data-reminder-list>Посмотреть записи с напоминаниями</button>${reminderState.error ? '<button class="mn-secondary" type="button" data-retry-reminders>Повторить настройку</button>' : ''}</section>`;
     }
+    function openReminder(record) {
+        const target = record && find(record.entry.id);
+        if (!target) return false;
+        if (editor && editingId === target.entry.id) return true;
+        if (editor) { back(); if (editor) return false; }
+        reminderQueue = reminderQueue.filter(item => item.id !== target.entry.id);
+        renderReminderBanner();
+        open(target.entry.id);
+        return true;
+    }
     function renderReminderBanner() {
         reminderQueue = reminderQueue.filter(item => {
             const record = find(item.id);
@@ -356,8 +366,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         else if (button.hasAttribute('data-export') || button.hasAttribute('data-export-recovery')) runSync(() => exportNotebook?.(button.hasAttribute('data-export-recovery')));
         else if (button.hasAttribute('data-reminder-open')) {
             const record = find(reminderQueue[0]?.id); if (!record) return;
-            if (editor) { back(); if (editor) return; }
-            open(record.entry.id);
+            openReminder(record);
         } else if (button.hasAttribute('data-reminder-close') || button.hasAttribute('data-reminder-snooze') || button.hasAttribute('data-reminder-done')) {
             const record = find(reminderQueue[0]?.id); if (!record) return;
             if (editor) { back(); if (editor) return; }
@@ -458,6 +467,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     return {
         render,
         showMessage: say,
+        openReminder,
         notifyReminder(record) {
             if (!record) reminderQueue = [];
             else {

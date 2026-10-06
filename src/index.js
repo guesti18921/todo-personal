@@ -502,6 +502,7 @@ reminderEngine = createReminderEngine({
     native: isNativeApp(), plugin: LocalNotifications, storage: localStorage,
     getRecords: () => ready && isLocallySaved() ? listEntries(todos, notes) : [],
     onDue: record => mobileUI?.notifyReminder(record),
+    onOpen: record => mobileUI?.openReminder(record) ?? false,
     onStatus: value => mobileUI?.setReminderStatus(value)
 });
 mobileUI = createMobileNotebook({

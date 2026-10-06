@@ -77,12 +77,71 @@ test('browser shows a due reminder once, snoozes, cancels on completion and neve
 });
 
 test('Android notification tap during cold startup is delivered after the matching notebook loads', async () => {
- const m = await modules(), p = plugin(), disk = storage(), listeners = {}; let records = [], due = [];
+ const m = await modules(), p = plugin(), disk = storage(), listeners = {}; let records = [], opened = [];
  p.addListener = async (name, callback) => { listeners[name] = callback; };
  disk.setItem('todo-personal:reminders-enabled:a', 'true');
  const record = { entry: entry(), type: 'task' }, notification = m.notificationPlan([record], 'a', now)[0];
- const engine = m.createReminderEngine({ native: true, plugin: p, storage: disk, getRecords: () => records, onDue: r => { if (r) due.push(r.entry.id); }, onStatus() {}, now: () => now });
+ const engine = m.createReminderEngine({ native: true, plugin: p, storage: disk, getRecords: () => records, onDue() {}, onOpen: r => opened.push(r.entry.id), onStatus() {}, now: () => now });
  await engine.start(); listeners.localNotificationActionPerformed({ notification });
- await engine.setAccount('a'); assert.equal(due.length, 0);
- records = [record]; await engine.refresh(); assert.deepEqual(due, ['one']); await engine.refresh(); assert.equal(due.length, 1);
+ await engine.setAccount('a'); assert.equal(opened.length, 0);
+ records = [record]; await engine.refresh(); assert.deepEqual(opened, ['one']); await engine.refresh(); assert.equal(opened.length, 1);
+});
+
+
+test('native receipt stays passive; tapping opens the exact record and retries after a blocked editor', async () => {
+ const m = await modules(), p = plugin(), disk = storage(), listeners = {};
+ const record = { entry: entry(), type: 'task' }; let opened = [], due = [], blocked = true;
+ p.addListener = async (name, callback) => { listeners[name] = callback; };
+ disk.setItem('todo-personal:reminders-enabled:a', 'true');
+ const notification = m.notificationPlan([record], 'a', now)[0];
+ const engine = m.createReminderEngine({ native: true, plugin: p, storage: disk,
+  getRecords: () => [record], onDue: r => { if (r) due.push(r.entry.id); },
+  onOpen: r => { if (blocked) return false; opened.push(r.entry.id); return true; }, onStatus() {}, now: () => now });
+ await engine.setAccount('a'); await engine.start();
+ listeners.localNotificationReceived(notification);
+ assert.deepEqual(due, ['one']); assert.deepEqual(opened, []);
+ listeners.localNotificationActionPerformed({ notification }); assert.deepEqual(opened, []);
+ blocked = false; await engine.refresh(); assert.deepEqual(opened, ['one']);
+ await engine.refresh(); assert.equal(opened.length, 1);
+ const wrong = { ...notification, extra: { ...notification.extra, account: 'b' } };
+ listeners.localNotificationActionPerformed({ notification: wrong }); await engine.refresh();
+ assert.equal(opened.length, 1);
+ record.entry.time = '19:00'; listeners.localNotificationActionPerformed({ notification }); await engine.refresh();
+ assert.equal(opened.length, 1, 'stale reminder cannot open a changed record');
+});
+
+test('notification target opens an editor among several records, preserving an interrupted draft', async () => {
+ const { JSDOM } = require('jsdom'), path = require('node:path'), { webcrypto } = require('node:crypto');
+ const dom = new JSDOM('<div id="root"></div>', { url: 'https://test.local' }); const w = dom.window;
+ const context = vm.createContext({ document: w.document, window: w, localStorage: w.localStorage,
+  crypto: webcrypto, Date, Intl, Map, Set, Promise, String, Number, Math, Boolean, JSON, setTimeout, clearTimeout });
+ const loaded = new Map();
+ async function load(file) {
+  file = path.resolve(file); if (loaded.has(file)) return loaded.get(file);
+  const mod = new vm.SourceTextModule(fs.readFileSync(file, 'utf8'), { context, identifier: file }); loaded.set(file, mod);
+  await mod.link((specifier, parent) => load(path.resolve(path.dirname(parent.identifier), specifier)));
+  return mod;
+ }
+ const mod = await load('src/mobileNotebook.js'); await mod.evaluate();
+ const todos = { home: [{ ...entry(), name: 'First target' }, { ...entry(), id: 'two', name: 'Second task' }], today: [], week: [] }, notes = [{ id: 'note', title: 'Target note', text: 'Keep these details', date: '', reminder: { mode: 'none' } }];
+ const ui = mod.namespace.createMobileNotebook({ root: w.document.querySelector('#root'), todos, notes, persist: () => true, getAccount: () => 'test@example.com' });
+ const text = () => w.document.querySelector('#mn-text');
+ try {
+  ui.setAccount('a');
+  w.document.querySelector('.mn-add').click(); text().value = 'Unfinished draft';
+  text().dispatchEvent(new w.Event('input', { bubbles: true }));
+  assert.equal(ui.openReminder({ entry: todos.home[0] }), true);
+  assert.equal(text().value, 'First target'); assert.ok(w.document.querySelector('[data-save]'));
+  assert.equal(JSON.parse(w.localStorage.getItem('todo-personal:entry-draft:a')).text, 'Unfinished draft');
+  assert.equal(ui.openReminder({ entry: notes[0] }), true); assert.equal(text().value, 'Target note');
+  assert.equal(w.document.querySelector('[name="details"]').value, 'Keep these details');
+  ui.back(); w.document.querySelector('.mn-add').click(); assert.equal(text().value, 'Unfinished draft');
+  const setItem = w.Storage.prototype.setItem;
+  w.Storage.prototype.setItem = () => { throw Error('Quota exceeded'); };
+  assert.equal(ui.openReminder({ entry: todos.home[1] }), false);
+  assert.equal(text().value, 'Unfinished draft', 'failed draft save never replaces the editor');
+  w.Storage.prototype.setItem = setItem;
+  assert.equal(ui.openReminder({ entry: todos.home[1] }), true); assert.equal(text().value, 'Second task');
+  assert.equal(ui.openReminder({ entry: { id: 'missing' } }), false);
+ } finally { dom.window.close(); }
 });

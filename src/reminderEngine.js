@@ -1,7 +1,7 @@
 import { notificationPlan, reminderMoment } from './reminderModel.js';
 
 // Native operations are serialized; every async boundary rechecks the account.
-export function createReminderEngine({ native, plugin, storage, getRecords, onDue, onStatus, now = () => new Date() }) {
+export function createReminderEngine({ native, plugin, storage, getRecords, onDue, onOpen = onDue, onStatus, now = () => new Date() }) {
     let account = null, enabled = false, generation = 0, queue = Promise.resolve();
     let armed = new Map(), pendingAction = null;
     let permission = 'unknown', exact = false, error = '', scheduled = 0;
@@ -14,10 +14,11 @@ export function createReminderEngine({ native, plugin, storage, getRecords, onDu
         });
         return queue;
     };
-    function deliver(notification) {
+    function deliver(notification, open = false) {
         if (!enabled || notification.extra?.account !== account) return false;
         const record = getRecords().find(r => r.entry.id === notification.extra?.entryId);
         if (!record || reminderMoment(record.entry)?.toISOString() !== notification.extra?.at) return false;
+        if (open) return onOpen(record) !== false;
         onDue(record); return true;
     }
     function tick() {
@@ -91,15 +92,15 @@ export function createReminderEngine({ native, plugin, storage, getRecords, onDu
             });
             if (obsolete.length) await plugin.removeDeliveredNotifications({ notifications: obsolete });
             scheduled = desired.length; report();
-            if (pendingAction && deliver(pendingAction)) pendingAction = null;
+            if (pendingAction && deliver(pendingAction, true)) pendingAction = null;
         });
     }
     return {
         refresh, tick,
         async start() {
             if (!native) return;
-            await plugin.addListener('localNotificationReceived', deliver);
-            await plugin.addListener('localNotificationActionPerformed', event => { if (!deliver(event.notification)) pendingAction = event.notification; });
+            await plugin.addListener('localNotificationReceived', notification => deliver(notification));
+            await plugin.addListener('localNotificationActionPerformed', event => { if (!deliver(event.notification, true)) pendingAction = event.notification; });
         },
         setAccount(id) {
             if (id && pendingAction?.extra?.account !== id) pendingAction = null;

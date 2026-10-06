@@ -120,3 +120,23 @@ Before replacing an installed test build, open its notebook with internet and
 wait for account synchronization to finish. Verify the same latest entries in
 the web preview. If Android rejects an update because of debug signatures,
 keep the old app installed until every local-only change is in the account.
+
+## 0.4.0 owner checks and 0.4.1 notification fix
+
+The owner confirmed on the Realme test device that notifications arrive and
+open the app, offline records survive reopening and synchronize, VPN switching
+works on the tested connection, and Google sign-in preserves the notebook.
+Tapping a notification opened Today instead of the record editor in 0.4.0.
+
+0.4.1-test (versionCode 5) separates receiving a reminder from tapping it.
+Receiving remains passive; tapping opens the matching task or note editor.
+The account and reminder timestamp must still match. A cold-start tap waits for
+the notebook to load. An interrupted draft is saved before navigating, and a
+failed draft save leaves its editor open and retains the pending tap for retry.
+
+Validation: 52 logic/runtime scenarios plus 11 compiled UI scenarios pass.
+The real-device tap fix requires a newly built 0.4.1 APK. Open Actions → Build
+Android test APK → Run workflow and select android-local-first-2026-10-06.
+Test with two records and the app on Today, another tab, and closed. A delivered
+notification must open the exact record's editor. Updating an installed test
+APK still depends on its debug signing certificate; synchronize before replacing.
