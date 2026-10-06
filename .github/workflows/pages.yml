@@ -1,4 +1,4 @@
-# Preview publication: ac74edc803637d4a9b78a99a4c13b9ba2f8184b8
+# Preview publication: a726a6244e9c44f3884918541f9b75f62598bca2
 name: Publish TO-DO
 
 on:
@@ -16,11 +16,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Get published website
         uses: actions/checkout@v4
@@ -62,6 +59,16 @@ jobs:
         uses: actions/upload-pages-artifact@v4
         with:
           path: site
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Publish site
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
