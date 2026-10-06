@@ -102,3 +102,21 @@ install this build. Uninstalling removes all local app data.
 The preview now uses the same notebook interface on touch and desktop screens.
 Account snapshots remain isolated. VPN/IP changes never clear local records;
 actual network reachability must be checked with the networks used by the owner.
+
+## 0.4.0-test build checkpoint (2026-10-06)
+
+The reproducible scaffold uses versionCode 4 and versionName 0.4.0-test.
+It packages all current local-first, Google sign-in, notification, list and
+interface changes. The prepared project includes the App, Browser and Local
+Notifications plugins, the authentication return intent, and the notification
+icon. Actual background delivery and native sign-in remain device checks.
+
+To build it, open repository Actions → Build Android test APK → Run workflow.
+Select `android-local-first-2026-10-06`, then press Run workflow. Once all steps
+finish successfully, open the run and download `todo-personal-android-debug`
+from Artifacts. The ZIP contains `app-debug.apk`. Do not download an older run.
+
+Before replacing an installed test build, open its notebook with internet and
+wait for account synchronization to finish. Verify the same latest entries in
+the web preview. If Android rejects an update because of debug signatures,
+keep the old app installed until every local-only change is in the account.
