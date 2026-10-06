@@ -2,7 +2,7 @@ name: Publish TO-DO
 
 on:
   push:
-    branches: [main, android-local-first-2026-10-06]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
