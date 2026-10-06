@@ -80,3 +80,12 @@
     .mn-date-fields { grid-template-columns: 1fr; }
     .mn-nav button { font-size: 11px; }
 }
+@media (max-width: 700px), (pointer: coarse) {
+    .mn-status { border: 0; background: transparent; padding: 4px; min-height: 44px; text-decoration: underline; text-underline-offset: 3px; }
+    .mn-sync-notice { margin: 14px 18px 0; padding: 14px; border: 1px solid #c38d9e; border-radius: 9px; background: #f3e8ed; font-size: 14px; }
+    .mn-sync-notice p { margin-bottom: 8px; }
+    .mn-sync-error { padding: 12px; background: #f3e8ed; border: 1px solid #c38d9e; border-radius: 8px; }
+    .mn-copy-difference { border-top: 1px solid #ddccd1; padding: 8px 0; }
+    .mn-copy-difference p { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .mn-setting h3 { font-size: 16px; margin: 15px 0 8px; }
+}

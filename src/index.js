@@ -1,4 +1,4 @@
-import { openNotebook, closeNotebook, savePart, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, discardDraftAndReload } from './notebookStore.js';
+import { openNotebook, closeNotebook, savePart, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, discardDraftAndReload, getSyncDetails, getRecoveryCopy, inspectConflict, resolveConflict } from './notebookStore.js';
 import { supabase } from './supabaseClient.js';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { createReminderEngine } from './reminderEngine.js';
@@ -302,9 +302,9 @@ action('Load cloud copy', async () => {
     finally { todoApp.inert = !ready; }
 });
 document.body.append(bar);
-onSaveStatus(message => {
+onSaveStatus((message, details) => {
     status.textContent = message;
-    mobileUI?.setStatus(message);
+    mobileUI?.setStatus(message, details);
     retrySave.hidden = ['Saved', 'Saving...', 'Saved locally'].includes(message);
 });
 
@@ -370,9 +370,9 @@ async function loadAccount(id, ticket) {
 }
 supabase.auth.onAuthStateChange((_event, session) => {
     const id = session?.user?.id || null;
-    // Offline Android startup can use this device's last authenticated data
+    // Offline startup can use this device's last authenticated data
     // while Supabase is still trying to refresh an expired access token.
-    if (_event === 'INITIAL_SESSION' && !id && isNativeApp() && readCachedAccount()?.id === activeUser) return;
+    if (_event === 'INITIAL_SESSION' && !id && readCachedAccount()?.id === activeUser) return;
     activeUserEmail = session?.user?.email || '';
     if (id === activeUser) return;
     activeUser = id;
@@ -490,6 +490,31 @@ mobileUI = createMobileNotebook({
     configureReminders: value => reminderEngine.configure(value),
     enableExactReminders: () => reminderEngine.enableExact(),
     refreshReminders: () => reminderEngine.refresh(),
+    getSyncDetails,
+    async syncNow() {
+        const id = activeUser;
+        await flushNotebook();
+        if (id !== activeUser) return;
+        const state = await readCloudChanges();
+        if (state && ready && id === activeUser) applyState(state);
+        mobileUI?.setStatus('', getSyncDetails());
+    },
+    inspectConflict,
+    async resolveConflict(mode) {
+        const id = activeUser;
+        const state = await resolveConflict(mode);
+        if (state && ready && id === activeUser) { applyState(state); flushNotebook(); }
+    },
+    canExportNotebook: !isNativeApp(),
+    exportNotebook(recovery = false) {
+        const data = recovery ? getRecoveryCopy() : getDraft();
+        if (!data) throw new Error('Нет сохранённой копии для скачивания.');
+        if (isNativeApp()) throw new Error('Скачивание файла пока доступно в веб-версии. Резервная копия сохранена на этом устройстве.');
+        const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' }));
+        const link = document.createElement('a'); link.href = url;
+        link.download = `todo-personal-${recovery ? 'recovery' : 'backup'}-${new Date().toISOString().slice(0, 10)}.json`;
+        link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
     getAccount: () => activeUserEmail
 });
 mobileUI.setAccount(activeUser);
@@ -498,7 +523,7 @@ reminderEngine.start().catch(() => mobileUI.setReminderStatus({ native: isNative
 setInterval(() => { if (!document.hidden) reminderEngine.refresh(); }, 15000);
 window.addEventListener('focus', () => reminderEngine.refresh());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) reminderEngine.refresh(); });
-if (isNativeApp() && !activeUser) {
+if (!activeUser) {
     const cached = readCachedAccount();
     if (cached && localStorage.getItem(`todo-personal:local:${cached.id}`)) {
         activeUser = cached.id;
@@ -526,3 +551,13 @@ setupNativeApp({ ui: mobileUI, onAuthLink: handleAuthLink, onResume: async () =>
     reminderEngine.refresh();
     refreshCloud();
 } }).catch(error => { status.textContent = `Android integration unavailable: ${error.message}`; });
+
+if (!isNativeApp() && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' }).then(async registration => {
+            if (!registration.active) await navigator.serviceWorker.ready;
+            mobileUI?.setOfflineReady(true);
+        }).catch(() => mobileUI?.setOfflineReady(false));
+    });
+} else if (isNativeApp()) mobileUI.setOfflineReady(true);
+window.addEventListener('online', () => { if (ready) refreshCloud(); });

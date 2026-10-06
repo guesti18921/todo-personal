@@ -1,19 +1,7 @@
 import { supabase } from './supabaseClient.js';
 import { normalizeNotebook, readLocalNotebook, writeLocalNotebook } from './localNotebook.js';
 
-function stable(value) {
-    if (Array.isArray(value)) {
-        return '[' + value.map(stable).join(',') + ']';
-    }
-
-    if (value !== null && typeof value === 'object') {
-        return '{' + Object.keys(value).sort().map(
-            name => JSON.stringify(name) + ':' + stable(value[name])
-        ).join(',') + '}';
-    }
-
-    return JSON.stringify(value);
-}
+import { stable, combineNotebooks, compareNotebooks, notebookSummary } from './syncModel.js';
 
 // Writes are serialized and conditional on the revision read from the server.
 let context = null;
@@ -24,6 +12,26 @@ const key = id => `todo-personal:draft:${id}`;
 const empty = () => ({ todos: { home: [], today: [], week: [] }, notes: [] });
 let notify = () => {};
 export function onSaveStatus(callback) { notify = callback; }
+export function getSyncDetails() {
+    const c = context;
+    if (!c) return null;
+    let backup = false;
+    try { backup = Boolean(localStorage.getItem(`todo-personal:recovery-latest:${c.id}`)); } catch (_) {}
+    return { phase: c.phase || 'local', localSaved: c.localSaved, dirty: c.dirty, conflict: c.conflict,
+        savedAt: c.savedAt || null, syncedAt: c.syncedAt || null, counts: notebookSummary(c.state), backup };
+}
+export function getRecoveryCopy() {
+    if (!context) return null;
+    const name = localStorage.getItem(`todo-personal:recovery-latest:${context.id}`);
+    return name ? JSON.parse(localStorage.getItem(name)) : null;
+}
+function preserveCopies(c, cloud) {
+    const name = `todo-personal:recovery:${c.id}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    const backup = { format: 'todo-personal-recovery-v1', createdAt: new Date().toISOString(),
+        local: { state: copy(c.state), revision: c.revision }, cloud: { state: copy(cloud.state), revision: cloud.revision } };
+    try { localStorage.setItem(name, JSON.stringify(backup)); localStorage.setItem(`todo-personal:recovery-latest:${c.id}`, name); }
+    catch (_) { throw new Error('Не удалось сохранить резервную копию на устройстве. Освободите место; обе текущие копии оставлены без изменений.'); }
+}
 export function closeNotebook() {
     clearTimeout(timer);
     clearTimeout(retryTimer);
@@ -33,14 +41,25 @@ export function hasPendingChanges() { return Boolean(context?.dirty); }
 export function isLocallySaved() { return Boolean(context?.localSaved); }
 export function getDraft() { return context ? copy(context.state) : null; }
 function stash(c) {
-    c.localSaved = writeLocalNotebook(c.id, c);
+    const stamp = new Date().toISOString();
+    c.localSaved = writeLocalNotebook(c.id, { ...c, savedAt: stamp });
+    if (c.localSaved) c.savedAt = stamp;
     // Delete an old draft only after its replacement has been persisted.
     if (c.localSaved) {
         try { localStorage.removeItem(key(c.id)); } catch (_) { /* retained safely */ }
     }
     return c.localSaved;
 }
-function report(c, message) { if (context === c) notify(message); }
+function report(c, message) {
+    if (message.startsWith('Conflict:')) c.phase = 'conflict';
+    else if (message === 'Saving...') c.phase = 'syncing';
+    else if (message.includes('connection unavailable') || message.startsWith('Not saved:') || message.startsWith('Connection unavailable')) c.phase = 'offline';
+    else if (message === 'Saved' || message.startsWith('Saved to cloud') || message.startsWith('Loaded from cloud')) c.phase = 'synced';
+    else if (message.includes('waiting for sync')) c.phase = 'pending';
+    else if (message.startsWith('Cloud revision')) c.phase = 'older';
+    else c.phase = 'local';
+    if (context === c) notify(message, getSyncDetails());
+}
 function scheduleRetry(c) {
     clearTimeout(retryTimer);
     if (context !== c || !c.dirty || c.conflict) return;
@@ -68,6 +87,8 @@ export async function openNotebook(id) {
         c.state = normalizeNotebook(saved.state);
         c.revision = saved.revision;
         c.dirty = cached ? cached.dirty : true;
+        c.conflict = Boolean(saved.conflict);
+        c.syncedAt = saved.syncedAt || null;
         stash(c);
         report(c, c.localSaved ? c.dirty ? 'Saved locally — waiting for sync' : 'Saved locally' : 'Local storage unavailable — keep this tab open');
         if (c.dirty) scheduleRetry(c);
@@ -90,6 +111,7 @@ export async function openNotebook(id) {
     const cloud = { todos: data.todos, notes: data.notes };
     c.state = normalizeNotebook(cloud);
     c.revision = data.revision;
+    c.syncedAt = new Date().toISOString();
     c.dirty = stable(c.state) !== stable(cloud);
     stash(c);
     report(c, c.localSaved ? c.dirty ? 'Saved locally — waiting for sync' : 'Saved' : 'Loaded from cloud — local storage unavailable');
@@ -133,10 +155,12 @@ export async function flushNotebook() {
                 if (error) throw error;
                 if (!data?.length) {
                     c.conflict = true;
+                    stash(c);
                     report(c, 'Conflict: download your draft before loading the cloud copy.');
                     return false;
                 }
                 c.revision = data[0].revision;
+                c.syncedAt = new Date().toISOString();
                 c.dirty = stable(c.state) !== stable(sent);
                 stash(c);
             }
@@ -167,12 +191,14 @@ export async function readCloudChanges() {
         return null;
     }
     if (data.revision === revision) {
+        c.syncedAt = new Date().toISOString(); stash(c);
         report(c, c.localSaved ? 'Saved' : 'Loaded from cloud — local storage unavailable');
         return null;
     }
     const cloud = { todos: data.todos, notes: data.notes };
     const normalized = normalizeNotebook(cloud);
     c.revision = data.revision;
+    c.syncedAt = new Date().toISOString();
     c.state = normalized;
     c.dirty = stable(c.state) !== stable(cloud);
     stash(c);
@@ -180,24 +206,43 @@ export async function readCloudChanges() {
     if (c.dirty) scheduleRetry(c);
     return copy(c.state);
 }
-export async function discardDraftAndReload() {
+export async function inspectConflict() {
     const c = context;
-    if (!c || c.running) return null;
-    // Read successfully before discarding the local draft.
+    if (!c || c.running) throw new Error('Дождитесь завершения отправки и попробуйте снова.');
+    const fingerprint = stable(c.state);
     const { data, error } = await supabase.from('notebooks').select('*').eq('user_id', c.id).single();
-    if (error) throw error;
+    if (error) throw new Error('Не удалось получить копию из аккаунта. Проверьте соединение и повторите попытку. Записи на устройстве сохранены.');
+    if (context !== c || stable(c.state) !== fingerprint) throw new Error('Записи изменились во время проверки. Сравните копии заново.');
+    if (!data || !Number.isSafeInteger(data.revision) || data.revision < c.revision) throw new Error('Облачная копия недоступна или устарела. Текущие записи сохранены.');
+    const state = normalizeNotebook({ todos: data.todos, notes: data.notes });
+    c.preview = { fingerprint, revision: data.revision, state };
+    return { local: copy(c.state), cloud: copy(state), differences: compareNotebooks(c.state, state) };
+}
+export async function resolveConflict(mode) {
+    const c = context;
+    if (!['both', 'cloud'].includes(mode) || !c?.preview || c.running) throw new Error('Сначала сравните копии.');
+    const preview = c.preview;
+    if (stable(c.state) !== preview.fingerprint) throw new Error('Записи на устройстве изменились. Сравните копии заново.');
+    const { data, error } = await supabase.from('notebooks').select('*').eq('user_id', c.id).single();
+    if (error) throw new Error('Нет соединения с аккаунтом. Обе копии оставлены без изменений.');
     if (context !== c) return null;
-    clearTimeout(timer);
-    clearTimeout(retryTimer);
-    const cloud = { todos: data.todos, notes: data.notes };
-    c.state = normalizeNotebook(cloud);
-    c.revision = data.revision;
-    c.dirty = stable(c.state) !== stable(cloud);
-    c.conflict = false;
-    stash(c);
-    report(c, c.localSaved ? c.dirty ? 'Saved locally — waiting for sync' : 'Saved' : 'Loaded from cloud — local storage unavailable');
-    if (c.dirty) scheduleRetry(c);
+    if (c.running || stable(c.state) !== preview.fingerprint || data?.revision !== preview.revision || stable(normalizeNotebook({ todos: data.todos, notes: data.notes })) !== stable(preview.state)) {
+        c.preview = null; throw new Error('Одна из копий обновилась. Сравните их заново перед выбором.');
+    }
+    preserveCopies(c, preview);
+    const state = mode === 'both' ? combineNotebooks(c.state, preview.state) : copy(preview.state);
+    const dirty = stable(state) !== stable(preview.state);
+    const next = { ...c, state, revision: preview.revision, dirty, conflict: false, preview: null, syncedAt: dirty ? c.syncedAt : new Date().toISOString(), savedAt: new Date().toISOString() };
+    if (!writeLocalNotebook(c.id, next)) throw new Error('Не удалось сохранить выбранную копию на устройстве. Текущие записи оставлены без изменений.');
+    clearTimeout(timer); clearTimeout(retryTimer);
+    Object.assign(c, next, { localSaved: true, conflict: false, preview: null, retryDelay: 2000 });
+    report(c, dirty ? 'Saved locally — waiting for sync' : 'Saved');
+    if (dirty) scheduleRetry(c);
     return copy(c.state);
+}
+export async function discardDraftAndReload() {
+    await inspectConflict();
+    return resolveConflict('cloud');
 }
 window.addEventListener('beforeunload', event => {
     // A persisted offline edit can safely outlive this tab.
@@ -206,5 +251,6 @@ window.addEventListener('beforeunload', event => {
 function resumeSync() {
     if (context?.dirty) flushNotebook();
 }
+window.addEventListener('offline', () => { if (context) report(context, 'Saved locally — connection unavailable'); });
 window.addEventListener('online', resumeSync);
 window.addEventListener('focus', resumeSync);

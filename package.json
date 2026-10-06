@@ -4,8 +4,8 @@
   "description": "",
   "main": "script.js",
   "scripts": {
-    "test": "node --experimental-vm-modules --test tests/local-notebook.test.cjs tests/auth-deep-link.test.cjs tests/deadline-parser.test.cjs tests/reminder.test.cjs",
-    "build": "webpack",
+    "test": "node --experimental-vm-modules --test tests/local-notebook.test.cjs tests/auth-deep-link.test.cjs tests/deadline-parser.test.cjs tests/reminder.test.cjs tests/sync-runtime.test.cjs",
+    "build": "webpack && node scripts/version-offline.cjs",
     "test:ui": "node --test tests/mobile-ui.test.cjs",
     "android:prepare": "node scripts/prepare-android.cjs",
     "android:sync": "npm run build && npm run android:prepare",

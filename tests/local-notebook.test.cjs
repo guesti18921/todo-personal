@@ -11,7 +11,7 @@ function fixture(existing = new Map()) {
     const disk = existing;
     const listeners = new Map();
     const timers = new Map();
-    let sequence = 0, failWrites = false, online = true, requests = 0, heldUpload;
+    let sequence = 0, failWrites = false, online = true, requests = 0, heldUpload, heldRead;
     const accounts = new Map();
     const storage = {
         getItem: key => disk.get(key) ?? null,
@@ -45,7 +45,7 @@ function fixture(existing = new Map()) {
                 update(value) { update = value; return this; },
                 insert(value) { inserted = value; return this; },
                 async maybeSingle() { return request(); },
-                async single() { return request(); },
+                async single() { if (heldRead) { const gate = heldRead; heldRead = null; await gate; } return request(); },
                 then(yes, no) {
                     if (update && heldUpload) {
                         const gate = heldUpload;
@@ -79,6 +79,7 @@ function fixture(existing = new Map()) {
         set online(value) { online = value; },
         set failWrites(value) { failWrites = value; },
         get requests() { return requests; },
+        holdNextRead() { let release; heldRead = new Promise(resolve => { release = resolve; }); return release; },
         holdNextUpload() {
             let release;
             heldUpload = new Promise(resolve => { release = resolve; });
@@ -299,4 +300,61 @@ test('completing and restoring tasks keeps the original deadline and disables re
     assert.equal(record.entry.checked, false);
     assert.equal(record.entry.date, '2026-10-05');
     assert.equal(record.entry.reminderAt, null);
+});
+
+test('sync details expose local save, confirmed cloud time and offline waiting without losing edits', async () => {
+ const f = fixture(), { store } = await f.load(); f.accounts.set('a', { user_id: 'a', ...empty(), revision: 0 });
+ await store.openNotebook('a'); assert.equal(store.getSyncDetails().phase, 'synced'); assert.ok(store.getSyncDetails().syncedAt);
+ f.online = false; store.savePart('notes', [{ id: 'n', title: 'Deutsch 日本語' }]);
+ assert.equal(store.getSyncDetails().localSaved, true); assert.equal(store.getSyncDetails().dirty, true);
+ await store.flushNotebook(); assert.equal(store.getSyncDetails().phase, 'offline');
+ assert.equal(store.getSyncDetails().counts.notes, 1);
+ f.online = true; await store.flushNotebook(); assert.equal(store.getSyncDetails().phase, 'synced'); assert.equal(store.getSyncDetails().dirty, false);
+ assert.equal(f.accounts.get('a').notes[0].title, 'Deutsch 日本語');
+});
+
+test('conflict comparison and keep-both preserve both versions, backups, deletions and restart-safe resolution', async () => {
+ const f = fixture(), { store } = await f.load();
+ f.accounts.set('a', { user_id: 'a', ...empty(), notes: [{ id: 'same', title: 'Первоначальная', reminder: { mode: 'custom', date: '2099-01-01', time: '12:00' } }], revision: 0 });
+ await store.openNotebook('a'); const mine = store.getDraft(); mine.notes[0].title = 'Моя версия 中文'; store.savePart('notes', mine.notes);
+ f.accounts.set('a', { user_id: 'a', ...empty(), notes: [{ ...mine.notes[0], title: 'Версия в аккаунте' }, { id: 'cloud-only', title: 'Только в аккаунте' }], revision: 1 });
+ await store.flushNotebook(); assert.equal(store.getSyncDetails().conflict, true);
+ const preview = await store.inspectConflict(); assert.equal(preview.differences.length, 2);
+ const result = await store.resolveConflict('both'); assert.equal(result.notes.length, 3);
+ assert.equal(result.notes.find(n => n.id === 'same').title, 'Версия в аккаунте');
+ const duplicate = result.notes.find(n => n.conflictCopy); assert.equal(duplicate.title, 'Моя версия 中文'); assert.equal(duplicate.reminder.mode, 'none');
+ assert.equal(store.getRecoveryCopy().local.state.notes[0].title, 'Моя версия 中文'); assert.equal(store.getRecoveryCopy().cloud.state.notes.length, 2);
+ assert.equal(JSON.parse(f.disk.get('todo-personal:local:a')).conflict, false);
+ await store.flushNotebook(); assert.equal(f.accounts.get('a').notes.length, 3); assert.equal(store.getSyncDetails().phase, 'synced');
+ store.closeNotebook(); const restarted = await fixture(f.disk).load(); await restarted.store.openNotebook('a'); assert.equal(restarted.store.getSyncDetails().conflict, false);
+});
+
+test('replacing with cloud requires a successful backup and refuses stale comparison or changed cloud', async () => {
+ const f = fixture(), { store } = await f.load(); f.accounts.set('a', { user_id: 'a', ...empty(), revision: 0 });
+ await store.openNotebook('a'); store.savePart('notes', [{ id: 'mine', title: 'Не потерять' }]);
+ f.accounts.set('a', { user_id: 'a', ...empty(), notes: [{ id: 'cloud', title: 'Из аккаунта' }], revision: 1 }); await store.flushNotebook();
+ await store.inspectConflict(); f.failWrites = true;
+ await assert.rejects(store.resolveConflict('cloud'), /резервную копию/); assert.equal(store.getDraft().notes[0].title, 'Не потерять');
+ f.failWrites = false; f.accounts.get('a').revision = 2;
+ await assert.rejects(store.resolveConflict('cloud'), /обновилась/); assert.equal(store.getDraft().notes[0].title, 'Не потерять');
+ await store.inspectConflict(); store.savePart('notes', [{ id: 'mine', title: 'Правка после сравнения' }]);
+ await assert.rejects(store.resolveConflict('cloud'), /изменились/);
+ await store.inspectConflict(); const result = await store.resolveConflict('cloud'); assert.equal(result.notes[0].title, 'Из аккаунта');
+ assert.equal(store.getRecoveryCopy().local.state.notes[0].title, 'Правка после сравнения'); assert.equal(store.getSyncDetails().conflict, false);
+});
+
+test('an unresolved conflict survives offline restart and does not resume uploads automatically', async () => {
+ const f = fixture(), { store } = await f.load(); f.accounts.set('a', { user_id: 'a', ...empty(), revision: 0 });
+ await store.openNotebook('a'); store.savePart('notes', [{ id: 'mine', title: 'Офлайн' }]); f.accounts.get('a').revision = 1; await store.flushNotebook(); store.closeNotebook();
+ const next = fixture(f.disk); next.online = false; const restarted = await next.load(); await restarted.store.openNotebook('a');
+ assert.equal(restarted.store.getSyncDetails().conflict, true); await restarted.store.flushNotebook(); assert.equal(next.requests, 0);
+});
+
+test('edits made during a cloud replacement request cannot be discarded by its delayed response', async () => {
+ const f = fixture(), { store } = await f.load(); f.accounts.set('a', { user_id: 'a', ...empty(), revision: 0 });
+ await store.openNotebook('a'); store.savePart('notes', [{ id: 'mine', title: 'Первая версия' }]);
+ f.accounts.get('a').revision = 1; await store.flushNotebook(); await store.inspectConflict();
+ const release = f.holdNextRead(), replacement = store.resolveConflict('cloud');
+ store.savePart('notes', [{ id: 'mine', title: 'Правка во время запроса' }]); release();
+ await assert.rejects(replacement, /обновилась/); assert.equal(store.getDraft().notes[0].title, 'Правка во время запроса'); assert.equal(store.getRecoveryCopy(), null);
 });

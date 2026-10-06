@@ -61,7 +61,9 @@ export function writeLocalNotebook(id, snapshot) {
             state: normalizeNotebook(snapshot.state),
             revision: snapshot.revision,
             dirty: snapshot.dirty,
-            savedAt: new Date().toISOString()
+            conflict: Boolean(snapshot.conflict),
+            savedAt: snapshot.savedAt || new Date().toISOString(),
+            syncedAt: snapshot.syncedAt || null
         }));
         return true;
     } catch (_) { return false; }

@@ -17,11 +17,11 @@ async function ready(dom) {
  while (dom.window.document.querySelector('#todo-app').hidden && Date.now() < deadline) await wait();
  assert.equal(dom.window.document.querySelector('#todo-app').hidden, false, 'notebook opens within the readiness timeout');
 }
-function boot(entries, native = false) {
+function boot(entries, native = false, fetcher = null) {
  const dom = new JSDOM(html, { url: 'https://test.local/', runScripts: 'outside-only', virtualConsole });
  const w = dom.window;
  Object.defineProperty(w, 'crypto', { value: webcrypto });
- Object.assign(w, { TextEncoder, TextDecoder, fetch: async () => { throw new TypeError('Network unavailable'); }, Request, Response, Headers });
+ Object.assign(w, { TextEncoder, TextDecoder, fetch: fetcher || (async () => { throw new TypeError('Network unavailable'); }), Request, Response, Headers });
  if (native) w.androidBridge = { postMessage() {} };
  for (const [key, value] of entries) w.localStorage.setItem(key, value);
  w.eval(bundle);
@@ -208,4 +208,54 @@ test('reminders display exact time, deliver offline, snooze without changing dea
   assert.equal(w.localStorage.getItem('todo-personal:reminders-enabled:' + id), 'false');
   assert.match(doc.querySelector('[data-toggle-reminders]').textContent, /Включить/);
  } finally { dom.window.close(); }
+});
+
+test('mobile synchronization explains offline state, resolves conflicts with both copies and exports a backup', async () => {
+ const exp = Math.floor(Date.now() / 1000) + 86400;
+ const jwt = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url') + '.' + Buffer.from(JSON.stringify({ sub: id, exp, role: 'authenticated' })).toString('base64url') + '.test';
+ const initial = { todos: { home: [], today: [], week: [] }, notes: [{ id: 'original', title: 'Исходная заметка', text: '' }] };
+ let network = true, cloud = { user_id: id, ...JSON.parse(JSON.stringify(initial)), revision: 0 };
+ const fetcher = async (input, options = {}) => {
+  if (!network) throw new TypeError('Network unavailable');
+  const url = new URL(String(input.url || input));
+  if (!url.pathname.includes('/rest/v1/notebooks')) throw new TypeError('Unsupported request');
+  if (options.method === 'PATCH') {
+   if (url.searchParams.get('revision') !== 'eq.' + cloud.revision) return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+   cloud = { ...cloud, ...JSON.parse(options.body) }; return new Response(JSON.stringify([{ revision: cloud.revision }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  return new Response(JSON.stringify(cloud), { status: 200, headers: { 'Content-Type': 'application/json' } });
+ };
+ const seed = [['sb-ihvwqqvndmwtislvgamd-auth-token', JSON.stringify({ access_token: jwt, refresh_token: 'test-only', expires_at: exp, expires_in: 86400, token_type: 'bearer', user: { id, email: 'test@example.com' } })], [cacheKey, JSON.stringify({ schemaVersion: 1, state: initial, revision: 0, dirty: false })]];
+ const dom = boot(seed, false, fetcher), w = dom.window, doc = w.document;
+ const click = selector => { assert.ok(doc.querySelector(selector), selector); doc.querySelector(selector).click(); };
+ const input = (selector, value) => { const el = doc.querySelector(selector); el.value = value; el.dispatchEvent(new w.Event('input', { bubbles: true })); };
+ const until = async predicate => { const end = Date.now() + 3000; while (!predicate() && Date.now() < end) await wait(); assert.ok(predicate()); };
+ try {
+  await ready(dom); await wait(); click('[data-view="all"]'); network = false;
+  click('[data-open]'); input('#mn-text', 'Правка на устройстве 日本語'); click('[data-save]');
+  await until(() => doc.querySelector('.mn-status').textContent.includes('нет соединения'));
+  assert.equal(doc.querySelector('.mn-sync-notice').hidden, false);
+  click('[data-sync-open]'); assert.match(doc.querySelector('.mn-main').textContent, /Сохранено на устройстве/);
+  assert.ok(doc.querySelector('[data-sync-now]')); assert.ok(doc.querySelector('[data-export]'));
+  cloud.notes[0].title = 'Правка на другом устройстве'; cloud.notes.push({ id: 'cloud-only', title: 'Дополнительная' }); cloud.revision = 1;
+  network = true; w.dispatchEvent(new w.Event('online'));
+  await until(() => Boolean(doc.querySelector('[data-compare]'))); click('[data-compare]');
+  await until(() => Boolean(doc.querySelector('[data-resolve="both"]')));
+  assert.equal(doc.querySelectorAll('.mn-copy-difference').length, 2);
+  assert.match(doc.querySelector('.mn-main').textContent, /Правка на устройстве 日本語/); assert.match(doc.querySelector('.mn-main').textContent, /Правка на другом устройстве/);
+  click('[data-resolve="both"]'); await until(() => cloud.notes.length === 3);
+  assert.ok(doc.querySelector('[data-export-recovery]'));
+  let download = ''; w.URL.createObjectURL = () => 'blob:test-backup'; w.URL.revokeObjectURL = () => {};
+  w.HTMLAnchorElement.prototype.click = function () { download = this.download; };
+  click('[data-export-recovery]'); await wait(); assert.match(download, /^todo-personal-recovery-.*\.json$/);
+  click('[data-view="all"]'); assert.equal(doc.querySelectorAll('.mn-card').length, 3);
+  assert.match(doc.querySelector('.mn-list').textContent, /Копия с устройства/);
+ } finally { dom.window.close(); }
+});
+
+test('browser can reopen cached records while an expired session refresh cannot reach the network', async () => {
+ const exp = 1, jwt = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url') + '.' + Buffer.from(JSON.stringify({ sub: id, exp, role: 'authenticated' })).toString('base64url') + '.test';
+ const dom = boot([['sb-ihvwqqvndmwtislvgamd-auth-token', JSON.stringify({ access_token: jwt, refresh_token: 'test-only', expires_at: exp, expires_in: 1, token_type: 'bearer', user: { id, email: 'test@example.com' } })], [cacheKey, JSON.stringify({ schemaVersion: 1, state: { todos: { home: [], today: [], week: [] }, notes: [{ id: 'offline', title: 'Офлайн-копия' }] }, revision: 0, dirty: false })]]);
+ try { await ready(dom); dom.window.document.querySelector('[data-view="all"]').click(); assert.match(dom.window.document.querySelector('.mn-list').textContent, /Офлайн-копия/); }
+ finally { dom.window.close(); }
 });
