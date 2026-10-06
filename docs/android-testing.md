@@ -140,3 +140,12 @@ Android test APK → Run workflow and select android-local-first-2026-10-06.
 Test with two records and the app on Today, another tab, and closed. A delivered
 notification must open the exact record's editor. Updating an installed test
 APK still depends on its debug signing certificate; synchronize before replacing.
+
+## Permanent-signing preparation
+
+The owner confirmed that the 0.4.1 notification tap opens the correct record.
+Permanent signing is prepared separately in `Build Android signed APK`.
+See [android-signing.md](android-signing.md) for the owner's one-time key and
+repository-secret setup. 0.4.2-test uses versionCode 6. Test debug builds retain
+disposable keys; future installed-app updates must use the signed workflow.
+No permanent-key release APK has been built yet.
