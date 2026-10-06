@@ -94,18 +94,23 @@ test('isolated workflow signer keeps keys private, verifies the expected certifi
         fs.mkdirSync(path.join(f.root, 'unsigned')); fs.writeFileSync(path.join(f.root, 'unsigned/app-release-unsigned.apk'), 'simulation-only');
         const scriptPath = path.join(f.root, 'isolated-sign.cjs'); fs.writeFileSync(scriptPath, script);
         const env = { ...f.env, ANDROID_HOME: sdk };
+        if (mode === 'sdk-ranges' || mode === 'range-mismatch') {
+            const second = mode === 'range-mismatch' ? '0'.repeat(64) : expected;
+            const report = 'Signer (minSdkVersion=33, maxSdkVersion=2147483647) certificate SHA-256 digest: ' + expected + '\nSigner (minSdkVersion=24, maxSdkVersion=32) certificate SHA-256 digest: ' + second;
+            fs.writeFileSync(executable, '#!/usr/bin/env node\nconst fs = require("node:fs"); const a = process.argv.slice(2); if (a[0] === "sign") fs.copyFileSync(a.at(-1), a[a.indexOf("--out")+1]); else console.log(' + JSON.stringify(report) + ');\n');
+        }
         if (mode === 'missing') delete env.ANDROID_KEYSTORE_PASSWORD;
         if (mode === 'wrong') env.ANDROID_KEYSTORE_PASSWORD = 'private-wrong-test-password';
         const result = require('node:child_process').spawnSync(process.execPath, [scriptPath], { cwd: f.root, env, encoding: 'utf8' });
         assert.equal(fs.existsSync(path.join(f.runner, 'todo-personal-release.p12')), false);
         assert.equal((result.stdout + result.stderr).includes(password), false);
         assert.equal((result.stdout + result.stderr).includes(f.env.ANDROID_KEYSTORE_BASE64), false);
-        if (mode === 'good') {
+        if (mode === 'good' || mode === 'sdk-ranges') {
             assert.equal(result.status, 0, result.stderr);
             assert.equal(fs.readFileSync(path.join(f.root, 'signed/certificate-sha256.txt'), 'utf8').trim(), expected);
         } else {
             assert.notEqual(result.status, 0); assert.equal(fs.existsSync(path.join(f.root, 'signed')), false);
         }
     };
-    for (const mode of ['good', 'missing', 'wrong', 'mismatch']) run(mode);
+    for (const mode of ['good', 'sdk-ranges', 'missing', 'wrong', 'mismatch', 'range-mismatch']) run(mode);
 });
