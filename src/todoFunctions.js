@@ -1,4 +1,5 @@
 import { savePart } from './notebookStore.js';
+import { createEntryId } from './localNotebook.js';
 import {format} from "date-fns"
 import { el } from "date-fns/locale";
 import Colcade from 'colcade'
@@ -884,6 +885,7 @@ export const toDosManager = (function () {
     // To-do factory function
     function createToDo(name, priority, date, details, project, checked=false) {
         return {
+            id: createEntryId(),
             name,
             priority,
             date,
@@ -1242,6 +1244,7 @@ export const notesManager = (function () {
 
     function createNote(title, text) {
         return {
+            id: createEntryId(),
             title,
             text
         }

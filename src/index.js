@@ -295,7 +295,7 @@ action('Load cloud copy', async () => {
 document.body.append(bar);
 onSaveStatus(message => {
     status.textContent = message;
-    retrySave.hidden = message === 'Saved' || message === 'Saving...';
+    retrySave.hidden = ['Saved', 'Saving...', 'Saved locally'].includes(message);
 });
 
 function applyState(state) {
@@ -345,6 +345,7 @@ async function loadAccount(id, ticket) {
         todoApp.inert = false;
         bar.hidden = false;
         retryLoad.hidden = true;
+        setTimeout(refreshCloud, 0);
     } catch (error) {
         if (ticket !== generation) return;
         closeNotebook();
