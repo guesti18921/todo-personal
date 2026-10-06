@@ -1,7 +1,7 @@
 .mobile-notebook { display: none; }
 @media (max-width: 700px), (pointer: coarse) {
     body { display: block; min-height: 100dvh; font-size: 16px; }
-    #todo-app.content { display: block; width: 100%; min-height: 100dvh; margin: 0; border-radius: 0; box-shadow: none; }
+    #todo-app.content { display: block; width: 100%; height: auto; min-height: 100dvh; overflow: visible; margin: 0; border-radius: 0; box-shadow: none; }
     #todo-app[hidden] { display: none !important; }
     #todo-app > .header, #todo-app > .side-bar, #todo-app > .main__container { display: none; }
     .sync-bar { display: none !important; }
