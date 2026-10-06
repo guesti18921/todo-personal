@@ -1,4 +1,4 @@
-import { openNotebook, closeNotebook, saveNotebook, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, discardDraftAndReload, getSyncDetails, getRecoveryCopy, inspectConflict, resolveConflict } from './notebookStore.js';
+import { openNotebook, closeNotebook, saveNotebook, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, getSyncDetails, getRecoveryCopy, inspectConflict, resolveConflict } from './notebookStore.js';
 import { supabase, SUPABASE_URL, SUPABASE_PUBLIC_KEY } from './supabaseClient.js';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { createReminderEngine } from './reminderEngine.js';
@@ -307,49 +307,7 @@ let ready = false;
 let polling = false;
 let changingAccount = false;
 
-const bar = document.createElement('div');
-bar.className = 'sync-bar';
-bar.style.cssText = 'position:fixed;bottom:8px;left:50%;transform:translateX(-50%);z-index:1000;max-width:96vw;padding:8px 12px;background:#f7f7f7;color:#501f3a;border:1px solid #c38d9e;border-radius:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font:13px sans-serif;';
-bar.hidden = true;
-const status = document.createElement('span');
-status.setAttribute('role', 'status');
-bar.append(status);
-function action(label, handler) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = label;
-    button.style.cssText = 'padding:5px 8px;background:#c38d9e;color:white;border:0;border-radius:3px;cursor:pointer;font:inherit;';
-    button.addEventListener('click', handler);
-    bar.append(button);
-    return button;
-}
-const retrySave = action('Retry save', () => { flushNotebook(); });
-retrySave.hidden = true;
-action('Download draft', () => {
-    const draft = getDraft();
-    if (!draft) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'notebook-draft.json';
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-});
-action('Load cloud copy', async () => {
-    if (hasPendingChanges() && !window.confirm('This replaces your unsaved edits with the cloud copy. Download your draft first. Continue?')) return;
-    todoApp.inert = true;
-    try {
-        const state = await discardDraftAndReload();
-        if (state && ready) applyState(state);
-    } catch (error) { status.textContent = error.message; }
-    finally { todoApp.inert = !ready; }
-});
-document.body.append(bar);
-onSaveStatus((message, details) => {
-    status.textContent = message;
-    mobileUI?.setStatus(message, details);
-    retrySave.hidden = ['Saved', 'Saving...', 'Saved locally'].includes(message);
-});
+onSaveStatus((message, details) => { mobileUI?.setStatus(message, details); });
 
 function applyState(state) {
     for (const name of Object.keys(todos)) delete todos[name];
@@ -367,7 +325,6 @@ function resetScreen() {
     ready = false;
     todoApp.hidden = true;
     todoApp.inert = true;
-    bar.hidden = true;
     closeNotebook();
     applyState({ todos: { home: [], today: [], week: [] }, notes: [] });
     addToDoForm.reset();
@@ -382,13 +339,20 @@ function resetScreen() {
 }
 const retryLoad = document.createElement('button');
 retryLoad.type = 'button';
-retryLoad.textContent = 'Retry loading notebook';
+retryLoad.textContent = 'Попробовать снова';
+retryLoad.className = 'auth-retry';
 retryLoad.hidden = true;
-authMessage.after(retryLoad);
+const switchAccount = document.createElement('button');
+switchAccount.type = 'button';
+switchAccount.className = 'auth-retry';
+switchAccount.textContent = 'Войти в другой аккаунт';
+switchAccount.hidden = true;
+authMessage.after(retryLoad, switchAccount);
+switchAccount.addEventListener('click', () => signOutAccount());
 retryLoad.addEventListener('click', () => { if (activeUser) loadAccount(activeUser, generation); });
 
 async function loadAccount(id, ticket) {
-    retryLoad.disabled = true;
+    retryLoad.disabled = switchAccount.disabled = true;
     authMessage.textContent = 'Открываем ваши записи…';
     try {
         const state = await openNotebook(id);
@@ -399,16 +363,17 @@ async function loadAccount(id, ticket) {
         authScreen.hidden = true;
         todoApp.hidden = false;
         todoApp.inert = false;
-        bar.hidden = false;
-        retryLoad.hidden = true;
+        retryLoad.hidden = switchAccount.hidden = true;
         setTimeout(refreshCloud, 0);
     } catch (error) {
         if (ticket !== generation) return;
         closeNotebook();
-        authMessage.textContent = `Could not load notebook: ${error.message}`;
-        retryLoad.hidden = false;
+        authMessage.textContent = error instanceof SyntaxError || /^(Invalid|Unsupported) (local |notebook)/.test(error?.message || '')
+            ? 'Не удалось прочитать сохранённые записи. Данные на устройстве оставлены без изменений. Попробуйте обновить приложение.'
+            : 'Не удалось открыть записи. Проверьте интернет и попробуйте снова. Если это первый вход на устройстве, для загрузки записей нужна сеть.';
+        retryLoad.hidden = switchAccount.hidden = false;
     } finally {
-        if (ticket === generation) retryLoad.disabled = false;
+        if (ticket === generation) retryLoad.disabled = switchAccount.disabled = false;
     }
 }
 supabase.auth.onAuthStateChange((_event, session) => {
@@ -430,7 +395,7 @@ supabase.auth.onAuthStateChange((_event, session) => {
     authSwitch.hidden = Boolean(id);
     updateGoogleVisibility();
     if (!id) refreshGoogleProvider();
-    retryLoad.hidden = true;
+    retryLoad.hidden = switchAccount.hidden = true;
     authForm.reset();
     authPassword.type = 'password';
     passwordToggle.textContent = 'Показать пароль';
@@ -493,20 +458,33 @@ authForm.addEventListener('submit', async event => {
     } catch (_) { authMessage.textContent = 'Нет соединения. Проверьте интернет и попробуйте снова.'; }
     finally { authGoogle.disabled = authSubmit.disabled = authSwitch.disabled = false; }
 });
-logout.addEventListener('click', async () => {
+function showAccountMessage(message) {
+    if (ready) mobileUI?.showMessage(message);
+    else authMessage.textContent = message;
+}
+async function signOutAccount() {
     if (changingAccount) return;
     changingAccount = true;
     todoApp.inert = true;
+    switchAccount.disabled = retryLoad.disabled = true;
+    showAccountMessage('Сохраняем записи перед выходом…');
     try {
         if (!await flushNotebook()) {
-            window.alert('Your latest edits are not saved to the cloud. Retry saving or download your draft before leaving.');
+            const info = getSyncDetails();
+            showAccountMessage(info?.conflict
+                ? 'Перед выходом сравните две копии блокнота на экране «Сохранение».'
+                : info?.localSaved
+                    ? 'Записи сохранены на устройстве, но ещё не отправлены в аккаунт. Проверьте интернет, откройте «Сохранение» и нажмите «Синхронизировать сейчас». Затем повторите выход.'
+                    : 'Не удалось сохранить последние изменения. Оставьте блокнот открытым, освободите место на устройстве и повторите сохранение.');
             return;
         }
         const { error } = await supabase.auth.signOut({ scope: 'local' });
-        if (error) window.alert(error.message);
-    } catch (error) { window.alert(error.message); }
-    finally { changingAccount = false; todoApp.inert = !ready; }
-});
+        if (error) showAccountMessage('Не удалось выйти. Попробуйте снова.');
+    } catch (_) { showAccountMessage('Не удалось выйти. Проверьте соединение и попробуйте снова.'); }
+    finally { changingAccount = false; todoApp.inert = !ready; switchAccount.disabled = retryLoad.disabled = false; }
+}
+logout.addEventListener('click', signOutAccount);
+
 async function refreshCloud() {
     if (!ready || polling || changingAccount || document.hidden || hasPendingChanges()) return;
     if (document.activeElement?.matches('input, textarea, [contenteditable="true"]')) return;
@@ -536,7 +514,7 @@ mobileUI = createMobileNotebook({
         reminderEngine.refresh();
         return saved;
     },
-    logout: () => logout.click(),
+    logout: signOutAccount,
     configureReminders: value => reminderEngine.configure(value),
     enableExactReminders: () => reminderEngine.enableExact(),
     refreshReminders: () => reminderEngine.refresh(),
@@ -601,7 +579,7 @@ setupNativeApp({ ui: mobileUI, onAuthLink: handleAuthLink, onResume: async () =>
     await flushNotebook();
     reminderEngine.refresh();
     refreshCloud();
-} }).catch(error => { status.textContent = `Android integration unavailable: ${error.message}`; });
+} }).catch(() => { mobileUI?.showMessage('Не удалось подключить функции Android. Закройте и снова откройте приложение.'); });
 
 if (!isNativeApp() && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {

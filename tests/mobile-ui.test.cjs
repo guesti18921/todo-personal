@@ -396,3 +396,52 @@ test('a failed mixed list action restores the original records and never reports
   assert.equal(state.todos.home[0].date, f.date(1)); assert.equal(state.notes[0].date, f.date(1));
  } finally { dom.window.close(); }
 });
+
+
+test('settings stay concise and blocked offline sign-out preserves all local changes', async () => {
+ const f = listFixture();
+ const seed = f.seed.map(([key, value]) => key === cacheKey ? [key, JSON.stringify({ ...JSON.parse(value), dirty: true })] : [key, value]);
+ const dom = boot(seed); const doc = dom.window.document;
+ let alerts = 0; dom.window.alert = () => alerts++;
+ try {
+  await ready(dom);
+  assert.equal(doc.querySelector('.sync-bar'), null, 'legacy technical toolbar is removed');
+  doc.querySelector('[data-view="settings"]').click();
+  assert.ok(doc.querySelector('[data-smart-dates]'));
+  assert.ok(doc.querySelector('[data-toggle-reminders]'));
+  const languages = Array.from(doc.querySelectorAll('details')).find(d => /Какие языки/.test(d.textContent));
+  assert.ok(languages); assert.equal(languages.open, false);
+  const before = JSON.parse(dom.window.localStorage.getItem(cacheKey)).state;
+  doc.querySelector('[data-logout]').click(); await wait(); await wait();
+  assert.equal(doc.querySelector('#todo-app').hidden, false);
+  assert.match(doc.querySelector('.mn-message').textContent, /сохранены на устройстве.*ещё не отправлены/);
+  assert.deepEqual(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state, before);
+  assert.equal(doc.querySelector('#todo-app').inert, false);
+  assert.equal(alerts, 0);
+  doc.querySelector('[data-sync-open]').click();
+  assert.equal(doc.querySelector('[data-sync-now]').textContent, 'Синхронизировать сейчас');
+ } finally { dom.window.close(); }
+});
+
+test('failed first account load hides server errors and allows switching account', async () => {
+ const f = listFixture(); const secret = 'private-server-detail';
+ const fetcher = async url => {
+  url = String(url);
+  if (url.includes('/rest/v1/')) return new Response(JSON.stringify({ message: secret, code: 'XX001' }), { status: 500 });
+  if (url.includes('/auth/v1/logout')) return new Response(null, { status: 204 });
+  if (url.includes('/auth/v1/settings')) return new Response(JSON.stringify({ external: { google: false } }), { status: 200 });
+  throw new TypeError('Network unavailable');
+ };
+ const dom = boot(f.seed.filter(([key]) => key !== cacheKey), false, fetcher), doc = dom.window.document;
+ try {
+  for (let i = 0; i < 30 && !Array.from(doc.querySelectorAll('.auth-retry')).some(b => !b.hidden); i++) await wait();
+  assert.match(doc.querySelector('#auth-message').textContent, /Не удалось открыть записи/);
+  assert.equal(doc.body.textContent.includes(secret), false);
+  const buttons = Array.from(doc.querySelectorAll('.auth-retry'));
+  assert.equal(buttons.every(b => !b.hidden && !b.disabled), true);
+  buttons.find(b => /другой аккаунт/.test(b.textContent)).click(); await wait(); await wait();
+  assert.equal(doc.querySelector('#auth-form').hidden, false);
+  assert.equal(doc.querySelector('#todo-app').hidden, true);
+  assert.equal(buttons.every(b => b.hidden), true);
+ } finally { dom.window.close(); }
+});

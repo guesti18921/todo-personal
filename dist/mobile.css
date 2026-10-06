@@ -1,15 +1,14 @@
 .mobile-notebook { display: none; }
-@media (max-width: 700px), (pointer: coarse) {
+@media (min-width: 0px) {
     body { display: block; min-height: 100dvh; font-size: 16px; }
     #todo-app.content { display: block; width: 100%; height: auto; min-height: 100dvh; overflow: visible; margin: 0; border-radius: 0; box-shadow: none; }
     #todo-app[hidden] { display: none !important; }
     #todo-app > .header, #todo-app > .side-bar, #todo-app > .main__container { display: none; }
-    .sync-bar { display: none !important; }
     .mobile-notebook { display: block; background: #f7f3ee; color: #501f3a; min-height: 100dvh; font: 16px/1.5 Lato, Arial, sans-serif; padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
     .mobile-notebook [hidden] { display: none !important; }
     .mobile-notebook *, .mobile-notebook *::before, .mobile-notebook *::after { box-sizing: border-box; }
     .mobile-notebook button { font: inherit; color: inherit; min-height: 44px; cursor: pointer; }
-    .mobile-notebook button:focus-visible, .mobile-notebook input:focus-visible, .mobile-notebook textarea:focus-visible, .mobile-notebook summary:focus-visible { outline: 3px solid #367f75; outline-offset: 3px; }
+    .mobile-notebook button:focus-visible, .mobile-notebook input:focus-visible, .mobile-notebook textarea:focus-visible, .mobile-notebook select:focus-visible, .mobile-notebook summary:focus-visible { outline: 3px solid #367f75; outline-offset: 3px; }
     .mn-header { background: #c38d9e; padding: calc(16px + env(safe-area-inset-top)) 18px 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
     .mn-logo { font-size: 21px; font-weight: 700; white-space: nowrap; }
     .mn-status { font-size: 12px; text-align: right; max-width: 190px; overflow-wrap: anywhere; }
@@ -80,7 +79,7 @@
     .mn-date-fields { grid-template-columns: 1fr; }
     .mn-nav button { font-size: 11px; }
 }
-@media (max-width: 700px), (pointer: coarse) {
+@media (min-width: 0px) {
     .mn-status { border: 0; background: transparent; padding: 4px; min-height: 44px; text-decoration: underline; text-underline-offset: 3px; }
     .mn-sync-notice { margin: 14px 18px 0; padding: 14px; border: 1px solid #c38d9e; border-radius: 9px; background: #f3e8ed; font-size: 14px; }
     .mn-sync-notice p { margin-bottom: 8px; }
@@ -97,7 +96,7 @@
 #auth-password-toggle { margin: 4px 0 12px; min-height: 44px; }
 #auth-google:disabled { opacity: .6; cursor: wait; }
 
-@media (max-width: 700px), (pointer: coarse) {
+@media (min-width: 0px) {
     .mn-list-options { border: 1px solid #ddccd1; border-radius: 8px; padding: 0 12px; }
     .mn-list-selects { display: grid; gap: 10px; padding-bottom: 12px; }
     .mn-list-selects label { margin: 0 !important; }
@@ -113,4 +112,13 @@
     .mn-bulk-panel button:disabled { opacity: .55; cursor: default; }
     .mn-main .mn-bulk-help { margin: 6px 0 0; font-size: 13px; }
     .mn-message:not(:empty) { position: fixed; bottom: calc(154px + env(safe-area-inset-bottom)); left: 14px; right: 14px; z-index: 30; margin: 0; padding: 12px 14px; background: #fffdfb; border: 1px solid #a6c8be; border-radius: 9px; box-shadow: 0 3px 14px #501f3a25; }
+}
+
+.auth-retry { min-height: 48px; padding: 10px 14px; margin: 8px 6px 0 0; border: 1px solid #c38d9e; border-radius: 8px; background: #fffdfb; color: #501f3a; font: inherit; cursor: pointer; }
+.auth-retry[hidden] { display: none; }
+@media (min-width: 701px) {
+    .mn-main, .mn-sync-notice { max-width: 850px; margin-left: auto; margin-right: auto; }
+    .mn-nav { padding-left: max(5px, calc((100vw - 850px) / 2)); padding-right: max(5px, calc((100vw - 850px) / 2)); }
+    .mn-message:not(:empty) { max-width: 822px; margin: auto; }
+    .mn-add { right: max(20px, calc((100vw - 850px) / 2 + 20px)); }
 }

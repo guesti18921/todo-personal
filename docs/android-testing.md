@@ -62,7 +62,10 @@ keep their original redirect address and cannot be changed by an APK update.
 An already confirmed account can simply sign in in the app.
 Expired links and failed network requests show a retry/sign-in message; full
 callback URLs and credentials are never logged by the app handler.
-Google login is still a later stage.
+Google login is configured and verified by the owner in the web preview.
+See [google-sign-in.md](google-sign-in.md) for the provider configuration.
+In the next APK, verify both Google and email sign-in with the app closed and
+already running. Returning from Google must preserve the existing notebook.
 
 The builds currently use disposable debug signing keys. If Android refuses to
 update the previous test APK, first sync all records, then uninstall it and
@@ -70,8 +73,32 @@ install this build. Uninstalling removes all local app data.
 
 ## Current limits
 
-- Notifications and natural-language date parsing are not implemented yet.
+- Android notifications are implemented but still need a real-device background
+  test in the next APK. Browser reminders require an open page.
+- Basic date suggestions support ten languages. They require confirmation and
+  keep the original text; arbitrary natural-language understanding is outside MVP.
 - The interface is currently Russian; record text is not translated.
 - Network access to Supabase depends on the actual provider/VPN; automated
   tests simulate failures, so the real network checks above are required.
 - Do not uninstall or clear app data while changes are still only local.
+
+## Additional checks in the next APK
+
+1. In Settings enable reminders, grant Android notification permission, and
+   create a reminder a few minutes ahead. Close the app and lock the phone.
+   Verify delivery offline, tap-to-open, snooze, and cancellation after completion.
+2. Deny notification permission, then enable it in Android settings. Check that
+   the app explains the next step without repeatedly asking for permission.
+3. Select multiple tasks and a note. Complete only the tasks; undo. Move the
+   selection to tomorrow; verify the note text and reminder time are preserved.
+4. Verify all screens scroll to their last control with the keyboard open and
+   closed. Check portrait, landscape, and the same screens in the web preview.
+5. Disconnect with unsynchronized changes and try signing out. The app must
+   explain that changes are local, keep the account open, and preserve every entry.
+   Reconnect, synchronize, and retry signing out.
+6. On a fresh device, interrupt the first account load. Verify a readable retry
+   message and the option to use another account. Server errors must not appear.
+
+The preview now uses the same notebook interface on touch and desktop screens.
+Account snapshots remain isolated. VPN/IP changes never clear local records;
+actual network reachability must be checked with the networks used by the owner.
