@@ -1,0 +1,66 @@
+name: Build Android signed APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Get current mobile source
+        uses: actions/checkout@v4
+        with:
+          ref: android-local-first-2026-10-06
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Check signing secrets
+        run: node scripts/android-signing.cjs check
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install dependencies
+        run: npm ci
+      - name: Test storage and signing
+        run: npm test
+      - name: Build interface
+        run: npm run build
+      - name: Test mobile flows
+        run: npm run test:ui
+      - name: Prepare Android project
+        run: npm run android:prepare
+      - name: Configure permanent signature
+        run: node scripts/android-signing.cjs configure
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      - name: Assemble signed APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      - name: Verify APK and certificate
+        run: node scripts/android-signing.cjs verify
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: todo-personal-android-signed
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/certificate-sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove private signing file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/todo-personal-release.p12"
