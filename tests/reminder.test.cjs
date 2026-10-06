@@ -50,6 +50,7 @@ test('native schedule requires explicit permission, reconciles edits and cancels
  assert.equal(p.pending.length, 1); assert.equal(p.pending[0].isExactNotification, false, 'no surprise exact-alarm permission prompt');
  const scheduled = p.calls.filter(c => c === 'schedule').length; await engine.refresh();
  assert.equal(p.calls.filter(c => c === 'schedule').length, scheduled, 'unchanged reminders stay scheduled');
+ records[0].type = 'note'; records[0].entry.title = records[0].entry.name; await engine.refresh(); assert.equal(p.pending[0].title, 'Напоминание о заметке');
  records[0].entry.time = '19:00'; await engine.refresh(); assert.equal(p.pending.length, 1); assert.equal(p.pending[0].schedule.at.getHours(), 18);
  records[0].entry.checked = true; await engine.refresh(); assert.equal(p.pending.length, 0);
  records[0].entry.checked = false; await engine.refresh(); assert.equal(p.pending.length, 1);

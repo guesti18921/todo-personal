@@ -74,7 +74,7 @@ export function createReminderEngine({ native, plugin, storage, getRecords, onDu
             const unchanged = new Set(), cancel = [];
             for (const old of pending) {
                 const next = wanted.get(old.id);
-                if (next && old.extra?.signature === next.extra.signature && old.isExactNotification === exact) unchanged.add(old.id);
+                if (next && old.extra?.signature === next.extra.signature && old.title === next.title && old.isExactNotification === exact) unchanged.add(old.id);
                 else cancel.push({ id: old.id });
             }
             if (cancel.length) await plugin.cancel({ notifications: cancel });
