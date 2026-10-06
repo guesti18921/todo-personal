@@ -115,9 +115,10 @@ jobs:
             stage = 'finding Android signing tools';
             const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
             const folder = path.join(sdk, 'build-tools');
-            const versions = fs.readdirSync(folder).filter(v => fs.existsSync(path.join(folder, v, 'apksigner'))).sort((a,b) => a.localeCompare(b, 'en', { numeric: true }));
-            if (!versions.length) throw Error('No apksigner');
-            const signer = path.join(folder, versions.at(-1), 'apksigner');
+            // Keep the CLI output format tied to the version tested with a real APK.
+            const version = '37.0.0';
+            const signer = path.join(folder, version, 'apksigner');
+            if (!fs.existsSync(signer)) throw Error('Reviewed apksigner version unavailable');
             fs.mkdirSync('signed', { recursive: true });
             const apk = 'signed/todo-personal.apk';
             stage = 'signing the APK';
@@ -125,13 +126,13 @@ jobs:
             stage = 'verifying the APK signature';
             const output = execFileSync(signer, ['verify', '--verbose', '--print-certs', apk], { ...options, encoding: 'utf8' });
             stage = 'comparing the public certificate';
-            const signers = Array.from(output.matchAll(/^Signer (?:#\d+|\(minSdkVersion=[^\r\n]+\)) certificate SHA-256 digest: ([0-9a-f]{64})[ \t]*$/gim), m => m[1].toLowerCase());
+            const signers = Array.from(output.matchAll(/^(?:Signer(?: #\d+| \(minSdkVersion=[^\r\n]+\))?|V3\.[01] Signer(?: \(minSdkVersion=[^\r\n]+\))?):? certificate SHA-256 digest: ([0-9a-f]{64})[ \t]*$/gim), m => m[1].toLowerCase());
             if (!signers.length || signers.some(fingerprint => fingerprint !== expected)) {
               console.error('Public expected certificate SHA-256: ' + expected);
               console.error('Recognized APK certificate fingerprints: ' + JSON.stringify(signers));
               const publicDigests = Array.from(output.matchAll(/certificate SHA-256 digest: ([0-9a-f:]+)/gi), m => m[1].toLowerCase());
               console.error('Public APK certificate digest fields: ' + JSON.stringify(publicDigests));
-              console.error('Android build-tools version: ' + versions.at(-1));
+              console.error('Android build-tools version: ' + version);
               throw Error('Certificate mismatch');
             }
             fs.writeFileSync('signed/certificate-sha256.txt', expected + '\n');
