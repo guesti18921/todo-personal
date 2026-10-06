@@ -12,6 +12,11 @@ virtualConsole.on('jsdomError', error => errors.push(error.message));
 const id = '11111111-1111-4111-8111-111111111111';
 const cacheKey = 'todo-personal:local:' + id, draftKey = 'todo-personal:entry-draft:' + id;
 const wait = () => new Promise(resolve => setTimeout(resolve, 100));
+async function ready(dom) {
+ const deadline = Date.now() + 5000;
+ while (dom.window.document.querySelector('#todo-app').hidden && Date.now() < deadline) await wait();
+ assert.equal(dom.window.document.querySelector('#todo-app').hidden, false, 'notebook opens within the readiness timeout');
+}
 function boot(entries, native = false) {
  const dom = new JSDOM(html, { url: 'https://test.local/', runScripts: 'outside-only', virtualConsole });
  const w = dom.window;
@@ -33,7 +38,7 @@ test('mobile notebook core flows persist across offline restart', async () => {
  const disk = () => JSON.parse(dom.window.localStorage.getItem(cacheKey));
  const snapshot = () => Array.from({ length: dom.window.localStorage.length }, (_, i) => { const key = dom.window.localStorage.key(i); return [key, dom.window.localStorage.getItem(key)]; });
  try {
-  await wait();
+  await ready(dom);
   assert.equal(doc().querySelector('#todo-app').hidden, false);
   assert.equal(doc().querySelector('[data-view="today"]').getAttribute('aria-current'), 'page');
   click('.mn-add');
@@ -70,7 +75,7 @@ test('mobile notebook core flows persist across offline restart', async () => {
   input('#mn-text', 'Русский · English · Italiano · Español 😀');
   click('[data-back]');
   assert.ok(dom.window.localStorage.getItem(draftKey));
-  const saved = snapshot();dom.window.close();dom = boot(saved);await wait();
+  const saved = snapshot();dom.window.close();dom = boot(saved);await ready(dom);
   click('.mn-add');
   assert.equal(doc().querySelector('#mn-text').value, 'Русский · English · Italiano · Español 😀');
   click('[data-save]');
@@ -103,7 +108,7 @@ test('mobile notebook core flows persist across offline restart', async () => {
    const session = JSON.parse(value); session.expires_at = 1;
    return [key, JSON.stringify(session)];
   });
-  dom.window.close(); dom = boot(expired, true); await wait();
+  dom.window.close(); dom = boot(expired, true); await ready(dom);
   assert.equal(doc().querySelector('#todo-app').hidden, false, 'native cold start works while expired session refresh cannot reach the network');
   assert.ok(doc().querySelector('.mobile-notebook'));
   assert.deepEqual(errors, []);
@@ -121,7 +126,7 @@ test('deadline suggestions require confirmation, remember rejection and respect 
  const snapshot = () => Array.from({ length: dom.window.localStorage.length }, (_, i) => { const key = dom.window.localStorage.key(i); return [key, dom.window.localStorage.getItem(key)]; });
  const disk = () => JSON.parse(dom.window.localStorage.getItem(cacheKey));
  try {
-  await wait();
+  await ready(dom);
   click('.mn-add'); input('#mn-text', 'Завтра в 18:00 позвонить');
   assert.equal(doc().querySelector('[name="date"]').value, '', 'typing never changes the deadline');
   assert.equal(doc().querySelector('.mn-suggestion').hidden, false);
@@ -145,7 +150,7 @@ test('deadline suggestions require confirmation, remember rejection and respect 
   click('[data-view="settings"]');
   click('[data-smart-dates]');
   assert.equal(JSON.parse(dom.window.localStorage.getItem('todo-personal:preferences:' + id)).smartDates, false);
-  const saved = snapshot(); dom.window.close(); dom = boot(saved); await wait();
+  const saved = snapshot(); dom.window.close(); dom = boot(saved); await ready(dom);
   click('.mn-add'); input('#mn-text', 'Tomorrow at 6 pm call');
   assert.equal(doc().querySelector('.mn-suggestion').hidden, true, 'disabled preference survives offline restart');
   click('[data-back]'); click('[data-view="settings"]'); click('[data-smart-dates]');
