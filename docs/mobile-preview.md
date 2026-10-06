@@ -12,9 +12,11 @@ are separate; sync is needed to see edits on both devices.
 Native Android functionality still requires device testing in an APK.
 Android APK assembly now runs only through workflow_dispatch, when requested.
 
-Pages deployment uses the github-pages environment. If its deployment branch
-policy disallows the development branch, run Publish TO-DO manually from main;
-it always reads the current development branch for the preview.
+Pages deployment runs from main in the github-pages environment. After a
+development branch change, run Publish TO-DO manually from main, or update
+the publishing workflow in main to trigger a deployment. It always reads the
+current development branch for the preview. Development-branch pushes do not
+attempt deployment because the environment does not accept that branch.
 To register directly in the preview, first allow its exact URL in Supabase
 Authentication → URL Configuration → Redirect URLs. Signing in with an
 already confirmed account does not require another redirect setting.
