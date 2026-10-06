@@ -4,7 +4,7 @@
   "description": "",
   "main": "script.js",
   "scripts": {
-    "test": "node --experimental-vm-modules --test tests/local-notebook.test.cjs tests/auth-deep-link.test.cjs tests/deadline-parser.test.cjs",
+    "test": "node --experimental-vm-modules --test tests/local-notebook.test.cjs tests/auth-deep-link.test.cjs tests/deadline-parser.test.cjs tests/reminder.test.cjs",
     "build": "webpack",
     "test:ui": "node --test tests/mobile-ui.test.cjs",
     "android:prepare": "node scripts/prepare-android.cjs",
@@ -32,6 +32,7 @@
     "@capacitor/android": "8.5.2",
     "@capacitor/app": "8.1.2",
     "@capacitor/core": "8.5.2",
+    "@capacitor/local-notifications": "8.3.0",
     "@supabase/supabase-js": "^2.117.2",
     "colcade": "^0.2.0",
     "date-fns": "^2.16.1",

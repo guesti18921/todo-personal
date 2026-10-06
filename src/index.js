@@ -1,10 +1,13 @@
 import { openNotebook, closeNotebook, savePart, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, discardDraftAndReload } from './notebookStore.js';
 import { supabase } from './supabaseClient.js';
-import { createMobileNotebook } from './mobileNotebook.js';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { createReminderEngine } from './reminderEngine.js';
+import { listEntries, createMobileNotebook } from './mobileNotebook.js';
 import { isNativeApp, setupNativeApp } from './nativeApp.js';
 import { readCachedAccount } from './localAccount.js';
 import { AUTH_REDIRECT_URL, createAuthLinkHandler } from './authDeepLink.js';
 let mobileUI = null;
+let reminderEngine = null;
 // all major functions are stored in these objects
 import {toDosManager, domManipulator, notesManager} from "./todoFunctions.js"
 
@@ -315,6 +318,7 @@ function applyState(state) {
     document.querySelectorAll('.nav__selected').forEach(el => el.classList.remove('nav__selected'));
     document.querySelector('.nav').children.item(0).classList.add('nav__selected');
     mobileUI?.render();
+    if (ready) reminderEngine?.refresh();
 }
 function resetScreen() {
     ready = false;
@@ -348,6 +352,7 @@ async function loadAccount(id, ticket) {
         if (ticket !== generation || !state) return;
         applyState(state);
         ready = true;
+        reminderEngine?.refresh();
         authScreen.hidden = true;
         todoApp.hidden = false;
         todoApp.inert = false;
@@ -374,6 +379,7 @@ supabase.auth.onAuthStateChange((_event, session) => {
     mobileUI?.setAccount(id);
     const ticket = ++generation;
     resetScreen();
+    reminderEngine?.setAccount(id);
     authScreen.hidden = false;
     authConfirm.hidden = true;
     authTitle.hidden = false;
@@ -463,6 +469,12 @@ async function refreshCloud() {
 }
 setInterval(refreshCloud, 10000);
 window.addEventListener('focus', refreshCloud);
+reminderEngine = createReminderEngine({
+    native: isNativeApp(), plugin: LocalNotifications, storage: localStorage,
+    getRecords: () => ready && isLocallySaved() ? listEntries(todos, notes) : [],
+    onDue: record => mobileUI?.notifyReminder(record),
+    onStatus: value => mobileUI?.setReminderStatus(value)
+});
 mobileUI = createMobileNotebook({
     root: todoApp, todos, notes,
     persist() {
@@ -471,12 +483,21 @@ mobileUI = createMobileNotebook({
         domManipulator.renderAllToDos(todos, display);
         domManipulator.renderProjectNames(todos, display);
         mobileUI?.render();
+        reminderEngine.refresh();
         return isLocallySaved();
     },
     logout: () => logout.click(),
+    configureReminders: value => reminderEngine.configure(value),
+    enableExactReminders: () => reminderEngine.enableExact(),
+    refreshReminders: () => reminderEngine.refresh(),
     getAccount: () => activeUserEmail
 });
 mobileUI.setAccount(activeUser);
+reminderEngine.setAccount(activeUser);
+reminderEngine.start().catch(() => mobileUI.setReminderStatus({ native: isNativeApp(), enabled: false, scheduled: 0, error: 'Не удалось подключить уведомления Android. Попробуйте открыть приложение снова.' }));
+setInterval(() => { if (!document.hidden) reminderEngine.refresh(); }, 15000);
+window.addEventListener('focus', () => reminderEngine.refresh());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) reminderEngine.refresh(); });
 if (isNativeApp() && !activeUser) {
     const cached = readCachedAccount();
     if (cached && localStorage.getItem(`todo-personal:local:${cached.id}`)) {
@@ -485,6 +506,7 @@ if (isNativeApp() && !activeUser) {
         const ticket = ++generation;
         resetScreen();
         mobileUI.setAccount(cached.id);
+        reminderEngine.setAccount(cached.id);
         authScreen.hidden = false;
         authForm.hidden = true;
         authSwitch.hidden = true;
@@ -501,5 +523,6 @@ const handleAuthLink = createAuthLinkHandler({ auth: supabase.auth, onStatus(res
 } });
 setupNativeApp({ ui: mobileUI, onAuthLink: handleAuthLink, onResume: async () => {
     await flushNotebook();
+    reminderEngine.refresh();
     refreshCloud();
 } }).catch(error => { status.textContent = `Android integration unavailable: ${error.message}`; });

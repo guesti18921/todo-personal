@@ -57,3 +57,12 @@ test('calendar validation, year rollover and time-only suggestions are explicit'
     assert.equal(parse('вчера', now).past, true);
     assert.equal(parse('завтра 2026-10-08', now), null);
 });
+
+test('dotted clock notation after a time preposition does not consume calendar dates', async () => {
+ const parse = await parser();
+ for (const text of ['Завтра в 18.00 позвонить', 'Tomorrow at 18.00 call', 'Morgen um 18.00 anrufen']) {
+  assert.equal(parse(text, now)?.date, '2026-10-07', text); assert.equal(parse(text, now)?.time, '18:00', text);
+ }
+ assert.equal(parse('Сдать 07.10.2026', now)?.date, '2026-10-07');
+ assert.equal(parse('Завтра в 25.00', now), null); assert.equal(parse('Завтра в 18.99', now), null);
+});

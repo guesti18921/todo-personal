@@ -170,3 +170,42 @@ test('deadline suggestions require confirmation, remember rejection and respect 
   assert.deepEqual(errors, []);
  } finally { dom.window.close(); }
 });
+
+test('reminders display exact time, deliver offline, snooze without changing deadline, and cancel on completion', async () => {
+ const exp = Math.floor(Date.now() / 1000) + 86400;
+ const jwt = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url') + '.' + Buffer.from(JSON.stringify({ sub: id, exp, role: 'authenticated' })).toString('base64url') + '.test';
+ const dom = boot([['sb-ihvwqqvndmwtislvgamd-auth-token', JSON.stringify({ access_token: jwt, refresh_token: 'test-only', expires_at: exp, expires_in: 86400, token_type: 'bearer', user: { id, email: 'test@example.com' } })], [cacheKey, JSON.stringify({ schemaVersion: 1, state: { todos: { home: [], today: [], week: [] }, notes: [] }, revision: 0, dirty: false })]]);
+ const w = dom.window, doc = w.document;
+ const click = selector => { assert.ok(doc.querySelector(selector), selector); doc.querySelector(selector).click(); };
+ const input = (selector, value) => { const el = doc.querySelector(selector); el.value = value; el.dispatchEvent(new w.Event('input', { bubbles: true })); el.dispatchEvent(new w.Event('change', { bubbles: true })); };
+ const disk = () => JSON.parse(w.localStorage.getItem(cacheKey));
+ try {
+  await ready(dom);
+  const RealDate = w.Date; let clock = new RealDate(); clock.setSeconds(0, 0);
+  w.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : [clock.getTime()])); } static now() { return clock.getTime(); } };
+  const future = new RealDate(clock.getTime() + 2 * 60000);
+  const date = [future.getFullYear(), String(future.getMonth() + 1).padStart(2, '0'), String(future.getDate()).padStart(2, '0')].join('-');
+  const time = `${String(future.getHours()).padStart(2, '0')}:${String(future.getMinutes()).padStart(2, '0')}`;
+  click('.mn-add'); input('#mn-text', 'Завтра в 18.00 позвонить');
+  assert.equal(doc.querySelector('.mn-suggestion').hidden, false, 'screenshot regression fixed');
+  click('[data-accept-deadline]');
+  const deadline = doc.querySelector('[name="date"]').value;
+  input('[name="reminderMode"]', 'custom'); input('[name="reminderDate"]', date); input('[name="reminderTime"]', time);
+  assert.match(doc.querySelector('.mn-reminder-preview').textContent, /Напомнить/);
+  click('[data-enable-reminders]'); await wait();
+  assert.match(doc.querySelector('.mn-reminder-device').textContent, /пока эта страница открыта/);
+  click('[data-save]');
+  click('[data-view="all"]'); click('[data-filter="reminder"]'); assert.equal(doc.querySelectorAll('.mn-card').length, 1);
+  clock = new RealDate(clock.getTime() + 3 * 60000); w.dispatchEvent(new w.Event('focus')); await wait();
+  assert.equal(doc.querySelector('.mn-reminder-banner').hidden, false);
+  click('[data-reminder-snooze]'); assert.equal(doc.querySelector('.mn-reminder-banner').hidden, true);
+  assert.equal(disk().state.todos.home[0].date, deadline, 'snoozing preserves deadline');
+  clock = new RealDate(clock.getTime() + 11 * 60000); w.dispatchEvent(new w.Event('focus')); await wait();
+  assert.equal(doc.querySelector('.mn-reminder-banner').hidden, false);
+  click('[data-reminder-done]'); assert.equal(disk().state.todos.home[0].checked, true); assert.equal(disk().state.todos.home[0].reminder.mode, 'none');
+  assert.equal(doc.querySelector('.mn-reminder-banner').hidden, true);
+  click('[data-view="settings"]'); click('[data-toggle-reminders]'); await wait();
+  assert.equal(w.localStorage.getItem('todo-personal:reminders-enabled:' + id), 'false');
+  assert.match(doc.querySelector('[data-toggle-reminders]').textContent, /Включить/);
+ } finally { dom.window.close(); }
+});

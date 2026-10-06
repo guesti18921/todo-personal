@@ -58,6 +58,14 @@
     .mn-suggestion p { font-size: 13px; margin: 0 0 10px; }
     .mn-suggestion .mn-suggestion-title { font-size: 14px; }
     .mn-suggestion-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .mn-reminder-form { margin: 24px 0; border-top: 1px solid #ddccd1; padding-top: 18px; }
+    .mn-reminder-form h2, .mn-reminder-banner h2 { font-size: 18px; margin: 0 0 10px; }
+    .mn-reminder-preview { font-size: 14px; font-weight: 700; margin: 12px 0; }
+    .mn-reminder-device { font-size: 13px; color: #715160; margin-bottom: 12px; }
+    .mn-reminder-banner { background: #e3f0ec; border-bottom: 2px solid #41b3a3; padding: 16px 18px; }
+    .mn-reminder-banner p { white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 12px; }
+    .mn-reminder-banner > div { display: flex; gap: 8px; flex-wrap: wrap; }
+    .mn-setting .mn-secondary { margin: 4px 4px 8px 0; }
     .mn-secondary { background: #fffdfb; border: 1px solid #cdb9c1; border-radius: 7px; padding: 8px 14px; }
     .mn-delete { display: block; background: transparent; border: 0; padding: 12px 0; color: #a33749 !important; margin-top: 16px; }
     .mn-message { margin: 0 18px; font-size: 14px; color: #367f75; overflow-wrap: anywhere; }

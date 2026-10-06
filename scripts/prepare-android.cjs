@@ -24,8 +24,8 @@ if (!manifest.includes('android:scheme="todopersonal"')) {
 fs.writeFileSync(manifestPath, manifest);
 const gradlePath = path.join(root, 'android/app/build.gradle');
 const gradle = fs.readFileSync(gradlePath, 'utf8')
-    .replace(/versionCode \d+/, 'versionCode 2')
-    .replace(/versionName "[^"]+"/, 'versionName "0.2.0-test"');
+    .replace(/versionCode \d+/, 'versionCode 3')
+    .replace(/versionName "[^"]+"/, 'versionName "0.3.0-test"');
 fs.writeFileSync(gradlePath, gradle);
 const drawable = path.join(root, 'android/app/src/main/res/drawable');
 fs.mkdirSync(drawable, { recursive: true });
@@ -33,5 +33,8 @@ fs.writeFileSync(path.join(drawable, 'todo_icon.xml'), `<vector xmlns:android="h
     <path android:fillColor="#c38d9e" android:pathData="M0,0h108v108h-108z"/>
     <path android:fillColor="#f7f3ee" android:pathData="M28,24h52v60h-52z"/>
     <path android:fillColor="#367f75" android:pathData="M35,37h8v8h-8zM49,39h23v4h-23zM35,51h8v8h-8zM49,53h23v4h-23zM35,65h8v8h-8zM49,67h23v4h-23z"/>
+</vector>`);
+fs.writeFileSync(path.join(drawable, 'notification_icon.xml'), `<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#ffffff" android:pathData="M5,2h14v20H5zM8,6v2h8V6zM8,11v2h8v-2zM8,16v2h6v-2z" android:fillType="evenOdd"/>
 </vector>`);
 console.log('Android project ready: packaged web assets and app icon.');

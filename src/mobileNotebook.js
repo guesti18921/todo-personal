@@ -1,5 +1,6 @@
 import { createEntryId } from './localNotebook.js';
 import { suggestDeadline } from './deadlineParser.js';
+import { REMINDER_OPTIONS, normalizeReminder, reminderMoment, reminderLabel, snoozeReminder } from './reminderModel.js';
 
 export function localDateString(date = new Date()) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
@@ -24,6 +25,7 @@ export function saveEntry(todos, notes, fields, previous = null) {
     const id = previous?.entry.id || createEntryId();
     const stamp = new Date().toISOString();
     const common = { ...(previous?.entry || {}), id, date: fields.date || '', time: fields.date ? fields.time || '' : '', today: !fields.date && Boolean(fields.today), deadlineDismissed: fields.deadlineDismissed || '', updatedAt: stamp };
+    common.reminder = normalizeReminder(fields.reminder ?? previous?.entry.reminder);
     if (previous && previous.type !== fields.type) {
         if (previous.type === 'note') notes.splice(notes.findIndex(entry => entry.id === id), 1);
         else todos[previous.project] = todos[previous.project].filter(entry => entry.id !== id);
@@ -49,17 +51,22 @@ export function toggleEntry(record) {
     record.entry.checked = !record.entry.checked;
     record.entry.completedAt = record.entry.checked ? new Date().toISOString() : null;
     record.entry.reminderAt = null;
+    record.entry.reminder = { mode: 'none', date: '', time: '' };
     record.entry.updatedAt = new Date().toISOString();
 }
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
-export function createMobileNotebook({ root, todos, notes, persist, logout, getAccount }) {
+export function createMobileNotebook({ root, todos, notes, persist, logout, getAccount, configureReminders, enableExactReminders, refreshReminders }) {
     const shell = document.createElement('section');
     shell.className = 'mobile-notebook';
     shell.setAttribute('aria-label', 'Мобильный блокнот');
     shell.innerHTML = `<header class="mn-header"><span class="mn-logo">// TO-DO</span><span class="mn-status" role="status" aria-live="polite"></span></header><main class="mn-main"></main><div class="mn-message" role="status" aria-live="polite"></div><button class="mn-add" type="button" aria-label="Создать запись">+</button><nav class="mn-nav" aria-label="Разделы блокнота"><button data-view="today" type="button">Сегодня</button><button data-view="all" type="button">Все записи</button><button data-view="done" type="button">Выполнено</button><button data-view="settings" type="button">Настройки</button></nav>`;
     root.append(shell);
+    const reminderBanner = document.createElement('section');
+    reminderBanner.className = 'mn-reminder-banner'; reminderBanner.hidden = true;
+    reminderBanner.setAttribute('role', 'status');
+    shell.querySelector('.mn-header').after(reminderBanner);
     const main = shell.querySelector('.mn-main'), nav = shell.querySelector('.mn-nav'), add = shell.querySelector('.mn-add'), message = shell.querySelector('.mn-message');
     let view = 'today', editor = false, editingId = null, creating = false, type = 'task', query = '', filter = 'all', account = null, draftSafe = true, statusText = '', undo = null, undoTimer;
     const records = () => listEntries(todos, notes);
@@ -67,6 +74,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     const draftKey = () => `todo-personal:entry-draft:${account}`;
     const preferencesKey = () => `todo-personal:preferences:${account}`;
     let smartDates = true, dismissedDeadline = '', suggestion = null;
+    let reminderState = { native: false, enabled: false, permission: 'unknown', exact: false, scheduled: 0, error: '' }, reminderQueue = [], reminderBusy = false;
     const suggestionKey = value => value ? `${value.date}|${value.time}` : '';
     function readPreferences() {
         try { smartDates = JSON.parse(localStorage.getItem(preferencesKey()))?.smartDates !== false; }
@@ -80,7 +88,8 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         undoTimer = setTimeout(() => { if (undo === action) { undo = null; say(''); } }, 8000);
     }
     function fields() {
-        return { type, text: main.querySelector('[name="text"]').value, details: main.querySelector('[name="details"]').value, date: main.querySelector('[name="date"]').value, time: main.querySelector('[name="time"]').value, today: main.querySelector('[name="today"]').checked, deadlineDismissed: dismissedDeadline };
+        return { type, text: main.querySelector('[name="text"]').value, details: main.querySelector('[name="details"]').value, date: main.querySelector('[name="date"]').value, time: main.querySelector('[name="time"]').value, today: main.querySelector('[name="today"]').checked, deadlineDismissed: dismissedDeadline,
+            reminder: normalizeReminder({ mode: main.querySelector('[name="reminderMode"]').value, date: main.querySelector('[name="reminderDate"]').value, time: main.querySelector('[name="reminderTime"]').value }) };
     }
     function stashDraft() {
         if (!editor || editingId || !account) return;
@@ -102,12 +111,14 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         if (entry.time) labels.push(entry.time);
         if (!entry.date) labels.push('Без срока');
         if (!entry.date && (entry.today || (entry.today === undefined && project === 'today'))) labels.push('В Сегодня');
+        const reminder = reminderLabel(entry);
+        if (reminder) labels.push(reminder + (reminderState.enabled ? '' : ' · на этом устройстве выключено'));
         if (project && !['home', 'today', 'week'].includes(project)) labels.push(project);
         return `<article class="mn-card ${entry.checked ? 'mn-completed' : ''}">${kind === 'task' ? `<button class="mn-check" type="button" data-check="${escape(entry.id)}" aria-label="${entry.checked ? 'Вернуть в активные' : 'Выполнить'}: ${escape(text)}">${entry.checked ? '✓' : '○'}</button>` : '<span class="mn-note-label">Заметка</span>'}<button class="mn-open" type="button" data-open="${escape(entry.id)}"><span class="mn-title" dir="auto">${escape(text)}</span>${details ? `<span class="mn-details" dir="auto">${escape(details)}</span>` : ''}<span class="mn-meta">${escape(labels.join(' · '))}</span></button></article>`;
     }
     function group(label, list) { return list.length ? `<section><h2 class="mn-group">${label}</h2>${list.map(card).join('')}</section>` : ''; }
     function renderList() {
-        const found = records().filter(({ entry, type: kind }) => (view === 'done' ? kind === 'task' && entry.checked : !entry.checked) && (filter === 'all' || view !== 'all' || kind === filter) && [entry.name, entry.title, entry.details, entry.text].some(text => String(text || '').toLocaleLowerCase().includes(query.toLocaleLowerCase())));
+        const found = records().filter(({ entry, type: kind }) => (view === 'done' ? kind === 'task' && entry.checked : !entry.checked) && (filter === 'all' || view !== 'all' || (filter === 'reminder' ? Boolean(reminderMoment(entry)) : kind === filter)) && [entry.name, entry.title, entry.details, entry.text].some(text => String(text || '').toLocaleLowerCase().includes(query.toLocaleLowerCase())));
         let html;
         if (view === 'today') {
             const groups = todayGroups(found);
@@ -119,14 +130,15 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         main.querySelector('.mn-list').innerHTML = html || `<p class="mn-empty">${query ? 'Ничего не найдено.' : view === 'today' ? 'На сегодня ничего не запланировано.' : view === 'done' ? 'Здесь появятся выполненные задачи.' : 'Записей пока нет. Нажмите +, чтобы создать первую.'}</p>`;
     }
     function render() {
+        renderReminderBanner();
         if (editor) return;
         nav.hidden = false; add.hidden = view === 'settings';
         nav.querySelectorAll('button').forEach(button => { if (button.dataset.view === view) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
         if (view === 'settings') {
-            main.innerHTML = `<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button></section><section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Работают на устройстве. Срок применяется только с вашего подтверждения. Настройка сохраняется для этого аккаунта в этом браузере или приложении.</p><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Это подсказки срока; уведомления пока не включены.</p></section><section class="mn-setting"><h2>Сохранение</h2><p class="mn-settings-status">${escape(statusText)}</p><p>Записи сохраняются на этом устройстве и синхронизируются при доступном соединении.</p></section>`;
+            main.innerHTML = `<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button></section>${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Работают на устройстве. Срок применяется только с вашего подтверждения. Настройка сохраняется для этого аккаунта в этом браузере или приложении.</p><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Подсказка заполняет срок. Напоминание выбирается отдельно в записи.</p></section><section class="mn-setting"><h2>Сохранение</h2><p class="mn-settings-status">${escape(statusText)}</p><p>Записи сохраняются на этом устройстве и синхронизируются при доступном соединении.</p></section>`;
             return;
         }
-        main.innerHTML = `<h1>${{ today: 'Сегодня', all: 'Все записи', done: 'Выполнено' }[view]}</h1><p class="mn-date">${new Intl.DateTimeFormat('ru', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())}</p><label class="mn-search-label" for="mn-search">Поиск</label><input id="mn-search" class="mn-input" type="search" placeholder="Найти запись" value="${escape(query)}">${view === 'all' ? `<div class="mn-filters">${[['all', 'Все'], ['task', 'Задачи'], ['note', 'Заметки']].map(([value, label]) => `<button type="button" data-filter="${value}" aria-pressed="${filter === value}">${label}</button>`).join('')}</div>` : ''}<div class="mn-list"></div>`;
+        main.innerHTML = `<h1>${{ today: 'Сегодня', all: 'Все записи', done: 'Выполнено' }[view]}</h1><p class="mn-date">${new Intl.DateTimeFormat('ru', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())}</p><label class="mn-search-label" for="mn-search">Поиск</label><input id="mn-search" class="mn-input" type="search" placeholder="Найти запись" value="${escape(query)}">${view === 'all' ? `<div class="mn-filters">${[['all', 'Все'], ['task', 'Задачи'], ['note', 'Заметки'], ['reminder', 'С напоминанием']].map(([value, label]) => `<button type="button" data-filter="${value}" aria-pressed="${filter === value}">${label}</button>`).join('')}</div>` : ''}<div class="mn-list"></div>`;
         renderList();
     }
     function open(id = null) {
@@ -139,10 +151,11 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         const entry = previous?.entry;
         const text = entry ? previous.type === 'task' ? entry.name : entry.title || entry.text : draft?.text || '';
         const details = entry ? previous.type === 'task' ? entry.details : entry.title ? entry.text : '' : draft?.details || '';
+        const reminder = normalizeReminder(entry?.reminder || draft?.reminder);
         type = previous?.type || (draft?.type === 'note' ? 'note' : 'task');
         dismissedDeadline = entry?.deadlineDismissed || draft?.deadlineDismissed || '';
         nav.hidden = true; add.hidden = true;
-        main.innerHTML = `<div class="mn-editor-header"><button type="button" class="mn-back" data-back>← Назад</button><button type="button" class="mn-primary" data-save>Сохранить</button></div><h1>${previous ? 'Запись' : 'Новая запись'}</h1><div class="mn-types">${[['task', 'Задача'], ['note', 'Заметка']].map(([value, label]) => `<button type="button" data-type="${value}" aria-pressed="${type === value}">${label}</button>`).join('')}</div><label for="mn-text">Что записать?</label><textarea class="mn-input mn-text" id="mn-text" name="text" dir="auto" placeholder="Запишите мысль или задачу">${escape(text)}</textarea><aside class="mn-suggestion" aria-label="Предложенный срок" aria-live="polite" hidden></aside><details ${details ? 'open' : ''}><summary>Подробности</summary><label for="mn-details">Дополнительный текст</label><textarea class="mn-input" id="mn-details" name="details" dir="auto">${escape(details)}</textarea></details><label for="mn-date">Срок · необязательно</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-date" name="date" value="${escape(entry?.date || draft?.date || '')}"><input class="mn-input" type="time" name="time" aria-label="Время срока" value="${escape(entry?.time || draft?.time || '')}"></div><div class="mn-filters"><button type="button" data-date="today">Сегодня</button><button type="button" data-date="tomorrow">Завтра</button><button type="button" data-date="none">Без срока</button></div><p class="mn-deadline-help"></p><label class="mn-pin"><input type="checkbox" name="today" ${(entry ? (entry.today ?? (previous?.project === 'today')) : draft?.today) ? 'checked' : ''}>Также показать в «Сегодня» без срока</label>${previous?.type === 'task' ? `<button type="button" class="mn-secondary" data-complete="${escape(id)}">${entry.checked ? 'Вернуть в активные' : 'Выполнить задачу'}</button>` : ''}${previous ? `<button type="button" class="mn-delete" data-delete="${escape(id)}">Удалить запись</button>` : ''}`;
+        main.innerHTML = `<div class="mn-editor-header"><button type="button" class="mn-back" data-back>← Назад</button><button type="button" class="mn-primary" data-save>Сохранить</button></div><h1>${previous ? 'Запись' : 'Новая запись'}</h1><div class="mn-types">${[['task', 'Задача'], ['note', 'Заметка']].map(([value, label]) => `<button type="button" data-type="${value}" aria-pressed="${type === value}">${label}</button>`).join('')}</div><p class="mn-type-help">${type === 'task' ? 'Задача — дело, которое можно отметить выполненным.' : 'Заметка — мысль или информация, которую нужно сохранить.'} У обоих типов можно выбрать срок и напоминание.</p><label for="mn-text">Что записать?</label><textarea class="mn-input mn-text" id="mn-text" name="text" dir="auto" placeholder="Запишите мысль или задачу">${escape(text)}</textarea><aside class="mn-suggestion" aria-label="Предложенный срок" aria-live="polite" hidden></aside><details ${details ? 'open' : ''}><summary>Подробности</summary><label for="mn-details">Дополнительный текст</label><textarea class="mn-input" id="mn-details" name="details" dir="auto">${escape(details)}</textarea></details><label for="mn-date">Срок · необязательно</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-date" name="date" value="${escape(entry?.date || draft?.date || '')}"><input class="mn-input" type="time" name="time" aria-label="Время срока" value="${escape(entry?.time || draft?.time || '')}"></div><div class="mn-filters"><button type="button" data-date="today">Сегодня</button><button type="button" data-date="tomorrow">Завтра</button><button type="button" data-date="none">Без срока</button></div><p class="mn-deadline-help"></p><label class="mn-pin"><input type="checkbox" name="today" ${(entry ? (entry.today ?? (previous?.project === 'today')) : draft?.today) ? 'checked' : ''}>Также показать в «Сегодня» без срока</label><section class="mn-reminder-form"><h2>Напоминание</h2><label for="mn-reminder-mode">Когда напомнить?</label><select class="mn-input" id="mn-reminder-mode" name="reminderMode">${REMINDER_OPTIONS.map(([value, label]) => `<option value="${value}" ${reminder.mode === value ? 'selected' : ''}>${label}</option>`).join('')}</select><div class="mn-reminder-custom" hidden><label for="mn-reminder-date">Дата напоминания</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-reminder-date" name="reminderDate" value="${escape(reminder.date)}"><input class="mn-input" type="time" name="reminderTime" aria-label="Время напоминания" value="${escape(reminder.time)}"></div></div><p class="mn-reminder-preview" aria-live="polite"></p><p class="mn-reminder-device"></p><button type="button" class="mn-secondary" data-enable-reminders>Включить напоминания на этом устройстве</button></section>${previous?.type === 'task' ? `<button type="button" class="mn-secondary" data-complete="${escape(id)}">${entry.checked ? 'Вернуть в активные' : 'Выполнить задачу'}</button>` : ''}${previous ? `<button type="button" class="mn-delete" data-delete="${escape(id)}">Удалить запись</button>` : ''}`;
         updateDate();
         if (!id && !draft) main.querySelector('[name="text"]').focus();
     }
@@ -166,6 +179,43 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
             : selectedDate < localDateString() ? 'Этот срок уже прошёл. Запись появится в «Сегодня» в разделе «Просрочено».'
             : 'Запись доступна во «Все записи» и появится в «Сегодня», когда наступит выбранная дата.';
         renderSuggestion();
+        const mode = main.querySelector('[name="reminderMode"]');
+        if (!hasDate && !['none', 'custom'].includes(mode.value)) mode.value = 'none';
+        mode.querySelectorAll('option').forEach(option => { option.disabled = !hasDate && !['none', 'custom'].includes(option.value); });
+        updateReminder();
+    }
+    function deviceReminderHelp() {
+        if (reminderState.error) return reminderState.error;
+        if (reminderState.native && reminderState.permission === 'denied') return 'Android не разрешает уведомления. Включите их в настройках телефона: Приложения → TO-DO Personal → Уведомления.';
+        if (!reminderState.enabled) return 'На этом устройстве напоминания выключены. Включите их, чтобы получать напоминания по выбранному времени.';
+        if (!reminderState.native) return 'В браузере напоминания появляются внутри блокнота, пока эта страница открыта. При закрытом браузере они не сработают.';
+        return reminderState.exact ? 'Android-уведомления включены. Напоминания запланированы на этом устройстве и не требуют интернета.' : 'Android-уведомления включены, но телефон может задерживать их. Разрешите точное время в настройках напоминаний.';
+    }
+    function updateReminder() {
+        if (!editor) return;
+        const value = fields(), custom = value.reminder.mode === 'custom';
+        main.querySelector('.mn-reminder-custom').hidden = !custom;
+        const at = reminderMoment(value), helper = main.querySelector('.mn-reminder-preview');
+        helper.textContent = value.reminder.mode === 'none' ? 'Для этой записи напоминание не придёт.' : !at
+            ? 'Укажите дату и время напоминания.' : at <= new Date()
+            ? 'Это время уже прошло — напоминание не сработает. Выберите будущее время.'
+            : reminderLabel(value) + (value.reminder.mode !== 'custom' && !value.time ? ' · у срока нет времени, используем 09:00.' : '');
+        main.querySelector('.mn-reminder-device').textContent = deviceReminderHelp();
+        main.querySelector('[data-enable-reminders]').hidden = reminderState.enabled;
+    }
+    function reminderSettings() {
+        return `<section class="mn-setting"><h2>Напоминания на этом устройстве</h2><p>${escape(deviceReminderHelp())}</p><button class="mn-secondary" type="button" data-toggle-reminders ${reminderBusy ? 'disabled' : ''}>${reminderState.enabled ? 'Выключить напоминания' : 'Включить напоминания'}</button>${reminderState.native && reminderState.enabled && !reminderState.exact ? '<button type="button" class="mn-secondary" data-exact-reminders>Разрешить точное время</button>' : ''}<p>Запланировано на устройстве: ${reminderState.scheduled}. Выключение отменяет уведомления на этом устройстве, но сохраняет выбранное время в записях.</p><button class="mn-secondary" type="button" data-reminder-list>Посмотреть записи с напоминаниями</button>${reminderState.error ? '<button class="mn-secondary" type="button" data-retry-reminders>Повторить настройку</button>' : ''}</section>`;
+    }
+    function renderReminderBanner() {
+        reminderQueue = reminderQueue.filter(item => {
+            const record = find(item.id);
+            return record && reminderMoment(record.entry)?.toISOString() === item.at;
+        });
+        const next = reminderQueue[0], record = next && find(next.id);
+        reminderBanner.hidden = !record;
+        if (!record) { reminderBanner.replaceChildren(); return; }
+        const text = record.type === 'task' ? record.entry.name : record.entry.title || record.entry.text;
+        reminderBanner.innerHTML = `<h2>Время напоминания</h2><p dir="auto">${escape(text)}</p><div><button type="button" class="mn-secondary" data-reminder-open>Открыть</button><button type="button" class="mn-secondary" data-reminder-snooze>Отложить на 10 минут</button>${record.type === 'task' ? '<button type="button" class="mn-primary" data-reminder-done>Выполнено</button>' : ''}<button type="button" class="mn-secondary" data-reminder-close>Закрыть</button></div>`;
     }
     function renderSuggestion() {
         const area = main.querySelector('.mn-suggestion');
@@ -181,6 +231,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     function commit(close = true) {
         const value = fields();
         if (!value.text.trim()) { if (close) { say('Напишите текст записи.'); main.querySelector('[name="text"]').focus(); } return false; }
+        if (close && value.reminder.mode !== 'none' && !reminderMoment({ ...value, checked: false })) { say('Укажите дату и время напоминания или выберите «Не напоминать».'); main.querySelector('[name="reminderMode"]').focus(); return false; }
         const previous = editingId ? find(editingId) : null;
         if (editingId && !previous) { say('Запись удалена на другом устройстве. Скопируйте текст перед выходом.'); return false; }
         editingId = saveEntry(todos, notes, value, previous);
@@ -200,13 +251,36 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     function changed() { if (editingId) commit(false); else stashDraft(); }
     shell.addEventListener('click', event => {
         const button = event.target.closest('button'); if (!button) return;
-        if (button.hasAttribute('data-view')) { view = button.dataset.view; query = ''; filter = 'all'; undo = null; say(''); render(); }
+        if (button.hasAttribute('data-reminder-open')) {
+            const record = find(reminderQueue[0]?.id); if (!record) return;
+            if (editor) { back(); if (editor) return; }
+            open(record.entry.id);
+        } else if (button.hasAttribute('data-reminder-close') || button.hasAttribute('data-reminder-snooze') || button.hasAttribute('data-reminder-done')) {
+            const record = find(reminderQueue[0]?.id); if (!record) return;
+            if (editor) { back(); if (editor) return; }
+            const handled = reminderQueue[0];
+            reminderQueue = reminderQueue.filter(item => item !== handled);
+            if (button.hasAttribute('data-reminder-snooze')) { snoozeReminder(record.entry); persist(); say('Напоминание отложено на 10 минут. Срок записи сохранён.'); }
+            if (button.hasAttribute('data-reminder-done')) { toggleEntry(record); persist(); say('Задача выполнена. Её напоминание отменено.'); }
+            render();
+        } else if (button.hasAttribute('data-toggle-reminders') || button.hasAttribute('data-enable-reminders')) {
+            if (reminderBusy) return;
+            reminderBusy = true; button.disabled = true;
+            Promise.resolve(configureReminders?.(button.hasAttribute('data-enable-reminders') || !reminderState.enabled))
+                .catch(() => say('Не удалось включить напоминания. Повторите попытку.'))
+                .finally(() => { reminderBusy = false; if (editor) { button.disabled = false; updateReminder(); } else render(); });
+        } else if (button.hasAttribute('data-exact-reminders')) {
+            Promise.resolve(enableExactReminders?.()).catch(() => say('Не удалось открыть настройки точного времени.'));
+        } else if (button.hasAttribute('data-retry-reminders')) {
+            refreshReminders?.();
+        } else if (button.hasAttribute('data-reminder-list')) { view = 'all'; filter = 'reminder'; query = ''; render(); }
+        else if (button.hasAttribute('data-view')) { view = button.dataset.view; query = ''; filter = 'all'; undo = null; say(''); render(); }
         else if (button === add) open();
         else if (button.hasAttribute('data-open')) open(button.dataset.open);
         else if (button.hasAttribute('data-back')) back();
         else if (button.hasAttribute('data-save')) commit();
         else if (button.hasAttribute('data-filter')) { filter = button.dataset.filter; render(); }
-        else if (button.hasAttribute('data-type')) { type = button.dataset.type; main.querySelectorAll('[data-type]').forEach(item => item.setAttribute('aria-pressed', String(item.dataset.type === type))); const complete = main.querySelector('[data-complete]'); if (complete) complete.hidden = type !== 'task'; changed(); }
+        else if (button.hasAttribute('data-type')) { type = button.dataset.type; main.querySelector('.mn-type-help').textContent = (type === 'task' ? 'Задача — дело, которое можно отметить выполненным.' : 'Заметка — мысль или информация, которую нужно сохранить.') + ' У обоих типов можно выбрать срок и напоминание.'; main.querySelectorAll('[data-type]').forEach(item => item.setAttribute('aria-pressed', String(item.dataset.type === type))); const complete = main.querySelector('[data-complete]'); if (complete) complete.hidden = type !== 'task'; changed(); }
         else if (button.hasAttribute('data-date')) {
             dismissedDeadline = suggestionKey(suggestDeadline(main.querySelector('[name="text"]').value));
             const date = new Date(); if (button.dataset.date === 'tomorrow') date.setDate(date.getDate() + 1);
@@ -243,6 +317,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
                 dismissedDeadline = suggestionKey(suggestDeadline(main.querySelector('[name="text"]').value));
                 updateDate();
             } else if (event.target.name === 'text') renderSuggestion();
+            else if (['reminderMode', 'reminderDate', 'reminderTime'].includes(event.target.name)) updateReminder();
             changed();
         }
     });
@@ -265,6 +340,19 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     document.addEventListener('visibilitychange', () => { if (document.hidden && editor && !editingId) stashDraft(); });
     return {
         render,
+        notifyReminder(record) {
+            if (!record) reminderQueue = [];
+            else {
+                const at = reminderMoment(record.entry)?.toISOString();
+                if (at && !reminderQueue.some(item => item.id === record.entry.id && item.at === at)) reminderQueue.push({ id: record.entry.id, at });
+            }
+            renderReminderBanner();
+        },
+        setReminderStatus(value) {
+            if (JSON.stringify(reminderState) === JSON.stringify(value)) return;
+            reminderState = value;
+            if (editor) updateReminder(); else render();
+        },
         saveDraft: stashDraft,
         back() {
             if (editor) { back(); return true; }
@@ -272,7 +360,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
             return false;
         },
         isEditing: () => editor || Boolean(undo),
-        setAccount(id) { if (account !== id) { clearTimeout(undoTimer); account = id; readPreferences(); dismissedDeadline = ''; suggestion = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
+        setAccount(id) { if (account !== id) { clearTimeout(undoTimer); account = id; reminderQueue = []; readPreferences(); dismissedDeadline = ''; suggestion = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
         setStatus(text) {
             const labels = { 'Saved': 'Синхронизировано', 'Saved locally': 'Сохранено на устройстве', 'Saved locally — waiting for sync': 'На устройстве · ожидает синхронизации', 'Saving...': 'Синхронизация…', 'Saved locally — connection unavailable': 'На устройстве · нет соединения', 'Saved locally — connection unavailable; sync will retry': 'На устройстве · ожидает соединения' };
             statusText = labels[text] || text;

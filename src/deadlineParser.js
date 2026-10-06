@@ -15,7 +15,9 @@ function calendarDate(year, month, day) {
 }
 
 export function suggestDeadline(value, now = new Date()) {
-    const text = String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ');
+    const text = String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ')
+        // A time preposition distinguishes 18.00 from a day/month date.
+        .replace(/(?<!\p{L})(в|at|um|alle|a las|à|às)\s+(\d{1,2})\.(\d{2})(?![\d.])/gu, '$1 $2:$3');
     if (!text.trim() || Number.isNaN(now.getTime())) return null;
     const dates = new Set(), times = new Set(), evidence = [];
     let invalid = false;
