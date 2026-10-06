@@ -126,7 +126,14 @@ jobs:
             const output = execFileSync(signer, ['verify', '--verbose', '--print-certs', apk], { ...options, encoding: 'utf8' });
             stage = 'comparing the public certificate';
             const signers = Array.from(output.matchAll(/^Signer (?:#\d+|\(minSdkVersion=[^\r\n]+\)) certificate SHA-256 digest: ([0-9a-f]{64})[ \t]*$/gim), m => m[1].toLowerCase());
-            if (!signers.length || signers.some(fingerprint => fingerprint !== expected)) throw Error('Certificate mismatch');
+            if (!signers.length || signers.some(fingerprint => fingerprint !== expected)) {
+              console.error('Public expected certificate SHA-256: ' + expected);
+              console.error('Recognized APK certificate fingerprints: ' + JSON.stringify(signers));
+              const publicDigests = Array.from(output.matchAll(/certificate SHA-256 digest: ([0-9a-f:]+)/gi), m => m[1].toLowerCase());
+              console.error('Public APK certificate digest fields: ' + JSON.stringify(publicDigests));
+              console.error('Android build-tools version: ' + versions.at(-1));
+              throw Error('Certificate mismatch');
+            }
             fs.writeFileSync('signed/certificate-sha256.txt', expected + '\n');
             console.log('APK signature verified. Public certificate SHA-256: ' + expected);
           } catch (error) {
