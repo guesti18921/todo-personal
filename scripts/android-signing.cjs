@@ -54,9 +54,9 @@ function verify(root, env = process.env) {
     let output;
     try { output = execFileSync(path.join(folder, tools.at(-1), 'apksigner'), ['verify', '--verbose', '--print-certs', apk], { env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' }); }
     catch (_) { throw new Error('APK signature verification failed. The APK will not be uploaded.'); }
-    const matches = Array.from(output.matchAll(/Signer #\d+ certificate SHA-256 digest: ([0-9a-f]{64})/gi), match => match[1].toLowerCase());
+    const matches = Array.from(output.matchAll(/^Signer (?:#\d+|\(minSdkVersion=[^\r\n]+\)) certificate SHA-256 digest: ([0-9a-f]{64})[ \t]*$/gim), match => match[1].toLowerCase());
     const expected = fs.readFileSync(files.certificate, 'utf8').trim();
-    if (matches.length !== 1 || matches[0] !== expected) throw new Error('APK was signed with a different certificate. The APK will not be uploaded.');
+    if (!matches.length || matches.some(fingerprint => fingerprint !== expected)) throw new Error('APK was signed with a different certificate. The APK will not be uploaded.');
     fs.writeFileSync(path.join(path.dirname(apk), 'certificate-sha256.txt'), expected + '\n');
     return expected;
 }
