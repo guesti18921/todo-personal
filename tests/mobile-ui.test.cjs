@@ -322,3 +322,77 @@ test('login offers Google only when enabled, preserves email login and explains 
   d.querySelector('#auth-confirm-back').click(); assert.equal(d.querySelector('#auth-google-area').hidden, false);
  } finally { dom.window.close(); }
 });
+
+function listFixture() {
+ const exp = Math.floor(Date.now() / 1000) + 86400;
+ const jwt = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url') + '.' + Buffer.from(JSON.stringify({ sub: id, exp, role: 'authenticated' })).toString('base64url') + '.test';
+ const date = n => { const d = new Date(); d.setDate(d.getDate() + n); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'); };
+ const state = { todos: { home: [
+  { id: 'a', name: 'Alpha overdue', date: date(-1), time: '18:00', updatedAt: '2026-01-01T10:00:00Z', reminder: { mode: 'at' } },
+  { id: 'b', name: 'Beta tomorrow', date: date(1), time: '10:00', updatedAt: '2026-01-02T10:00:00Z' },
+  { id: 'c', name: 'Cafe\u0301 中文', date: '', time: '', updatedAt: '2026-01-03T10:00:00Z' },
+  { id: 'done', name: 'Done task', checked: true, date: '', completedAt: '2026-01-01T10:00:00Z' }
+ ], today: [], week: [] }, notes: [{ id: 'n', title: '日本語 note', text: 'original text', date: date(0), time: '12:00', updatedAt: '2026-01-04T10:00:00Z', reminder: { mode: 'custom', date: '2099-01-01', time: '09:30' } }] };
+ const seed = [['sb-ihvwqqvndmwtislvgamd-auth-token', JSON.stringify({ access_token: jwt, refresh_token: 'test-only', expires_at: exp, expires_in: 86400, token_type: 'bearer', user: { id, email: 'test@example.com', aud: 'authenticated', role: 'authenticated' } })], [cacheKey, JSON.stringify({ schemaVersion: 1, state, revision: 0, dirty: false, savedAt: new Date().toISOString() })]];
+ return { seed, state, date };
+}
+test('list filters and account sorting combine with scoped selection, bulk completion/restore, postponement and undo offline', async () => {
+ const f = listFixture(); let dom = boot(f.seed);
+ const doc = () => dom.window.document;
+ const click = selector => { assert.ok(doc().querySelector(selector), selector); doc().querySelector(selector).click(); };
+ const change = (selector, value) => { const e = doc().querySelector(selector); e.value = value; e.dispatchEvent(new dom.window.Event('change', { bubbles: true })); };
+ const state = () => JSON.parse(dom.window.localStorage.getItem(cacheKey)).state;
+ try {
+  await ready(dom); click('[data-view="all"]');
+  change('[data-due-filter]', 'overdue'); assert.equal(doc().querySelectorAll('[data-open]').length, 1);
+  assert.equal(doc().querySelector('[data-open]').dataset.open, 'a');
+  click('[data-selection-toggle]'); click('[data-select-visible]'); click('[data-bulk="tomorrow"]');
+  assert.equal(state().todos.home[0].date, f.date(1)); assert.equal(state().todos.home[0].time, '18:00'); assert.equal(state().todos.home[0].reminder.mode, 'at');
+  click('[data-undo]'); assert.equal(state().todos.home[0].date, f.date(-1));
+  click('[data-reset-filters]'); change('[data-list-sort]', 'updated');
+  assert.equal(doc().querySelector('[data-open]').dataset.open, 'n');
+  click('[data-selection-toggle]'); click('[data-select="a"]'); click('[data-select="n"]'); click('[data-bulk="complete"]');
+  assert.equal(state().todos.home[0].checked, true); assert.equal(state().todos.home[0].reminder.mode, 'none');
+  assert.equal(state().notes[0].checked, undefined); assert.equal(state().todos.home[1].checked, undefined);
+  click('[data-undo]'); assert.equal(state().todos.home[0].checked, undefined); assert.equal(state().todos.home[0].reminder.mode, 'at');
+  click('[data-selection-toggle]'); click('[data-select="a"]'); click('[data-select="n"]'); click('[data-bulk="tomorrow"]');
+  assert.equal(state().notes[0].date, f.date(1)); assert.equal(state().notes[0].title, '日本語 note');
+  assert.equal(state().notes[0].text, 'original text'); assert.equal(state().notes[0].reminder.date, '2099-01-01');
+  click('[data-undo]'); assert.equal(state().notes[0].date, f.date(0));
+  // A new search clears selection, so hidden records cannot be affected.
+  click('[data-selection-toggle]'); click('[data-select="a"]');
+  const search = doc().querySelector('#mn-search'); search.value = 'café'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.equal(doc().querySelectorAll('[data-select]').length, 1); assert.equal(doc().querySelector('[data-select]').dataset.select, 'c');
+  assert.equal(doc().querySelector('[data-bulk="complete"]').disabled, true);
+  click('[data-select-visible]'); click('[data-bulk="complete"]');
+  assert.equal(state().todos.home[2].checked, true); assert.equal(state().todos.home[0].checked, undefined);
+  click('[data-view="done"]'); click('[data-selection-toggle]'); click('[data-select="c"]'); click('[data-bulk="restore"]');
+  assert.equal(state().todos.home[2].checked, false); assert.equal(state().todos.home[2].reminder.mode, 'none');
+  const entries = Array.from({ length: dom.window.localStorage.length }, (_, i) => { const key = dom.window.localStorage.key(i); return [key, dom.window.localStorage.getItem(key)]; });
+  dom.window.close(); dom = boot(entries); await ready(dom); click('[data-view="all"]');
+  assert.equal(doc().querySelector('[data-list-sort]').value, 'updated'); assert.equal(state().todos.home[2].checked, false);
+ } finally { dom.window.close(); }
+});
+test('a failed mixed list action restores the original records and never reports success', async () => {
+ const f = listFixture(), dom = boot(f.seed);
+ try {
+  await ready(dom); const d = dom.window.document;
+  d.querySelector('[data-view="all"]').click(); d.querySelector('[data-selection-toggle]').click();
+  d.querySelector('[data-select="a"]').click(); d.querySelector('[data-select="n"]').click();
+  const safe = dom.window.localStorage.getItem(cacheKey);
+  const proto = Object.getPrototypeOf(dom.window.localStorage), original = proto.setItem;
+  proto.setItem = function(key, value) { if (key === cacheKey) throw Error('Quota exceeded'); return original.call(this, key, value); };
+  d.querySelector('[data-bulk="tomorrow"]').click();
+  assert.equal(dom.window.localStorage.getItem(cacheKey), safe);
+  assert.match(d.querySelector('.mn-message').textContent, /Не удалось сохранить действие/);
+  assert.equal(d.querySelector('[data-undo]'), null);
+  assert.match(d.querySelector('[data-open="a"] .mn-meta').textContent, /Просрочено/);
+  proto.setItem = original;
+  // The failed action keeps the selection, making retry a single tap.
+  assert.equal(d.querySelector('[data-select="a"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(d.querySelector('[data-select="n"]').getAttribute('aria-pressed'), 'true');
+  d.querySelector('[data-bulk="tomorrow"]').click();
+  const state = JSON.parse(dom.window.localStorage.getItem(cacheKey)).state;
+  assert.equal(state.todos.home[0].date, f.date(1)); assert.equal(state.notes[0].date, f.date(1));
+ } finally { dom.window.close(); }
+});

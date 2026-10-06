@@ -119,16 +119,20 @@ export async function openNotebook(id) {
     return copy(c.state);
 }
 export function savePart(part, value) {
-    const c = context;
-    if (!c) return;
+    if (!context) return;
     if (!['todos', 'notes'].includes(part)) throw new Error('Invalid notebook section.');
-    const next = normalizeNotebook({ ...c.state, [part]: value });
+    return saveNotebook({ ...context.state, [part]: value });
+}
+export function saveNotebook(state) {
+    const c = context;
+    if (!c) return false;
+    const next = normalizeNotebook(state);
     if (stable(c.state) === stable(next)) {
         if (!c.localSaved) {
             const stored = stash(c);
             report(c, stored ? c.dirty ? 'Saved locally — waiting for sync' : 'Saved locally' : 'Unsaved changes — keep this tab open');
         }
-        return;
+        return c.localSaved;
     }
     c.state = next;
     c.dirty = true;
@@ -136,6 +140,7 @@ export function savePart(part, value) {
     report(c, stored ? 'Saved locally — waiting for sync' : 'Unsaved changes — keep this tab open');
     clearTimeout(timer);
     timer = setTimeout(() => { flushNotebook(); }, 500);
+    return stored;
 }
 export async function flushNotebook() {
     const c = context;

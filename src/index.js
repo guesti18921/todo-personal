@@ -1,4 +1,4 @@
-import { openNotebook, closeNotebook, savePart, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, discardDraftAndReload, getSyncDetails, getRecoveryCopy, inspectConflict, resolveConflict } from './notebookStore.js';
+import { openNotebook, closeNotebook, saveNotebook, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, discardDraftAndReload, getSyncDetails, getRecoveryCopy, inspectConflict, resolveConflict } from './notebookStore.js';
 import { supabase, SUPABASE_URL, SUPABASE_PUBLIC_KEY } from './supabaseClient.js';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { createReminderEngine } from './reminderEngine.js';
@@ -529,13 +529,12 @@ reminderEngine = createReminderEngine({
 mobileUI = createMobileNotebook({
     root: todoApp, todos, notes,
     persist() {
-        savePart('todos', todos);
-        savePart('notes', notes);
+        const saved = saveNotebook({ todos, notes });
         domManipulator.renderAllToDos(todos, display);
         domManipulator.renderProjectNames(todos, display);
         mobileUI?.render();
         reminderEngine.refresh();
-        return isLocallySaved();
+        return saved;
     },
     logout: () => logout.click(),
     configureReminders: value => reminderEngine.configure(value),

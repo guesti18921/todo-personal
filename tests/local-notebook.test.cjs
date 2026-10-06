@@ -358,3 +358,20 @@ test('edits made during a cloud replacement request cannot be discarded by its d
  store.savePart('notes', [{ id: 'mine', title: 'Правка во время запроса' }]); release();
  await assert.rejects(replacement, /обновилась/); assert.equal(store.getDraft().notes[0].title, 'Правка во время запроса'); assert.equal(store.getRecoveryCopy(), null);
 });
+
+test('a mixed task/note batch is persisted as one snapshot and failed storage leaves the previous disk copy intact', async () => {
+ const writes = [], disk = new Map();
+ const set = disk.set.bind(disk);
+ disk.set = (key, value) => { if (key === 'todo-personal:local:a') writes.push(JSON.parse(value)); return set(key, value); };
+ const f = fixture(disk), { store } = await f.load(); f.accounts.set('a', { ...empty(), revision: 0 });
+ await store.openNotebook('a'); f.online = false; writes.length = 0;
+ const next = { todos: { home: [{ id: 'task-a', name: 'Deutsch', date: '2026-10-07' }], today: [], week: [] }, notes: [{ id: 'note-a', title: '日本語', date: '2026-10-07' }] };
+ assert.equal(store.saveNotebook(next), true); assert.equal(writes.length, 1);
+ assert.equal(writes[0].state.todos.home[0].date, writes[0].state.notes[0].date);
+ const safe = disk.get('todo-personal:local:a'); f.failWrites = true;
+ assert.equal(store.saveNotebook({ ...next, notes: [{ id: 'note-a', title: 'changed' }] }), false);
+ assert.equal(disk.get('todo-personal:local:a'), safe);
+ // The caller can revert a rejected batch and retry the original snapshot.
+ store.saveNotebook(next); f.failWrites = false; assert.equal(store.saveNotebook(next), true);
+ assert.deepEqual(json(store.getDraft()), next);
+});

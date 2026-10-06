@@ -96,3 +96,21 @@
 .auth-method-divider { margin: 14px 0; text-align: center; font-size: 14px; }
 #auth-password-toggle { margin: 4px 0 12px; min-height: 44px; }
 #auth-google:disabled { opacity: .6; cursor: wait; }
+
+@media (max-width: 700px), (pointer: coarse) {
+    .mn-list-options { border: 1px solid #ddccd1; border-radius: 8px; padding: 0 12px; }
+    .mn-list-selects { display: grid; gap: 10px; padding-bottom: 12px; }
+    .mn-list-selects label { margin: 0 !important; }
+    .mn-list-selects select { margin-top: 6px; }
+    .mn-list-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .mn-result-count { color: #715160; font-size: 13px; margin: 12px 0; }
+    .mn-select { flex: 0 0 44px; width: 44px; background: transparent; border: 0; font-size: 25px !important; color: #367f75 !important; }
+    .mn-select[aria-pressed="true"] { background: #e3f0ec; border-radius: 8px; }
+    .mn-bulk-selecting { position: sticky; top: 8px; z-index: 10; }
+    .mn-bulk-panel { padding: 12px; background: #e3f0ec; border: 1px solid #a6c8be; border-radius: 9px; box-shadow: 0 3px 10px #501f3a15; }
+    .mn-bulk-panel > p { font-weight: 700; margin-bottom: 8px; }
+    .mn-bulk-panel > div { display: flex; flex-wrap: wrap; gap: 8px; }
+    .mn-bulk-panel button:disabled { opacity: .55; cursor: default; }
+    .mn-main .mn-bulk-help { margin: 6px 0 0; font-size: 13px; }
+    .mn-message:not(:empty) { position: fixed; bottom: calc(154px + env(safe-area-inset-bottom)); left: 14px; right: 14px; z-index: 30; margin: 0; padding: 12px 14px; background: #fffdfb; border: 1px solid #a6c8be; border-radius: 9px; box-shadow: 0 3px 14px #501f3a25; }
+}

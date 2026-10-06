@@ -1,57 +1,27 @@
-# Android: first implementation stage
+# Mobile-first Android MVP: current state
 
-This branch adds the storage foundation for the planned Android version. It
-keeps the existing colors, adds a mobile interface at widths up to 700px, and
-does not publish the website. Android test APK builds are now configured; see
-`docs/android-testing.md` for build and device test steps.
+The mobile preview is https://todo.m1strell.com/mobile-preview/ . It preserves the original colours. The older website root remains separate. Native sources are generated reproducibly from locked Capacitor dependencies; APK builds are manual, and the owner tests the first release.
 
 ## Implemented
 
-- Mobile Today / All entries / Completed / Settings screens with a large +.
-- Fast task/note entry, optional date and time, manual pinning to Today,
-  account-scoped entry drafts, autosave of existing records and undo actions.
-- Existing desktop views handle tasks without a deadline.
+- Today / All entries / Completed / Settings, large +, optional deadlines, no-date pinning to Today, selected date chips and full page scrolling.
+- Tasks and notes with unrestricted multilingual text, autosave, per-account drafts, search, completion/restoration, deletion and undo.
+- Deadline filters, account/device sorting preference and selection for batch completion/restoration or moving to tomorrow, with safe undo.
+- Account-scoped snapshots, offline browser shell, offline cached-account opening, conditional Supabase sync, timeout and automatic connection retries.
+- Conflict comparison, keep both / use cloud, separate recovery snapshots and browser JSON export.
+- Email signup confirmation returning to the native app; Google login through the browser, explicit account selection, readable errors and password visibility.
+- Confirmed deadline suggestions in ten languages, dotted clocks, weekdays and anchored numeric durations; optional combined deadline/reminder acceptance.
+- Optional local Android notifications and browser reminders, device enable/disable, timing choices, snooze and cancellation on completion/deletion/account change.
 
-- Permanent, versioned local snapshots scoped to the authenticated account.
-- Cached notebooks open before a cloud request; pending edits survive reopening.
-- Existing tasks, projects, notes and completion flags are retained. Legacy
-  entries receive deterministic IDs; new entries receive random IDs.
-- Existing unsaved drafts migrate without deleting them until persistence succeeds.
-- Failed uploads retry with increasing delays up to one minute, and on focus or
-  a browser `online` event. This also covers a connection change while the device
-  still reports that it is online.
-- Cloud revision checks stop conflicting uploads. Neither version is overwritten
-  automatically; the existing download/load-cloud controls remain available.
-- Local storage failure is shown explicitly. Corrupted snapshots are retained.
-- Record text is stored unchanged, including German, English, Italian, Spanish,
-  Chinese, Japanese and Russian text. This is text preservation, not reminder
-  understanding or interface translation.
+## Verified by the owner
 
-## Verification
+The owner confirmed page scrolling, selected deadlines, reminders in the web flow, offline/synchronization behavior, and Google login with a record surviving reload and a fresh incognito sign-in. Automated tests also cover these flows with simulated storage/network/notification APIs; they are not substitutes for physical Android testing.
 
-Run `npm test` for storage, migration, account isolation, restart, retry, Unicode
-and conflict scenarios. Tests use an isolated storage and cloud simulation; they
-do not contact a real Supabase account. Run `npm ci` and `npm run build` to compile
-the application, then `npm run test:ui` for offline interface flows in a DOM
-simulation. These checks do not substitute for layout and Android device tests.
+## Remaining before the first Android release
 
-## Scope of offline support
+1. Test a fresh APK: offline cold launch, Google and email return, real Android background reminders, permissions, back button, keyboard and scrolling.
+2. Check phone behavior when changing VPN, IP and connection, including cloud sync and signing back in. The app does not authorize by IP, but external service reachability cannot be guaranteed.
+3. Final user-facing cleanup and accessibility/layout pass; remove technical controls from ordinary product flows, then fix issues found by the owner.
+4. Prepare release configuration and audience access, and check data recovery/export needs. Browser JSON restore and native file export are not implemented.
 
-The interface must already be loaded and a local snapshot must exist for the
-account. First login and first download require connectivity. This stage does
-not cache the website shell or add a service worker; reopening the GitHub Pages
-URL offline is not guaranteed. The future packaged Android application will
-include its interface locally.
-
-Browser localStorage is device storage, not a backup. Clearing application/site
-data removes local snapshots. Signing out hides account data from the interface;
-snapshots remain account-scoped for later authenticated use on this device.
-
-## Next stages
-
-1. Android device testing, including full offline cold start.
-2. Google login and synchronization behavior under VPN/network switching.
-3. Local reminders, explicit confirmation of inferred dates and multilingual
-   reminder parsing. Device timezone, not IP location, determines relative dates.
-
-The first Android release is tested by the project owner before publication.
+For focused behavior and test instructions see `list-management.md`, `sync-and-offline.md`, `google-sign-in.md`, `deadline-suggestions.md`, `reminders.md` and `android-testing.md`.
