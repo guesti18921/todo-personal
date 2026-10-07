@@ -336,6 +336,53 @@ function listFixture() {
  const seed = [['sb-ihvwqqvndmwtislvgamd-auth-token', JSON.stringify({ access_token: jwt, refresh_token: 'test-only', expires_at: exp, expires_in: 86400, token_type: 'bearer', user: { id, email: 'test@example.com', aud: 'authenticated', role: 'authenticated' } })], [cacheKey, JSON.stringify({ schemaVersion: 1, state, revision: 0, dirty: false, savedAt: new Date().toISOString() })]];
  return { seed, state, date };
 }
+test('draft recovery is visible after restart, discard is reversible and storage failure preserves the draft', async () => {
+ const f = listFixture(), draft = { type: 'note', text: 'Черновик 中文 <script>test</script>', details: 'Не потерять', date: '', time: '', reminder: { mode: 'none' } };
+ const dom = boot([...f.seed, [draftKey, JSON.stringify(draft)]]), d = dom.window.document;
+ try {
+  await ready(dom);
+  assert.ok(d.querySelector('[data-continue-draft]'));
+  assert.match(d.querySelector('.mn-draft-panel').textContent, /Черновик 中文/);
+  assert.equal(d.querySelector('.mn-draft-panel script'), null);
+  d.querySelector('[data-continue-draft]').click();
+  assert.equal(d.querySelector('#mn-text').value, draft.text);
+  assert.equal(d.querySelector('[data-type="note"]').getAttribute('aria-pressed'), 'true');
+  assert.match(d.querySelector('.mn-draft-restored').textContent, /Черновик восстановлен/);
+  assert.equal(d.querySelector('[data-enable-reminders]').hidden, true);
+  assert.equal(d.querySelector('.mn-reminder-device').hidden, true);
+  d.querySelector('[data-back]').click();
+  const original = dom.window.localStorage.getItem(draftKey);
+  const proto = Object.getPrototypeOf(dom.window.localStorage), remove = proto.removeItem;
+  proto.removeItem = function(key) { if (key === draftKey) throw Error('Storage blocked'); return remove.call(this, key); };
+  d.querySelector('[data-discard-draft]').click();
+  assert.equal(dom.window.localStorage.getItem(draftKey), original);
+  assert.ok(d.querySelector('[data-continue-draft]'));
+  proto.removeItem = remove;
+  d.querySelector('[data-discard-draft]').click();
+  assert.equal(dom.window.localStorage.getItem(draftKey), null);
+  assert.equal(d.querySelector('[data-continue-draft]'), null);
+  d.querySelector('[data-undo]').click();
+  assert.equal(dom.window.localStorage.getItem(draftKey), original);
+  d.querySelector('[data-continue-draft]').click(); d.querySelector('[data-save]').click();
+  assert.equal(dom.window.localStorage.getItem(draftKey), null);
+  assert.equal(d.querySelector('[data-continue-draft]'), null);
+  assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.3/);
+ } finally { dom.window.close(); }
+});
+test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
+ const f = listFixture(), dom = boot(f.seed), d = dom.window.document;
+ try {
+  await ready(dom); d.querySelector('.mn-add').click();
+  assert.equal(d.querySelector('[data-enable-reminders]').hidden, true);
+  const mode = d.querySelector('[name="reminderMode"]'); mode.value = 'custom'; mode.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.equal(d.querySelector('[data-enable-reminders]').hidden, false);
+  assert.equal(d.querySelector('.mn-reminder-device').hidden, false);
+  mode.value = 'none'; mode.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.equal(d.querySelector('[data-enable-reminders]').hidden, true);
+  assert.equal(d.querySelector('.mn-reminder-device').hidden, true);
+ } finally { dom.window.close(); }
+});
 test('list filters and account sorting combine with scoped selection, bulk completion/restore, postponement and undo offline', async () => {
  const f = listFixture(); let dom = boot(f.seed);
  const doc = () => dom.window.document;
