@@ -367,7 +367,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.3/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.4/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -381,6 +381,26 @@ test('notification permissions are shown only after choosing a reminder and retu
   mode.value = 'none'; mode.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   assert.equal(d.querySelector('[data-enable-reminders]').hidden, true);
   assert.equal(d.querySelector('.mn-reminder-device').hidden, true);
+ } finally { dom.window.close(); }
+});
+test('long note previews are clamped while editing, saving and searching retain the entire text', async () => {
+ const f = listFixture();
+ const fullText = Array.from({ length: 30 }, (_, i) => `${i + 1}. Строка заметки 中文 日本語 — полный текст`).join('\n\n');
+ const fullDetails = 'Дополнительный текст\n'.repeat(12);
+ const seed = f.seed.map(([key, value]) => key === cacheKey ? [key, JSON.stringify({ ...JSON.parse(value), state: { ...f.state, notes: [{ id: 'long-note', title: fullText, text: fullDetails }] } })] : [key, value]);
+ const dom = boot(seed), d = dom.window.document;
+ try {
+  await ready(dom); d.querySelector('[data-view="all"]').click();
+  const title = d.querySelector('[data-open="long-note"] .mn-title');
+  assert.equal(title.textContent, fullText, 'preview clipping never truncates record contents');
+  const search = d.querySelector('#mn-search'); search.value = '30. Строка'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.equal(d.querySelectorAll('[data-open]').length, 1, 'search still finds text beyond the preview');
+  d.querySelector('[data-open="long-note"]').click();
+  assert.equal(d.querySelector('#mn-text').value, fullText);
+  assert.equal(d.querySelector('#mn-details').value, fullDetails);
+  d.querySelector('[data-save]').click();
+  const stored = JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes[0];
+  assert.equal(stored.title, fullText); assert.equal(stored.text, fullDetails);
  } finally { dom.window.close(); }
 });
 test('list filters and account sorting combine with scoped selection, bulk completion/restore, postponement and undo offline', async () => {
