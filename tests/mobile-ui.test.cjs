@@ -17,9 +17,10 @@ async function ready(dom) {
  while (dom.window.document.querySelector('#todo-app').hidden && Date.now() < deadline) await wait();
  assert.equal(dom.window.document.querySelector('#todo-app').hidden, false, 'notebook opens within the readiness timeout');
 }
-function boot(entries, native = false, fetcher = null) {
+function boot(entries, native = false, fetcher = null, languages = ['ru-RU']) {
  const dom = new JSDOM(html, { url: 'https://test.local/', runScripts: 'outside-only', virtualConsole });
  const w = dom.window;
+ Object.defineProperty(w.navigator, 'languages', { value: languages });
  Object.defineProperty(w, 'crypto', { value: webcrypto });
  Object.assign(w, { TextEncoder, TextDecoder, fetch: fetcher || (async () => { throw new TypeError('Network unavailable'); }), Request, Response, Headers });
  if (native) w.androidBridge = { postMessage() {} };
@@ -367,7 +368,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.4/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.5/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -511,4 +512,98 @@ test('failed first account load hides server errors and allows switching account
   assert.equal(doc.querySelector('#todo-app').hidden, true);
   assert.equal(buttons.every(b => b.hidden), true);
  } finally { dom.window.close(); }
+});
+
+test('English login and registration preserve typed credentials and explicit language through restart', async () => {
+ let signUpOptions;
+ let dom = boot([], false, async (request, options) => {
+  const url=String(request?.url||request);
+  if(url.includes('/auth/v1/settings')) return new Response(JSON.stringify({external:{google:true}}));
+  if(url.includes('/auth/v1/signup')) { signUpOptions=JSON.parse(options.body); return new Response(JSON.stringify({user:{id,email:'test@example.com',identities:[]},session:null}),{headers:{'Content-Type':'application/json'}}); }
+  if(url.includes('/auth/v1/token')) return new Response(JSON.stringify({error_code:'invalid_credentials',msg:'Invalid login credentials'}),{status:400,headers:{'Content-Type':'application/json'}});
+  throw Error('Unexpected request');
+ }, ['en-RU']);
+ try {
+  let d=dom.window.document; await wait();
+  assert.equal(d.documentElement.lang,'en'); assert.equal(d.querySelector('#auth-title').textContent,'Sign in');
+  assert.equal(d.querySelector('#auth-google').textContent,'Continue with Google');
+  d.querySelector('#auth-email').value='test@example.com'; d.querySelector('#auth-password').value='good-password';
+  d.querySelector('#auth-password-toggle').click();
+  const choose=value=>{const el=d.querySelector('#auth-language');el.value=value;el.dispatchEvent(new dom.window.Event('change',{bubbles:true}));};
+  choose('ru'); choose('en');
+  assert.equal(d.querySelector('#auth-password').value,'good-password'); assert.equal(d.querySelector('#auth-password').type,'text');
+  assert.equal(d.querySelector('#auth-password-toggle').textContent,'Hide password');
+  assert.equal(d.querySelector('#auth-email').value,'test@example.com');
+  d.querySelector('#auth-form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})); await wait();
+  assert.match(d.querySelector('#auth-message').textContent,/Incorrect email or password/);
+  d.querySelector('#auth-switch').click(); choose('ru'); choose('en');
+  assert.equal(d.querySelector('#auth-title').textContent,'Create an account');
+  d.querySelector('#auth-form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})); await wait();
+  assert.equal(d.querySelector('#auth-confirm').hidden,false); assert.match(d.querySelector('#auth-confirm').textContent,/Check your email/);
+  assert.equal(signUpOptions.data.todo_personal_language,'en');
+  const seed=Array.from({length:dom.window.localStorage.length},(_,i)=>{const key=dom.window.localStorage.key(i);return[key,dom.window.localStorage.getItem(key)];});
+  dom.window.close();dom=boot(seed,false,null,['ru-RU']);d=dom.window.document;
+  assert.equal(d.documentElement.lang,'en');
+ } finally {dom.window.close();}
+});
+
+test('settings language switches offline, translates every screen, and preserves full note data and deadlines', async () => {
+ const f=listFixture(), original=JSON.parse(f.seed.find(([key])=>key===cacheKey)[1]);
+ original.state.notes=[{id:'language-note',title:'Сегодня Задача 中文 日本語 😀\n'.repeat(30),text:'Завтра <b>details</b>',date:'2030-10-10',time:'18:00',reminder:{mode:'15',date:'',time:''}}];
+ const seed=f.seed.map(([key,value])=>[key,key===cacheKey?JSON.stringify(original):value]);
+ let dom=boot(seed);
+ try{
+  await ready(dom);let d=dom.window.document;
+  d.querySelector('[data-view="settings"]').click();
+  const selector=d.querySelector('[data-language]');selector.value='en';selector.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  assert.equal(d.documentElement.lang,'en');assert.equal(d.querySelector('.mn-main h1').textContent,'Settings');
+  assert.doesNotMatch(d.querySelector('.mn-main').textContent,/[А-Яа-яЁё]/);
+  assert.equal(d.querySelector('[data-view="today"]').textContent,'Today');
+  assert.doesNotMatch(d.querySelector('.mn-header').textContent,/[А-Яа-яЁё]/);
+  assert.equal(d.querySelector('.mn-status').getAttribute('aria-label'),'View saving status');
+  d.querySelector('[data-view="all"]').click();assert.equal(d.querySelector('.mn-main h1').textContent,'All entries');
+  assert.equal(d.querySelector('[data-open="language-note"] .mn-title').textContent,original.state.notes[0].title);
+  d.querySelector('[data-open="language-note"]').click();
+  assert.equal(d.querySelector('[data-save]').textContent,'Save');
+  assert.equal(d.querySelector('[name="text"]').value,original.state.notes[0].title);
+  assert.equal(d.querySelector('[name="details"]').value,original.state.notes[0].text);
+  assert.equal(d.querySelector('[name="date"]').value,'2030-10-10');
+  assert.equal(d.querySelector('[name="time"]').value,'18:00');
+  assert.match(d.querySelector('.mn-reminder-preview').textContent,/Remind me/);
+  assert.equal(d.querySelector('[name="reminderMode"] option[value="15"]').textContent,'15 minutes before');
+  d.querySelector('[data-save]').click();
+  const stored=JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes[0];
+  for(const key of ['title','text','date','time','reminder'])assert.deepEqual(stored[key],original.state.notes[0][key]);
+  d.querySelector('[data-view="done"]').click();assert.equal(d.querySelector('.mn-main h1').textContent,'Completed');
+  d.querySelector('[data-view="settings"]').click();d.querySelector('[data-sync-open]').click();
+  assert.equal(d.querySelector('.mn-main h1').textContent,'Saving');assert.doesNotMatch(d.querySelector('.mn-main').textContent,/[А-Яа-яЁё]/);
+  const next=Array.from({length:dom.window.localStorage.length},(_,i)=>{const key=dom.window.localStorage.key(i);return[key,dom.window.localStorage.getItem(key)];});
+  dom.window.close();dom=boot(next);await ready(dom);d=dom.window.document;
+  assert.equal(d.documentElement.lang,'en');d.querySelector('[data-view="all"]').click();
+  assert.equal(d.querySelector('[data-open="language-note"] .mn-title').textContent,original.state.notes[0].title);
+ }finally{dom.window.close();}
+});
+
+test('account metadata language loads on a new device and settings save it through Supabase outside the auth callback', async () => {
+ const f=listFixture();let user=JSON.parse(f.seed[0][1]).user;
+ user.user_metadata={todo_personal_language:'en'};let updates=0;
+ const seed=f.seed.map(([key,value])=>key===f.seed[0][0]?[key,JSON.stringify({...JSON.parse(value),user})]:[key,value]);
+ const dom=boot(seed,false,async (request,options)=>{
+  const url=String(request?.url||request);
+  if(url.includes('/auth/v1/user')) {
+   if(options.method==='PUT') {updates++;user={...user,user_metadata:{...user.user_metadata,...JSON.parse(options.body).data}};}
+   return new Response(JSON.stringify(user),{headers:{'Content-Type':'application/json'}});
+  }
+  throw Error('Network unavailable');
+ });
+ try{
+  await ready(dom);const d=dom.window.document;
+  for(let i=0;i<20&&d.documentElement.lang!=='en';i++)await wait();
+  assert.equal(d.documentElement.lang,'en');assert.equal(d.querySelector('[data-view="today"]').textContent,'Today');
+  d.querySelector('[data-view="settings"]').click();
+  const select=d.querySelector('[data-language]');select.value='ru';select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  for(let i=0;i<20&&JSON.parse(dom.window.localStorage.getItem('todo-personal:language:'+id)).dirty;i++)await wait();
+  assert.equal(updates,1);assert.equal(user.user_metadata.todo_personal_language,'ru');
+  assert.equal(d.documentElement.lang,'ru');assert.equal(JSON.parse(dom.window.localStorage.getItem('todo-personal:language:'+id)).dirty,false);
+ }finally{dom.window.close();}
 });
