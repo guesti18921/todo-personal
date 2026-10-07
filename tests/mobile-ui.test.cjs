@@ -676,3 +676,21 @@ test('confirmed server deletion clears only this account and cannot reopen its c
   reboot = boot(disk); await wait(); assert.equal(reboot.window.document.querySelector('#todo-app').hidden, true);
  } finally { reboot?.window.close(); dom.window.close(); }
 });
+
+test('a deletion marker blocks cached Auth reopening even if storage cleanup remains unavailable', async () => {
+ const f = listFixture();
+ const dom = new JSDOM(html, { url: 'https://test.local/', runScripts: 'outside-only', virtualConsole });
+ const w = dom.window;
+ Object.defineProperty(w.navigator, 'languages', { value: ['ru-RU'] });
+ Object.defineProperty(w, 'crypto', { value: webcrypto });
+ Object.assign(w, { TextEncoder, TextDecoder, fetch: async () => { throw new TypeError('offline'); }, Request, Response, Headers });
+ for(const [key,value] of [...f.seed, ['todo-personal:deleted-account:'+id, '1']]) w.localStorage.setItem(key,value);
+ w.Storage.prototype.removeItem = function(){ throw new Error('storage blocked'); };
+ try {
+  w.eval(bundle); await wait(); await wait();
+  assert.equal(w.document.querySelector('#todo-app').hidden, true);
+  assert.equal(w.document.querySelector('#auth-screen').hidden, false);
+  assert.equal(w.localStorage.getItem('todo-personal:deleted-account:'+id), '1');
+  assert.doesNotMatch(w.document.querySelector('.mn-list').textContent, /Alpha overdue/);
+ } finally { w.close(); }
+});

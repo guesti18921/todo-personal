@@ -3,6 +3,11 @@ import { AUTH_STORAGE_KEY } from './localAccount.js';
 const deletedPrefix = 'todo-personal:deleted-account:';
 const ownedTypes = ['local', 'draft', 'entry-draft', 'preferences', 'language', 'reminders-enabled', 'recovery-latest'];
 
+export function isAccountDeleted(storage, owner) {
+    try { return Boolean(owner && storage.getItem(deletedPrefix + owner)); }
+    catch (_) { return false; }
+}
+
 export async function requestAccountDeletion(client, owner, currentOwner) {
     const { data, error } = await client.auth.getSession();
     const session = data?.session;

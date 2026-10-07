@@ -11,7 +11,7 @@ import { boundedFetch } from './networkFetch.js';
 import { authErrorMessage, createGoogleLogin, googleProviderEnabled } from './googleAuth.js';
 import { createClient } from '@supabase/supabase-js';
 import { createEmailConfirmation, EMAIL_CONFIRMATION_URL } from './emailConfirmation.js';
-import { requestAccountDeletion, clearDeletedAccount } from './accountDeletion.js';
+import { requestAccountDeletion, clearDeletedAccount, isAccountDeleted } from './accountDeletion.js';
 let mobileUI = null;
 let reminderEngine = null;
 const retiredAccounts = new Set();
@@ -457,8 +457,9 @@ async function loadAccount(id, ticket) {
 }
 supabase.auth.onAuthStateChange((_event, session) => {
     const id = session?.user?.id || null;
-    if (id && retiredAccounts.has(id)) {
-        setTimeout(() => supabase.auth.signOut({ scope: 'local' }), 0);
+    if (id && (retiredAccounts.has(id) || isAccountDeleted(localStorage, id))) {
+        setTimeout(() => supabase.auth.signOut({ scope: 'local' }).catch(() => {}), 0);
+        authMessage.textContent = t('Аккаунт удалён. Не удалось полностью очистить данные на устройстве. Очистите данные приложения в настройках телефона.');
         return;
     }
     if (id) { emailConfirmation.stop(); authPassword.value = ''; }
