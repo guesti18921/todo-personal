@@ -33,7 +33,7 @@ export function reminderLabel(entry, now = new Date(), locale = 'ru') {
     if (!at) return '';
     return `${at <= now ? 'Напоминание прошло' : 'Напомнить'}: ${new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(at)}`;
 }
-export function notificationPlan(records, account, now = new Date()) {
+export function notificationPlan(records, account, now = new Date(), { includePast = false } = {}) {
     const used = new Set();
     return [...records].sort((a, b) => a.entry.id.localeCompare(b.entry.id)).flatMap(record => {
         let hash = 2166136261;
@@ -42,7 +42,7 @@ export function notificationPlan(records, account, now = new Date()) {
         while (used.has(id)) id = id % 2147483646 + 1;
         used.add(id);
         const at = reminderMoment(record.entry);
-        if (!account || !at || at <= now) return [];
+        if (!account || !at || (!includePast && at <= now)) return [];
         const text = record.type === 'task' ? record.entry.name : record.entry.title || record.entry.text;
         const body = String(text || '').slice(0, 300);
         const extra = { account, entryId: record.entry.id, at: at.toISOString() };
