@@ -145,3 +145,12 @@ test('notification target opens an editor among several records, preserving an i
   assert.equal(ui.openReminder({ entry: { id: 'missing' } }), false);
  } finally { dom.window.close(); }
 });
+
+test('changing the interface language reschedules notification titles while preserving body, target and exact time', async () => {
+ const m=await modules(), p=plugin(), disk=storage(); let english=false;
+ const engine=m.createReminderEngine({native:true,plugin:p,storage:disk,getRecords:()=>[{entry:entry(),type:'task'}],onDue(){},onStatus(){},now:()=>now,localize:text=>english&&text==='Пора выполнить задачу'?'Time for your task':text});
+ await engine.setAccount('a');await engine.configure(true);
+ const old=p.pending[0]; english=true;await engine.refresh();const next=p.pending[0];
+ assert.equal(next.title,'Time for your task');assert.equal(next.body,old.body);assert.equal(next.id,old.id);
+ assert.equal(next.schedule.at.getTime(),old.schedule.at.getTime());assert.deepEqual(next.extra,old.extra);assert.equal(p.pending.length,1);
+});
