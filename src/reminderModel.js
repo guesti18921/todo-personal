@@ -28,10 +28,10 @@ export function snoozeReminder(entry, now = new Date(), minutes = 10) {
     entry.reminder = { mode: 'custom', date: dateValue(at), time: timeValue(at) };
     entry.updatedAt = now.toISOString();
 }
-export function reminderLabel(entry, now = new Date()) {
+export function reminderLabel(entry, now = new Date(), locale = 'ru') {
     const at = reminderMoment(entry);
     if (!at) return '';
-    return `${at <= now ? 'Напоминание прошло' : 'Напомнить'}: ${new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(at)}`;
+    return `${at <= now ? 'Напоминание прошло' : 'Напомнить'}: ${new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(at)}`;
 }
 export function notificationPlan(records, account, now = new Date()) {
     const used = new Set();
