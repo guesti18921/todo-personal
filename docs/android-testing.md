@@ -166,3 +166,14 @@ Local validation: 58 logic/runtime checks and 13 compiled UI checks passed.
 Real-device update and post-update notification checks remain pending.
 The signed workflow always builds the newly pinned source; the temporary reuse
 option for the old unsigned 0.4.2 APK has been removed.
+
+
+## 0.4.4 compact previews
+
+VersionCode 8 keeps the same package ID and signing key. Card text is visually
+limited to three lines with an ellipsis; additional text remains limited to two
+lines. No stored text is truncated. Opening a card loads the complete entry;
+search still includes content beyond the preview. Compiled UI validation covers
+a 30-paragraph multilingual note, opening, saving and searching its last line.
+Install over the current signed version without uninstalling. Check a long note
+in Today / All entries and open it to confirm the complete text is available.
