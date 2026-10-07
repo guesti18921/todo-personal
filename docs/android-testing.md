@@ -148,4 +148,21 @@ Permanent signing is prepared separately in `Build Android signed APK`.
 See [android-signing.md](android-signing.md) for the owner's one-time key and
 repository-secret setup. 0.4.2-test uses versionCode 6. Test debug builds retain
 disposable keys; future installed-app updates must use the signed workflow.
-No permanent-key release APK has been built yet.
+Permanent-key APK 0.4.2 was built in run 37527689697; its signature was also
+verified after downloading with real Android Build Tools 37.0.0. The owner
+confirmed installation, login, records and notifications work.
+
+## 0.4.3 update verification
+
+VersionCode 7 retains com.m1strell.todopersonal and the owner's permanent key.
+Install over 0.4.2 without uninstalling. Confirm the installer offers an update,
+records remain present, login persists, and Settings displays version 0.4.3.
+Verify a delivered notification opens the exact record after updating.
+
+Changes: a visible recoverable draft on list screens, reversible draft deletion,
+shorter task/note explanations, contextual notification-permission help, clear
+suggestion actions (deadline only versus deadline and reminder), and app version.
+Local validation: 58 logic/runtime checks and 13 compiled UI checks passed.
+Real-device update and post-update notification checks remain pending.
+The signed workflow always builds the newly pinned source; the temporary reuse
+option for the old unsigned 0.4.2 APK has been removed.
