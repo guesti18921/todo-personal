@@ -1,7 +1,7 @@
 import { notificationPlan, reminderMoment } from './reminderModel.js';
 
 // Native operations are serialized; every async boundary rechecks the account.
-export function createReminderEngine({ native, plugin, storage, getRecords, onDue, onOpen = onDue, onStatus, now = () => new Date() }) {
+export function createReminderEngine({ native, plugin, storage, getRecords, onDue, onOpen = onDue, onStatus, now = () => new Date(), localize = text => text }) {
     let account = null, enabled = false, generation = 0, queue = Promise.resolve();
     let armed = new Map(), pendingAction = null;
     let permission = 'unknown', exact = false, error = '', scheduled = 0;
@@ -66,11 +66,11 @@ export function createReminderEngine({ native, plugin, storage, getRecords, onDu
             }
             exact = (await plugin.checkExactNotificationSetting()).exact_alarm === 'granted';
             if (ticket !== generation) return;
-            await plugin.createChannel({ id: 'todo-reminders', name: 'Напоминания о записях', importance: 4, visibility: 0, vibration: true });
+            await plugin.createChannel({ id: 'todo-reminders', name: localize('Напоминания о записях'), importance: 4, visibility: 0, vibration: true });
             if (ticket !== generation) return;
             const pending = (await plugin.getPending()).notifications;
             if (ticket !== generation) return;
-            const desired = notificationPlan(getRecords(), account, now()).map(item => ({ ...item, isExactNotification: exact }));
+            const desired = notificationPlan(getRecords(), account, now()).map(item => ({ ...item, title: localize(item.title), isExactNotification: exact }));
             const wanted = new Map(desired.map(item => [item.id, item]));
             const unchanged = new Set(), cancel = [];
             for (const old of pending) {
