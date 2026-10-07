@@ -154,3 +154,37 @@ test('changing the interface language reschedules notification titles while pres
  assert.equal(next.title,'Time for your task');assert.equal(next.body,old.body);assert.equal(next.id,old.id);
  assert.equal(next.schedule.at.getTime(),old.schedule.at.getTime());assert.deepEqual(next.extra,old.extra);assert.equal(p.pending.length,1);
 });
+
+// Capacitor Android 8.3 keeps delivered records in getPending(), while
+// getDeliveredNotifications() returns Android data rather than our `extra`.
+test('Android tray notifications survive periodic refresh after delivery and delayed alarms are not cancelled at their deadline', async () => {
+ const m=await modules(), disk=storage();let clock=new Date(now), saved=[], visible=[], cancellations=0, removals=0;
+ const item=entry();item.date='2026-10-06';item.time='17:32';item.reminder={mode:'at'};
+ let records=[{entry:item,type:'task'}];
+ const p={...plugin(),async getPending(){return{notifications:saved};},async schedule({notifications}){saved.push(...notifications);},
+  async cancel({notifications}){cancellations++;saved=saved.filter(n=>!notifications.some(x=>x.id===n.id));},
+  async getDeliveredNotifications(){return{notifications:visible};},async removeDeliveredNotifications({notifications}){removals++;visible=visible.filter(n=>!notifications.some(x=>x.id===n.id));}};
+ const engine=m.createReminderEngine({native:true,plugin:p,storage:disk,getRecords:()=>records,onDue(){},onStatus(){},now:()=>clock});
+ await engine.setAccount('a');await engine.configure(true);assert.equal(saved.length,1);
+ const notification=saved[0];clock=new Date(2026,9,6,17,32,1);
+ // Android may deliver just after the nominal time; keep its existing alarm.
+ await engine.refresh();assert.equal(cancellations,0);assert.equal(saved.length,1);
+ visible=[{id:notification.id,title:notification.title,body:notification.body,data:{'android.title':notification.title}}];
+ for(let i=0;i<4;i++){clock=new Date(clock.getTime()+15000);await engine.refresh();}
+ assert.equal(visible.length,1,'valid reminder remains in the notification shade');assert.equal(removals,0);
+ records=[];await engine.refresh();assert.equal(visible.length,0,'deleting the entry removes its notification');
+});
+
+test('delivered metadata can be retrieved by ID; unknown tray notifications are preserved and expired entries are never newly scheduled', async () => {
+ const m=await modules(), p=plugin(), disk=storage();let clock=new Date(now), records=[{entry:entry(),type:'task'}], visible=[], deliveredMetadata=[];
+ p.getDeliveredNotifications=async()=>({notifications:visible});
+ p.getByIds=async()=>({notifications:deliveredMetadata});
+ p.removeDeliveredNotifications=async({notifications})=>{visible=visible.filter(n=>!notifications.some(x=>x.id===n.id));};
+ const engine=m.createReminderEngine({native:true,plugin:p,storage:disk,getRecords:()=>records,onDue(){},onStatus(){},now:()=>clock});
+ await engine.setAccount('a');await engine.configure(true);const planned=p.pending[0];
+ await p.cancel({notifications:[planned]});deliveredMetadata=[planned];visible=[{id:planned.id,data:{}},{id:987654321,data:{}}];
+ clock=new Date(planned.schedule.at.getTime()+60000);await engine.refresh();
+ assert.equal(visible.length,2);assert.equal(p.pending.length,0,'past reminders are not scheduled again');
+ records[0].entry.checked=true;await engine.refresh();assert.deepEqual(visible.map(x=>x.id),[987654321]);
+ p.getByIds=async()=>{throw Error('metadata unavailable');};await engine.refresh();assert.equal(visible.length,1);
+});
