@@ -385,7 +385,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.8/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.9/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -626,4 +626,53 @@ test('account metadata language loads on a new device and settings save it throu
   assert.equal(updates,1);assert.equal(user.user_metadata.todo_personal_language,'ru');
   assert.equal(d.documentElement.lang,'ru');assert.equal(JSON.parse(dom.window.localStorage.getItem('todo-personal:language:'+id)).dirty,false);
  }finally{dom.window.close();}
+});
+
+
+test('account deletion requires confirmation, cancellation and failed requests preserve local entries', async () => {
+ const f = listFixture(), calls = [];
+ const dom = boot(f.seed, false, async (url, options) => {
+  if (String(url).includes('/functions/v1/delete-account')) {
+   calls.push(options); return new Response(JSON.stringify({ code: 'deletion_failed' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+  }
+  throw new TypeError('offline');
+ });
+ try {
+  await ready(dom); const d = dom.window.document, storage = dom.window.localStorage;
+  d.querySelector('[data-view="settings"]').click(); d.querySelector('[data-delete-account]').click();
+  assert.equal(calls.length, 0); assert.match(d.querySelector('.mn-main').textContent, /без возможности восстановления/);
+  d.querySelector('[data-cancel-account-deletion]').click(); assert.equal(calls.length, 0);
+  d.querySelector('[data-delete-account]').click();
+  d.querySelector('[data-confirm-account-deletion]').click();
+  d.querySelector('[data-confirm-account-deletion]').click();
+  for (let i=0;i<30 && !d.querySelector('.mn-deletion-error')?.textContent;i++) await wait();
+  assert.equal(calls.length, 1); assert.deepEqual(JSON.parse(calls[0].body), { confirm: 'DELETE' });
+  assert.match(d.querySelector('.mn-deletion-error').textContent, /не подтверждено/);
+  assert.deepEqual(JSON.parse(storage.getItem(cacheKey)).state, f.state);
+  assert.ok(storage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token'));
+ } finally { dom.window.close(); }
+});
+
+test('confirmed server deletion clears only this account and cannot reopen its cached notebook', async () => {
+ const f = listFixture(), other = 'another-account';
+ const scoped = ['draft', 'entry-draft', 'preferences', 'language', 'reminders-enabled', 'recovery-latest'];
+ const extra = scoped.map(type => ['todo-personal:'+type+':'+id, '{}']);
+ extra.push(['todo-personal:recovery:'+id+':123:copy', '{}'], ['todo-personal:reminder-seen:'+id+':entry:time', '1'], ['todo-personal:local:'+other, 'KEEP'], ['todo-personal:language', '{"language":"ru"}']);
+ const dom = boot([...f.seed, ...extra], false, async (url) => {
+  if (String(url).includes('/functions/v1/delete-account')) return new Response(JSON.stringify({ code: 'account_deleted' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  throw new TypeError('offline');
+ });
+ let reboot;
+ try {
+  await ready(dom); const d = dom.window.document, storage = dom.window.localStorage;
+  d.querySelector('[data-view="settings"]').click(); d.querySelector('[data-delete-account]').click(); d.querySelector('[data-confirm-account-deletion]').click();
+  for(let i=0;i<30 && d.querySelector('#auth-screen').hidden;i++) await wait();
+  assert.equal(d.querySelector('#todo-app').hidden, true);
+  assert.equal(storage.getItem(cacheKey), null); assert.equal(storage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token'), null);
+  for(const [name] of extra) if(name.includes(':'+id)) assert.equal(storage.getItem(name), null, name);
+  assert.equal(storage.getItem('todo-personal:local:'+other), 'KEEP');
+  assert.equal(storage.getItem('todo-personal:language'), '{"language":"ru"}');
+  const disk = Array.from({length:storage.length}, (_,i)=> {const key=storage.key(i);return [key, storage.getItem(key)];});
+  reboot = boot(disk); await wait(); assert.equal(reboot.window.document.querySelector('#todo-app').hidden, true);
+ } finally { reboot?.window.close(); dom.window.close(); }
 });

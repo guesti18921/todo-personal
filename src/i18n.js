@@ -58,7 +58,7 @@ export function createLanguagePreferences({ storage, languages = [], updateUser 
         syncing = true;
         try {
             const result = await updateUser({ data: { [LANGUAGE_METADATA]: pending.language } });
-            if (result?.error || result?.data?.user?.id !== id) return;
+            if (account !== id || result?.error || result?.data?.user?.id !== id) return;
             const latest = read(accountKey(id));
             if (latest?.language !== pending.language) return;
             storage.setItem(accountKey(id), JSON.stringify({ language: pending.language, dirty: false }));

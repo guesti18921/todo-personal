@@ -11,8 +11,10 @@ import { boundedFetch } from './networkFetch.js';
 import { authErrorMessage, createGoogleLogin, googleProviderEnabled } from './googleAuth.js';
 import { createClient } from '@supabase/supabase-js';
 import { createEmailConfirmation, EMAIL_CONFIRMATION_URL } from './emailConfirmation.js';
+import { requestAccountDeletion, clearDeletedAccount } from './accountDeletion.js';
 let mobileUI = null;
 let reminderEngine = null;
+const retiredAccounts = new Set();
 // all major functions are stored in these objects
 import {toDosManager, domManipulator, notesManager} from "./todoFunctions.js"
 
@@ -455,6 +457,10 @@ async function loadAccount(id, ticket) {
 }
 supabase.auth.onAuthStateChange((_event, session) => {
     const id = session?.user?.id || null;
+    if (id && retiredAccounts.has(id)) {
+        setTimeout(() => supabase.auth.signOut({ scope: 'local' }), 0);
+        return;
+    }
     if (id) { emailConfirmation.stop(); authPassword.value = ''; }
     // Offline startup can use this device's last authenticated data
     // while Supabase is still trying to refresh an expired access token.
@@ -569,6 +575,49 @@ async function signOutAccount() {
 }
 logout.addEventListener('click', signOutAccount);
 
+async function deleteAccount() {
+    if (changingAccount || !activeUser) throw new Error(t('Не удалось удалить аккаунт. Попробуйте снова.'));
+    const owner = activeUser;
+    changingAccount = true;
+    todoApp.inert = true;
+    let deleted = false;
+    try {
+        await requestAccountDeletion(supabase, owner, () => activeUser);
+        deleted = true;
+        retiredAccounts.add(owner);
+        // Stop writers before removing this account's snapshots and drafts.
+        if (activeUser === owner) {
+            ++generation;
+            resetScreen();
+            activeUser = null;
+            activeUserEmail = '';
+            languagePreferences.bindUser(null);
+            mobileUI?.setAccount(null);
+        }
+        const cleaned = clearDeletedAccount(localStorage, owner);
+        const remindersCleared = await reminderEngine?.setAccount(activeUser);
+        if (!activeUser) {
+            const { error } = await supabase.auth.signOut({ scope: 'local' });
+            if (error) throw error;
+            authScreen.hidden = false;
+            authConfirm.hidden = true;
+            authTitle.hidden = false;
+            authForm.hidden = authSwitch.hidden = false;
+            authForm.reset();
+            registering = false;
+            authTitle.textContent = authSubmit.textContent = t('Войти');
+            authSwitch.textContent = t('Создать аккаунт');
+            authPassword.autocomplete = 'current-password';
+            updateGoogleVisibility();
+            authMessage.textContent = t(cleaned && remindersCleared !== false ? 'Аккаунт и записи удалены.' : 'Аккаунт удалён. Не удалось полностью очистить данные на устройстве. Очистите данные приложения в настройках телефона.');
+        }
+    } catch (_) {
+        if (!deleted) throw new Error(t('Удаление не подтверждено. Проверьте интернет и повторите попытку.'));
+        authScreen.hidden = false;
+        authMessage.textContent = t('Аккаунт удалён. Закройте и снова откройте приложение, чтобы завершить выход.');
+    } finally { changingAccount = false; todoApp.inert = !ready; }
+}
+
 async function refreshCloud() {
     if (!ready || polling || changingAccount || document.hidden || hasPendingChanges()) return;
     if (document.activeElement?.matches('input, textarea, [contenteditable="true"]')) return;
@@ -601,6 +650,7 @@ mobileUI = createMobileNotebook({
         return saved;
     },
     logout: signOutAccount,
+    deleteAccount,
     configureReminders: value => reminderEngine.configure(value),
     enableExactReminders: () => reminderEngine.enableExact(),
     refreshReminders: () => reminderEngine.refresh(),

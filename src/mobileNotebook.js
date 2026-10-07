@@ -62,7 +62,7 @@ const syncPresentation = details => { const info = rawSyncPresentation(details);
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
-export function createMobileNotebook({ root, todos, notes, persist, logout, getAccount, configureReminders, enableExactReminders, refreshReminders, getSyncDetails = () => null, syncNow, inspectConflict, resolveConflict, exportNotebook, canExportNotebook = true, changeLanguage = () => false }) {
+export function createMobileNotebook({ root, todos, notes, persist, logout, deleteAccount, getAccount, configureReminders, enableExactReminders, refreshReminders, getSyncDetails = () => null, syncNow, inspectConflict, resolveConflict, exportNotebook, canExportNotebook = true, changeLanguage = () => false }) {
     const shell = document.createElement('section');
     shell.className = 'mobile-notebook';
     shell.setAttribute('aria-label', t('Мобильный блокнот'));
@@ -84,6 +84,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     const preferencesKey = () => `todo-personal:preferences:${account}`;
     let smartDates = true, dismissedDeadline = '', suggestion = null, deadlineAnchor = null;
     let syncDetails = null, syncBusy = false, syncPreview = null, syncError = '', offlineReady = false;
+    let deletionBusy = false, deletionError = '';
     let reminderState = { native: false, enabled: false, permission: 'unknown', exact: false, scheduled: 0, error: '' }, reminderQueue = [], reminderBusy = false;
     const suggestionKey = value => value ? `${value.date}|${value.time}` : '';
     function readPreferences() {
@@ -165,11 +166,12 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         nav.querySelectorAll('[data-view]').forEach(button => { button.textContent = t(navLabels[button.dataset.view]); });
         renderReminderBanner();
         if (editor) return;
-        nav.hidden = false; add.hidden = selecting || ['settings', 'sync'].includes(view);
+        nav.hidden = view === 'delete-account'; add.hidden = selecting || ['settings', 'sync', 'delete-account'].includes(view);
         nav.querySelectorAll('button').forEach(button => { if (button.dataset.view === view) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
         if (view === 'sync') { renderSync(); return; }
+        if (view === 'delete-account') { renderDeletion(); return; }
         if (view === 'settings') {
-            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button></section>${languageSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p>TO-DO Personal · версия 0.4.8</p></section>`;
+            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button><button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p>TO-DO Personal · версия 0.4.9</p></section>`;
             return;
         }
         // Android's keyboard changes the viewport. Keep the focused search
@@ -183,6 +185,17 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         main.innerHTML = ui`<h1>${{ today: t('Сегодня'), all: t('Все записи'), done: t('Выполнено') }[view]}</h1><p class="mn-date">${new Intl.DateTimeFormat(getLanguage(), { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())}</p><label class="mn-search-label" for="mn-search">Поиск</label><input id="mn-search" class="mn-input" type="search" placeholder="Найти запись" value="${escape(query)}">${view === 'all' ? `<div class="mn-filters">${[['all', t('Все')], ['task', t('Задачи')], ['note', t('Заметки')], ['reminder', t('С напоминанием')]].map(([value, label]) => `<button type="button" data-filter="${value}" aria-pressed="${filter === value}">${label}</button>`).join('')}</div>` : ''}${listControls()}<div class="mn-bulk"></div><div class="mn-draft-slot"></div><div class="mn-list"></div>`;
         main.dataset.listView = view;
         renderList();
+    }
+    function renderDeletion() {
+        main.innerHTML = ui`<h1>Удалить аккаунт?</h1><section class="mn-setting"><p>${escape(getAccount() || '')}</p><p>Аккаунт и все записи в облаке будут удалены без возможности восстановления. На этом устройстве будут очищены записи, черновики, резервные копии и напоминания этого аккаунта.</p><p>Для удаления нужен интернет. Копии на других устройствах могут оставаться доступными без сети.</p><p class="mn-deletion-error" role="alert">${escape(deletionError)}</p><div><button class="mn-secondary" type="button" data-cancel-account-deletion ${deletionBusy ? 'disabled' : ''}>Отмена</button><button class="mn-primary mn-danger" type="button" data-confirm-account-deletion ${deletionBusy ? 'disabled' : ''}>${deletionBusy ? t('Удаляем аккаунт…') : t('Удалить навсегда')}</button></div></section>`;
+    }
+    async function confirmAccountDeletion() {
+        if (deletionBusy || view !== 'delete-account' || !account) return;
+        const owner = account;
+        deletionBusy = true; deletionError = ''; render();
+        try { await deleteAccount(); }
+        catch (error) { if (owner === account) deletionError = error.message || t('Не удалось удалить аккаунт. Попробуйте снова.'); }
+        finally { if (owner === account) { deletionBusy = false; render(); } }
     }
     function visibleEntries() { return browseEntries(records(), { view, filter, due: dueFilter, query, sort: listSort }); }
     function listControls() {
@@ -389,7 +402,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
     }
     function changed() { if (editingId) commit(false); else stashDraft(); }
     shell.addEventListener('click', event => {
-        const button = event.target.closest('button'); if (!button) return;
+        const button = event.target.closest('button'); if (!button || button.disabled || deletionBusy) return;
         if (button.hasAttribute('data-continue-draft')) open();
         else if (button.hasAttribute('data-discard-draft')) {
             const owner = account;
@@ -476,6 +489,9 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
             list.splice(index, 1);
             persist(); editor = false; render(); offerUndo(t('Запись удалена.'), () => { list.splice(index, 0, record.entry); persist(); });
         } else if (button.hasAttribute('data-undo') && undo) { const restored = undo(); undo = null; render(); say(restored === false ? t('Не удалось отменить: записи изменились или сохранение недоступно. Текущие записи не заменены предыдущей версией.') : t('Действие отменено.')); }
+        else if (button.hasAttribute('data-delete-account')) { deletionError = ''; view = 'delete-account'; render(); }
+        else if (button.hasAttribute('data-cancel-account-deletion')) { view = 'settings'; deletionError = ''; render(); }
+        else if (button.hasAttribute('data-confirm-account-deletion')) { confirmAccountDeletion(); }
         else if (button.hasAttribute('data-logout')) { logout(); }
     });
     shell.addEventListener('input', event => {
@@ -532,13 +548,15 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         },
         saveDraft: stashDraft,
         back() {
+            if (deletionBusy) return true;
+            if (view === 'delete-account') { view = 'settings'; deletionError = ''; render(); return true; }
             if (editor) { back(); return true; }
             if (selecting) { clearSelection(); render(); return true; }
             if (view !== 'today' || query) { view = 'today'; query = ''; filter = 'all'; undo = null; say(''); render(); return true; }
             return false;
         },
-        isEditing: () => editor || selecting || Boolean(undo),
-        setAccount(id) { if (account !== id) { clearTimeout(undoTimer); account = id; clearSelection(); dueFilter = 'all'; reminderQueue = []; syncDetails = null; syncBusy = false; syncPreview = null; syncError = ''; updateSyncNotice(); readPreferences(); dismissedDeadline = ''; suggestion = null; deadlineAnchor = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
+        isEditing: () => editor || selecting || Boolean(undo) || view === 'delete-account',
+        setAccount(id) { if (account !== id) { clearTimeout(undoTimer); deletionBusy = false; deletionError = ''; account = id; clearSelection(); dueFilter = 'all'; reminderQueue = []; syncDetails = null; syncBusy = false; syncPreview = null; syncError = ''; updateSyncNotice(); readPreferences(); dismissedDeadline = ''; suggestion = null; deadlineAnchor = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
         setOfflineReady(value) {
             offlineReady = value;
             if (!editor && ['settings', 'sync'].includes(view)) render();

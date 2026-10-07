@@ -142,7 +142,7 @@ export function createReminderEngine({ native, plugin, storage, getRecords, isRe
             if (id && pendingAction?.extra?.account !== id) pendingAction = null;
             account = id; armed.clear(); generation++; error = ''; permission = 'unknown'; scheduled = 0;
             try { enabled = Boolean(id && storage.getItem(key(id)) === 'true'); } catch (_) { enabled = false; }
-            onDue(null); report(); return refresh();
+            onDue(null); report(); return refresh().then(() => !error);
         },
         async configure(value) {
             const id = account, ticket = generation;

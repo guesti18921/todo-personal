@@ -4,7 +4,7 @@
   "description": "",
   "main": "script.js",
   "scripts": {
-    "test": "node --experimental-vm-modules --test tests/local-notebook.test.cjs tests/auth-deep-link.test.cjs tests/deadline-parser.test.cjs tests/reminder.test.cjs tests/sync-runtime.test.cjs tests/google-auth.test.cjs tests/list-actions.test.cjs tests/android-signing.test.cjs tests/i18n.test.cjs tests/email-confirmation.test.cjs tests/account-deletion-server.test.cjs",
+    "test": "node --experimental-vm-modules --test tests/local-notebook.test.cjs tests/auth-deep-link.test.cjs tests/deadline-parser.test.cjs tests/reminder.test.cjs tests/sync-runtime.test.cjs tests/google-auth.test.cjs tests/list-actions.test.cjs tests/android-signing.test.cjs tests/i18n.test.cjs tests/email-confirmation.test.cjs tests/account-deletion-server.test.cjs tests/account-deletion-client.test.cjs",
     "build": "webpack && node scripts/version-offline.cjs",
     "test:ui": "node --test tests/mobile-ui.test.cjs",
     "android:prepare": "node scripts/prepare-android.cjs",
