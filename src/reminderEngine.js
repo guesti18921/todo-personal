@@ -70,13 +70,18 @@ export function createReminderEngine({ native, plugin, storage, getRecords, onDu
             if (ticket !== generation) return;
             const pending = (await plugin.getPending()).notifications;
             if (ticket !== generation) return;
-            const desired = notificationPlan(getRecords(), account, now()).map(item => ({ ...item, title: localize(item.title), isExactNotification: exact }));
+            const clock = now();
+            const current = notificationPlan(getRecords(), account, clock, { includePast: true }).map(item => ({ ...item, title: localize(item.title), isExactNotification: exact }));
+            const currentById = new Map(current.map(item => [item.id, item]));
+            const desired = current.filter(item => item.schedule.at > clock);
             const wanted = new Map(desired.map(item => [item.id, item]));
             const unchanged = new Set(), cancel = [];
             for (const old of pending) {
                 const next = wanted.get(old.id);
                 if (next && old.extra?.signature === next.extra.signature && old.title === next.title && old.isExactNotification === exact) unchanged.add(old.id);
-                else cancel.push({ id: old.id });
+                // Android retains triggered notifications in getPending(). Keep valid
+                // past alarms as well: an inexact alarm may still be waiting to fire.
+                else if (!(currentById.get(old.id)?.schedule.at <= clock && old.extra?.signature === currentById.get(old.id)?.extra.signature)) cancel.push({ id: old.id });
             }
             if (cancel.length) await plugin.cancel({ notifications: cancel });
             if (ticket !== generation) return;
@@ -85,10 +90,23 @@ export function createReminderEngine({ native, plugin, storage, getRecords, onDu
             if (ticket !== generation) return;
             const delivered = await plugin.getDeliveredNotifications();
             if (ticket !== generation) return;
-            const active = getRecords();
+            // Android's delivered objects expose system `data`, not the entry's
+            // `extra`. Resolve our metadata from storage before deciding to dismiss.
+            const metadata = new Map(pending.filter(item => item.extra?.account).map(item => [item.id, item.extra]));
+            const unknownIds = delivered.notifications.filter(item => !item.extra?.account && !metadata.has(item.id)).map(item => item.id);
+            if (unknownIds.length && typeof plugin.getByIds === 'function') {
+                try {
+                    const stored = await plugin.getByIds({ ids: unknownIds });
+                    if (ticket !== generation) return;
+                    for (const item of stored.notifications) if (item.extra?.account) metadata.set(item.id, item.extra);
+                } catch (_) { /* Missing metadata is not evidence that a notification is obsolete. */ }
+            }
+            if (ticket !== generation) return;
             const obsolete = delivered.notifications.filter(item => {
-                const record = active.find(r => r.entry.id === item.extra?.entryId);
-                return item.extra?.account !== account || !record || reminderMoment(record.entry)?.toISOString() !== item.extra?.at;
+                const extra = item.extra?.account ? item.extra : metadata.get(item.id);
+                if (!extra) return false;
+                const record = currentById.get(item.id);
+                return extra.account !== account || !record || extra.signature !== record.extra.signature;
             });
             if (obsolete.length) await plugin.removeDeliveredNotifications({ notifications: obsolete });
             scheduled = desired.length; report();
