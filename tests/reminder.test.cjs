@@ -28,6 +28,42 @@ function plugin() {
   async schedule({ notifications }) { calls.push('schedule'); pending.push(...notifications); }
  };
 }
+test('loading or unsaved notebook retains own alarms and delivered reminders, even across their due time', async () => {
+ const m = await modules(), p = plugin(), disk = storage();
+ const records = [{ entry: entry(), type: 'task' }]; let ready = true, clock = now, delivered = [], removed = [];
+ p.getDeliveredNotifications = async () => ({ notifications: delivered });
+ p.removeDeliveredNotifications = async ({ notifications }) => { removed.push(...notifications); };
+ disk.setItem('todo-personal:reminders-enabled:a', 'true');
+ const engine = m.createReminderEngine({ native: true, plugin: p, storage: disk,
+  getRecords: () => ready ? records : [], isRecordsReady: () => ready,
+  onDue() {}, onStatus() {}, now: () => clock });
+ await engine.setAccount('a'); assert.equal(p.pending.length, 1);
+ const alarm = p.pending[0]; delivered = [alarm];
+ ready = false; await engine.setAccount('a'); await engine.refresh();
+ assert.equal(p.pending.length, 1); assert.equal(removed.length, 0);
+ clock = new Date(2026, 9, 7, 17, 46); await engine.refresh();
+ ready = true; await engine.refresh();
+ assert.equal(p.pending.length, 1, 'overdue inexact alarm must remain scheduled');
+ assert.equal(removed.length, 0, 'valid delivered reminder must remain visible');
+ records.length = 0; await engine.refresh();
+ assert.equal(p.pending.length, 0, 'a loaded empty notebook must cancel deleted reminders');
+ assert.equal(removed.length, 1);
+});
+test('loading notebook still removes reminders belonging to a previous account and respects disabling', async () => {
+ const m = await modules(), p = plugin(), disk = storage(); let ready = true, delivered = [], removed = [];
+ disk.setItem('todo-personal:reminders-enabled:a', 'true');
+ disk.setItem('todo-personal:reminders-enabled:b', 'true');
+ p.getDeliveredNotifications = async () => ({ notifications: delivered });
+ p.removeDeliveredNotifications = async ({ notifications }) => { removed.push(...notifications); };
+ const engine = m.createReminderEngine({ native: true, plugin: p, storage: disk,
+  getRecords: () => ready ? [{ entry: entry(), type: 'task' }] : [], isRecordsReady: () => ready,
+  onDue() {}, onStatus() {}, now: () => now });
+ await engine.setAccount('a'); delivered = [p.pending[0]];
+ ready = false; await engine.setAccount('b');
+ assert.equal(p.pending.length, 0); assert.equal(removed.length, 1);
+ ready = true; await engine.refresh(); assert.equal(p.pending.length, 1);
+ ready = false; await engine.configure(false); assert.equal(p.pending.length, 0);
+});
 test('granted app permission never reports success for a blocked notification channel, and unblocking restores scheduling', async () => {
  const m = await modules(), p = plugin(), disk = storage(); let importance = 0, state;
  p.listChannels = async () => ({ channels: [{ id: 'todo-reminders', importance }] });

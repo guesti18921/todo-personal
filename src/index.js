@@ -585,6 +585,7 @@ window.addEventListener('focus', refreshCloud);
 reminderEngine = createReminderEngine({
     native: isNativeApp(), plugin: LocalNotifications, storage: localStorage, localize: t,
     getRecords: () => ready && isLocallySaved() ? listEntries(todos, notes) : [],
+    isRecordsReady: () => ready && isLocallySaved(),
     onDue: record => mobileUI?.notifyReminder(record),
     onOpen: record => mobileUI?.openReminder(record) ?? false,
     onStatus: value => mobileUI?.setReminderStatus(value)

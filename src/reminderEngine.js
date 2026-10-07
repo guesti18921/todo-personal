@@ -1,7 +1,7 @@
 import { notificationPlan, reminderMoment } from './reminderModel.js';
 
 // Native operations are serialized; every async boundary rechecks the account.
-export function createReminderEngine({ native, plugin, storage, getRecords, onDue, onOpen = onDue, onStatus, now = () => new Date(), localize = text => text }) {
+export function createReminderEngine({ native, plugin, storage, getRecords, isRecordsReady = () => true, onDue, onOpen = onDue, onStatus, now = () => new Date(), localize = text => text }) {
     let account = null, enabled = false, generation = 0, queue = Promise.resolve();
     let armed = new Map(), pendingAction = null;
     let permission = 'unknown', exact = false, error = '', scheduled = 0;
@@ -15,14 +15,14 @@ export function createReminderEngine({ native, plugin, storage, getRecords, onDu
         return queue;
     };
     function deliver(notification, open = false) {
-        if (!enabled || notification.extra?.account !== account) return false;
+        if (!enabled || !isRecordsReady() || notification.extra?.account !== account) return false;
         const record = getRecords().find(r => r.entry.id === notification.extra?.entryId);
         if (!record || reminderMoment(record.entry)?.toISOString() !== notification.extra?.at) return false;
         if (open) return onOpen(record) !== false;
         onDue(record); return true;
     }
     function tick() {
-        if (native || !enabled || !account) return;
+        if (native || !enabled || !account || !isRecordsReady()) return;
         for (const record of getRecords()) {
             const at = reminderMoment(record.entry);
             // Do not flood the user with old reminders after a long absence.
@@ -37,6 +37,7 @@ export function createReminderEngine({ native, plugin, storage, getRecords, onDu
     }
     function refresh() {
         if (!native) {
+            if (enabled && account && !isRecordsReady()) return Promise.resolve();
             const records = getRecords();
             const nextArmed = new Map();
             if (enabled && account) for (const record of records) {
@@ -82,20 +83,26 @@ export function createReminderEngine({ native, plugin, storage, getRecords, onDu
             const pending = (await plugin.getPending()).notifications;
             if (ticket !== generation) return;
             const clock = now();
-            const current = notificationPlan(getRecords(), account, clock, { includePast: true }).map(item => ({ ...item, title: localize(item.title), isExactNotification: exact }));
+            // Unavailable data is not an empty notebook. Keep this account's
+            // alarms until a saved snapshot is available, including overdue alarms.
+            const recordsReady = isRecordsReady();
+            const current = recordsReady ? notificationPlan(getRecords(), account, clock, { includePast: true }).map(item => ({ ...item, title: localize(item.title), isExactNotification: exact })) : [];
             const currentById = new Map(current.map(item => [item.id, item]));
             const desired = current.filter(item => item.schedule.at > clock);
             const wanted = new Map(desired.map(item => [item.id, item]));
             const unchanged = new Set(), cancel = [];
             for (const old of pending) {
+                if (!recordsReady && (!old.extra?.account || old.extra.account === account)) continue;
                 const next = wanted.get(old.id);
                 if (next && old.extra?.signature === next.extra.signature && old.title === next.title && old.isExactNotification === exact) unchanged.add(old.id);
                 // Android retains triggered notifications in getPending(). Keep valid
                 // past alarms as well: an inexact alarm may still be waiting to fire.
                 else if (!(currentById.get(old.id)?.schedule.at <= clock && old.extra?.signature === currentById.get(old.id)?.extra.signature)) cancel.push({ id: old.id });
             }
+            if (recordsReady && !isRecordsReady()) return;
             if (cancel.length) await plugin.cancel({ notifications: cancel });
             if (ticket !== generation) return;
+            if (recordsReady && !isRecordsReady()) return;
             const fresh = desired.filter(item => !unchanged.has(item.id));
             if (fresh.length) await plugin.schedule({ notifications: fresh });
             if (ticket !== generation) return;
@@ -117,10 +124,10 @@ export function createReminderEngine({ native, plugin, storage, getRecords, onDu
                 const extra = item.extra?.account ? item.extra : metadata.get(item.id);
                 if (!extra) return false;
                 const record = currentById.get(item.id);
-                return extra.account !== account || !record || extra.signature !== record.extra.signature;
+                return extra.account !== account || (recordsReady && isRecordsReady() && (!record || extra.signature !== record.extra.signature));
             });
             if (obsolete.length) await plugin.removeDeliveredNotifications({ notifications: obsolete });
-            scheduled = desired.length; report();
+            scheduled = recordsReady ? desired.length : pending.filter(item => item.extra?.account === account && !cancel.some(old => old.id === item.id)).length; report();
             if (pendingAction && deliver(pendingAction, true)) pendingAction = null;
         });
     }
