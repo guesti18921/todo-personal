@@ -131,3 +131,6 @@
     .mn-draft-panel p[dir] { font-size: 15px; white-space: pre-wrap; }
     .mn-draft-panel > div { display: flex; gap: 8px; flex-wrap: wrap; }
 }
+
+.auth-language { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; font-size: 14px; }
+.auth-language select { font: inherit; color: inherit; background: #fff; border: 1px solid #cbbfc3; border-radius: 8px; padding: 8px 12px; max-width: 55%; }
