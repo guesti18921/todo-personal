@@ -122,3 +122,12 @@
     .mn-message:not(:empty) { max-width: 822px; margin: auto; }
     .mn-add { right: max(20px, calc((100vw - 850px) / 2 + 20px)); }
 }
+
+@media (min-width: 0px) {
+    .mn-type-help, .mn-draft-restored { font-size: 13px; color: #715160; margin: 8px 0 14px; }
+    .mn-draft-panel { background: #e3f0ec; border: 1px solid #a6c8be; border-radius: 9px; padding: 14px; margin: 16px 0; }
+    .mn-draft-panel h2 { font-size: 16px; margin: 0 0 8px; }
+    .mn-draft-panel p { font-size: 13px; margin-bottom: 10px; overflow-wrap: anywhere; }
+    .mn-draft-panel p[dir] { font-size: 15px; white-space: pre-wrap; }
+    .mn-draft-panel > div { display: flex; gap: 8px; flex-wrap: wrap; }
+}
