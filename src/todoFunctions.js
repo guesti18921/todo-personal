@@ -1,4 +1,5 @@
 import { savePart } from './notebookStore.js';
+import { createEntryId } from './localNotebook.js';
 import {format} from "date-fns"
 import { el } from "date-fns/locale";
 import Colcade from 'colcade'
@@ -63,10 +64,9 @@ export const domManipulator = (function () {
             const toDoDate = document.createElement('div');
             toDoDate.classList.add('todo__date');
             // convert date string into a date the form of "Jan 12th"
-            const dateObject = new Date(todo.date);
-            const dateMonth = format(dateObject, 'MMM');
-            const dateDay = format(dateObject, 'do');
-            const dateFormated = `${dateMonth} ${dateDay}`;
+            const dateObject = todo.date ? new Date(todo.date + 'T12:00:00') : null;
+            const dateFormated = dateObject && !Number.isNaN(dateObject.getTime())
+                ? format(dateObject, 'MMM do') : 'No due date';
             toDoDate.textContent = dateFormated;
 
             // create a edit icon for the to-do item
@@ -153,10 +153,9 @@ export const domManipulator = (function () {
                 const toDoDate = document.createElement('div');
                 toDoDate.classList.add('todo__date');
                 // convert date string into a date the form of "Jan 12th"
-                const dateObject = new Date(todo.date);
-                const dateMonth = format(dateObject, 'MMM');
-                const dateDay = format(dateObject, 'do');
-                const dateFormated = `${dateMonth} ${dateDay}`;
+                const dateObject = todo.date ? new Date(todo.date + 'T12:00:00') : null;
+                const dateFormated = dateObject && !Number.isNaN(dateObject.getTime())
+                    ? format(dateObject, 'MMM do') : 'No due date';
                 toDoDate.textContent = dateFormated;
 
                 // create a edit icon for the to-do item
@@ -254,10 +253,9 @@ export const domManipulator = (function () {
         dateTitle.classList.add('details-popup__catagory');
         const dateContent = document.createElement('span');
         // display human readable date
-        const day = format(new Date(todos[i].date), 'do');
-        const month = format(new Date(todos[i].date), 'MMMM');
-        const year = format(new Date(todos[i].date), 'yyyy');
-        const formatedDate = `${month} ${day}, ${year}`;
+        const dueDate = todos[i].date ? new Date(todos[i].date + 'T12:00:00') : null;
+        const formatedDate = dueDate && !Number.isNaN(dueDate.getTime())
+            ? format(dueDate, 'MMMM do, yyyy') : 'No due date';
         dateContent.textContent = formatedDate;
         date.appendChild(dateTitle);
         date.appendChild(dateContent);
@@ -884,6 +882,7 @@ export const toDosManager = (function () {
     // To-do factory function
     function createToDo(name, priority, date, details, project, checked=false) {
         return {
+            id: createEntryId(),
             name,
             priority,
             date,
@@ -1242,6 +1241,7 @@ export const notesManager = (function () {
 
     function createNote(title, text) {
         return {
+            id: createEntryId(),
             title,
             text
         }

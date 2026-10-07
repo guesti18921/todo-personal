@@ -1,0 +1,9 @@
+{
+  "appId": "com.m1strell.todopersonal",
+  "appName": "TO-DO Personal",
+  "webDir": "dist",
+  "plugins": { "LocalNotifications": { "smallIcon": "notification_icon", "iconColor": "#367f75" } },
+  "android": {
+    "backgroundColor": "#f7f3ee"
+  }
+}

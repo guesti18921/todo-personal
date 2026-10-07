@@ -1,1 +1,7 @@
 node_modules/
+/android/
+
+*.p12
+*.jks
+*.keystore
+*.keystore.base64
