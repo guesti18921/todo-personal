@@ -16,24 +16,25 @@
                 <img src="img/logo.png" alt="// TO-DO" class="auth-card__logo">
             </div>
             <div class="auth-card__body">
+                <label class="auth-language" for="auth-language"><span data-auth-text="Язык интерфейса">Язык интерфейса</span><select id="auth-language"><option value="ru">Русский</option><option value="en">English</option></select></label>
                 <h1 id="auth-title">Войти</h1>
-                <p class="auth-card__intro">Задачи и заметки в одном месте.</p>
-                <div id="auth-google-area" hidden><button id="auth-google" type="button">Продолжить с Google</button><p class="auth-method-divider">или по почте</p></div>
+                <p class="auth-card__intro" data-auth-text="Задачи и заметки в одном месте.">Задачи и заметки в одном месте.</p>
+                <div id="auth-google-area" hidden><button id="auth-google" type="button" data-auth-text="Продолжить с Google">Продолжить с Google</button><p class="auth-method-divider" data-auth-text="или по почте">или по почте</p></div>
                 <form id="auth-form">
                     <label for="auth-email">Email</label>
                     <input id="auth-email" type="email" autocomplete="email" required>
-                    <label for="auth-password">Пароль</label>
+                    <label for="auth-password" data-auth-text="Пароль">Пароль</label>
                     <input id="auth-password" type="password" autocomplete="current-password" minlength="6" required>
                     <button id="auth-password-toggle" class="auth-card__switch" type="button" aria-controls="auth-password" aria-pressed="false">Показать пароль</button>
                     <button id="auth-submit" type="submit">Войти</button>
                 </form>
                 <button class="auth-card__switch" id="auth-switch" type="button">Создать аккаунт</button>
                 <div class="auth-confirm" id="auth-confirm" hidden>
-    <h2>Проверьте почту</h2>
-    <p>Ссылка для подтверждения отправлена на:</p>
+    <h2 data-auth-text="Проверьте почту">Проверьте почту</h2>
+    <p data-auth-text="Ссылка для подтверждения отправлена на:">Ссылка для подтверждения отправлена на:</p>
     <p class="auth-confirm__email" id="auth-confirm-email"></p>
     <p id="auth-confirm-instructions">Откройте ссылку из письма, затем вернитесь и войдите.</p>
-    <button class="auth-card__switch" id="auth-confirm-back" type="button">
+    <button class="auth-card__switch" data-auth-text="Вернуться к входу" id="auth-confirm-back" type="button">
         Вернуться к входу
     </button>
 </div>
