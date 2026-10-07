@@ -169,10 +169,19 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, getA
         nav.querySelectorAll('button').forEach(button => { if (button.dataset.view === view) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
         if (view === 'sync') { renderSync(); return; }
         if (view === 'settings') {
-            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button></section>${languageSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p>TO-DO Personal · версия 0.4.6</p></section>`;
+            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button></section>${languageSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p>TO-DO Personal · версия 0.4.7</p></section>`;
+            return;
+        }
+        // Android's keyboard changes the viewport. Keep the focused search
+        // element mounted across resize, reminder refresh and cloud updates.
+        const search = main.querySelector('#mn-search');
+        if (search && main.dataset.listView === view && document.activeElement === search) {
+            search.placeholder = t('Найти запись');
+            renderList();
             return;
         }
         main.innerHTML = ui`<h1>${{ today: t('Сегодня'), all: t('Все записи'), done: t('Выполнено') }[view]}</h1><p class="mn-date">${new Intl.DateTimeFormat(getLanguage(), { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())}</p><label class="mn-search-label" for="mn-search">Поиск</label><input id="mn-search" class="mn-input" type="search" placeholder="Найти запись" value="${escape(query)}">${view === 'all' ? `<div class="mn-filters">${[['all', t('Все')], ['task', t('Задачи')], ['note', t('Заметки')], ['reminder', t('С напоминанием')]].map(([value, label]) => `<button type="button" data-filter="${value}" aria-pressed="${filter === value}">${label}</button>`).join('')}</div>` : ''}${listControls()}<div class="mn-bulk"></div><div class="mn-draft-slot"></div><div class="mn-list"></div>`;
+        main.dataset.listView = view;
         renderList();
     }
     function visibleEntries() { return browseEntries(records(), { view, filter, due: dueFilter, query, sort: listSort }); }

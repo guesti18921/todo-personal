@@ -68,6 +68,17 @@ export function createReminderEngine({ native, plugin, storage, getRecords, onDu
             if (ticket !== generation) return;
             await plugin.createChannel({ id: 'todo-reminders', name: localize('Напоминания о записях'), importance: 4, visibility: 0, vibration: true });
             if (ticket !== generation) return;
+            // POST_NOTIFICATIONS can be granted while this individual channel
+            // is blocked. Recreating a channel does not undo the user's setting.
+            const { channels } = await plugin.listChannels();
+            if (ticket !== generation) return;
+            const channel = channels.find(item => item.id === 'todo-reminders');
+            if (!channel || channel.importance === 0) {
+                error = channel
+                    ? 'Android отключил канал «Напоминания о записях». Включите его: Настройки телефона → Приложения → TO-DO Personal → Уведомления → Напоминания о записях.'
+                    : 'Не удалось создать канал уведомлений Android. Откройте приложение снова и повторите настройку напоминаний.';
+                scheduled = 0; report(); return;
+            }
             const pending = (await plugin.getPending()).notifications;
             if (ticket !== generation) return;
             const clock = now();

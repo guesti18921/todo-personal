@@ -9,6 +9,8 @@ import { readCachedAccount } from './localAccount.js';
 import { AUTH_REDIRECT_URL, createAuthLinkHandler } from './authDeepLink.js';
 import { boundedFetch } from './networkFetch.js';
 import { authErrorMessage, createGoogleLogin, googleProviderEnabled } from './googleAuth.js';
+import { createClient } from '@supabase/supabase-js';
+import { createEmailConfirmation, EMAIL_CONFIRMATION_URL } from './emailConfirmation.js';
 let mobileUI = null;
 let reminderEngine = null;
 // all major functions are stored in these objects
@@ -268,6 +270,32 @@ let registering = false;
 let activeUser = null;
 let activeUserEmail = '';
 
+// A separate non-persistent client prevents a cancelled verification request
+// from silently changing the active account when its network response arrives.
+const confirmationAuth = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:confirmation-check' },
+    global: { fetch: boundedFetch }
+});
+let confirmationStatus = null;
+const confirmationMessages = {
+    waiting: 'Ожидаем подтверждение почты. Откройте письмо на любом устройстве. После подтверждения вход здесь завершится автоматически в течение 30 секунд.',
+    offline: 'Нет соединения. Продолжим проверку подтверждения, когда появится интернет.',
+    expired: 'Ожидание завершено. Если почта подтверждена, вернитесь к входу и введите пароль.',
+    limited: 'Слишком много попыток. Подождите немного, затем вернитесь к входу.',
+    failed: 'Не удалось завершить вход. Вернитесь к входу и проверьте почту и пароль.'
+};
+const emailConfirmation = createEmailConfirmation({
+    auth: confirmationAuth.auth,
+    applySession: session => supabase.auth.setSession(session),
+    visible: () => !document.hidden && !authConfirm.hidden,
+    onStatus(status) {
+        confirmationStatus = status;
+        if (confirmationMessages[status]) document.querySelector('#auth-confirm-instructions').textContent = t(confirmationMessages[status]);
+    }
+});
+window.addEventListener('focus', () => emailConfirmation.check());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) emailConfirmation.check(); });
+
 const authLanguage = document.querySelector('#auth-language');
 function renderAuthLanguage() {
     document.documentElement.lang = getLanguage();
@@ -278,9 +306,9 @@ function renderAuthLanguage() {
     authSwitch.textContent = t(registering ? 'Уже есть аккаунт? Войти' : 'Создать аккаунт');
     document.querySelectorAll('.auth-retry').forEach(el => { if (el.dataset.authText) el.textContent = t(el.dataset.authText); });
     passwordToggle.textContent = t(authPassword.type === 'password' ? 'Показать пароль' : 'Скрыть пароль');
-    document.querySelector('#auth-confirm-instructions').textContent = t(isNativeApp()
+    document.querySelector('#auth-confirm-instructions').textContent = t(confirmationMessages[confirmationStatus] || (isNativeApp()
         ? 'Откройте ссылку из письма: после подтверждения вы вернётесь в приложение.'
-        : 'Откройте ссылку из письма, затем вернитесь и войдите.');
+        : 'Откройте ссылку из письма, затем вернитесь и войдите.'));
 }
 const languagePreferences = createLanguagePreferences({
     storage: localStorage, languages: navigator.languages || [navigator.language],
@@ -427,6 +455,7 @@ async function loadAccount(id, ticket) {
 }
 supabase.auth.onAuthStateChange((_event, session) => {
     const id = session?.user?.id || null;
+    if (id) { emailConfirmation.stop(); authPassword.value = ''; }
     // Offline startup can use this device's last authenticated data
     // while Supabase is still trying to refresh an expired access token.
     if (_event === 'INITIAL_SESSION' && !id && readCachedAccount()?.id === activeUser) return;
@@ -459,6 +488,7 @@ supabase.auth.onAuthStateChange((_event, session) => {
 resetScreen();
 
 authSwitch.addEventListener('click', () => {
+    emailConfirmation.stop();
     registering = !registering;
     authMessage.textContent = '';
     authTitle.textContent = registering ? t('Регистрация') : t('Войти');
@@ -468,6 +498,7 @@ authSwitch.addEventListener('click', () => {
 });
 
 authConfirmBack.addEventListener('click', () => {
+    emailConfirmation.stop();
     authConfirm.hidden = true;
     authForm.hidden = false;
     authSwitch.hidden = false;
@@ -491,10 +522,10 @@ authForm.addEventListener('submit', async event => {
     authMessage.textContent = t('Подождите…');
     try {
         const { data, error } = signUp
-            ? await supabase.auth.signUp({ email, password, options: { data: { todo_personal_language: getLanguage() }, emailRedirectTo: isNativeApp() ? AUTH_REDIRECT_URL : location.origin + location.pathname } })
+            ? await supabase.auth.signUp({ email, password, options: { data: { todo_personal_language: getLanguage() }, emailRedirectTo: EMAIL_CONFIRMATION_URL } })
             : await supabase.auth.signInWithPassword({ email, password });
-        if (error) authMessage.textContent = t(authErrorMessage(error));
-        else if (signUp && !data.session) {
+        if (error && error.code !== 'email_not_confirmed' && error.message !== 'Email not confirmed') authMessage.textContent = t(authErrorMessage(error));
+        else if ((signUp && !error && !data.session) || error?.code === 'email_not_confirmed' || error?.message === 'Email not confirmed') {
     authForm.hidden = true;
     authSwitch.hidden = true;
     updateGoogleVisibility();
@@ -505,6 +536,8 @@ authForm.addEventListener('submit', async event => {
         ? t('Откройте ссылку из письма: после подтверждения вы вернётесь в приложение.')
         : t('Откройте ссылку из письма, затем вернитесь и войдите.');
     authConfirm.hidden = false;
+    authPassword.value = '';
+    emailConfirmation.start(email, password);
 }
     } catch (_) { authMessage.textContent = t('Нет соединения. Проверьте интернет и попробуйте снова.'); }
     finally { authGoogle.disabled = authSubmit.disabled = authSwitch.disabled = false; }

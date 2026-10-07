@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>TO-DO Personal</title>
+<style>body{margin:0;background:#f7f3ee;color:#452138;font:18px system-ui;display:grid;min-height:100dvh;place-items:center}main{max-width:32rem;padding:2rem}h1{font-size:1.7rem}</style></head>
+<body><main><h1 id="title">Подтверждение почты</h1><p id="message">Вернитесь к устройству, на котором начали вход. Блокнот проверит подтверждение и продолжит вход там.</p></main>
+<script>
+// This page never creates a notebook session on the device opening the email.
+// Remove credential-bearing fragments immediately; do not load third-party assets.
+const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
+const failed = params.has('error') || params.has('error_code');
+history.replaceState(null, '', location.pathname);
+const english = !navigator.language.toLowerCase().startsWith('ru');
+document.documentElement.lang = english ? 'en' : 'ru';
+document.querySelector('#title').textContent = english ? 'Email confirmation' : 'Подтверждение почты';
+document.querySelector('#message').textContent = failed
+ ? (english ? 'The confirmation link is invalid or has expired. Return to TO-DO Personal and request a new email.' : 'Ссылка подтверждения недействительна или устарела. Вернитесь в TO-DO Personal и запросите новое письмо.')
+ : (english ? 'Return to the device where you started signing in. TO-DO Personal will check your confirmation and finish signing in there.' : 'Вернитесь к устройству, на котором начали вход. Блокнот проверит подтверждение и продолжит вход там.');
+</script></body></html>

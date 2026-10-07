@@ -1,5 +1,13 @@
 // Interface text only. Never pass entry contents through this dictionary.
 export default {
+  "Ожидаем подтверждение почты. Откройте письмо на любом устройстве. После подтверждения вход здесь завершится автоматически в течение 30 секунд.": "Waiting for email confirmation. Open the email on any device. After confirmation, sign-in here will finish automatically within 30 seconds.",
+  "Нет соединения. Продолжим проверку подтверждения, когда появится интернет.": "No connection. We will resume checking your confirmation when you are online.",
+  "Ожидание завершено. Если почта подтверждена, вернитесь к входу и введите пароль.": "Waiting has ended. If your email is confirmed, return to sign-in and enter your password.",
+  "Слишком много попыток. Подождите немного, затем вернитесь к входу.": "Too many attempts. Wait a little, then return to sign-in.",
+  "Не удалось завершить вход. Вернитесь к входу и проверьте почту и пароль.": "Could not finish signing in. Return to sign-in and check your email and password.",
+
+  "Android отключил канал «Напоминания о записях». Включите его: Настройки телефона → Приложения → TO-DO Personal → Уведомления → Напоминания о записях.": "Android has disabled the Entry reminders channel. Enable it in Phone settings → Apps → TO-DO Personal → Notifications → Entry reminders.",
+  "Не удалось создать канал уведомлений Android. Откройте приложение снова и повторите настройку напоминаний.": "Could not create the Android notification channel. Reopen the app and try setting up reminders again.",
   "Сегодня": "Today",
   "Завтра": "Tomorrow",
   "Все записи": "All entries",
@@ -185,7 +193,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.6": "TO-DO Personal · version 0.4.6",
+  "TO-DO Personal · версия 0.4.7": "TO-DO Personal · version 0.4.7",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",

@@ -12,6 +12,23 @@ virtualConsole.on('jsdomError', error => errors.push(error.message));
 const id = '11111111-1111-4111-8111-111111111111';
 const cacheKey = 'todo-personal:local:' + id, draftKey = 'todo-personal:entry-draft:' + id;
 const wait = () => new Promise(resolve => setTimeout(resolve, 100));
+test('search keeps the same focused input and query when the mobile keyboard resizes the viewport', async () => {
+ const f = listFixture(), dom = boot(f.seed);
+ try {
+  await ready(dom); const w = dom.window, d = w.document;
+  d.querySelector('[data-view="all"]').click();
+  const search = d.querySelector('#mn-search'); search.focus(); search.value = 'needle';
+  search.dispatchEvent(new w.Event('input', { bubbles: true })); search.setSelectionRange(3, 3);
+  for (let i = 0; i < 3; i++) w.dispatchEvent(new w.Event('resize'));
+  assert.equal(d.querySelector('#mn-search'), search);
+  assert.equal(d.activeElement, search); assert.equal(search.value, 'needle');
+  assert.equal(search.selectionStart, 3);
+  d.querySelector('[data-view="today"]').click();
+  assert.equal(d.querySelector('.mn-main h1').textContent, 'Сегодня');
+  d.querySelector('[data-view="settings"]').click();
+  assert.equal(d.querySelector('.mn-main h1').textContent, 'Настройки');
+ } finally { dom.window.close(); }
+});
 async function ready(dom) {
  const deadline = Date.now() + 5000;
  while (dom.window.document.querySelector('#todo-app').hidden && Date.now() < deadline) await wait();
@@ -368,7 +385,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.6/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.7/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -515,11 +532,11 @@ test('failed first account load hides server errors and allows switching account
 });
 
 test('English login and registration preserve typed credentials and explicit language through restart', async () => {
- let signUpOptions;
+ let signUpOptions, signUpRedirect;
  let dom = boot([], false, async (request, options) => {
   const url=String(request?.url||request);
   if(url.includes('/auth/v1/settings')) return new Response(JSON.stringify({external:{google:true}}));
-  if(url.includes('/auth/v1/signup')) { signUpOptions=JSON.parse(options.body); return new Response(JSON.stringify({user:{id,email:'test@example.com',identities:[]},session:null}),{headers:{'Content-Type':'application/json'}}); }
+  if(url.includes('/auth/v1/signup')) { signUpOptions=JSON.parse(options.body); signUpRedirect=new URL(url).searchParams.get('redirect_to'); return new Response(JSON.stringify({user:{id,email:'test@example.com',identities:[]},session:null}),{headers:{'Content-Type':'application/json'}}); }
   if(url.includes('/auth/v1/token')) return new Response(JSON.stringify({error_code:'invalid_credentials',msg:'Invalid login credentials'}),{status:400,headers:{'Content-Type':'application/json'}});
   throw Error('Unexpected request');
  }, ['en-RU']);
@@ -541,6 +558,9 @@ test('English login and registration preserve typed credentials and explicit lan
   d.querySelector('#auth-form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})); await wait();
   assert.equal(d.querySelector('#auth-confirm').hidden,false); assert.match(d.querySelector('#auth-confirm').textContent,/Check your email/);
   assert.equal(signUpOptions.data.todo_personal_language,'en');
+  assert.equal(signUpRedirect,'https://guesti18921.github.io/todo-personal/email-confirmed.html');
+  assert.equal(d.querySelector('#auth-password').value,'');
+  assert.match(d.querySelector('#auth-confirm-instructions').textContent,/any device/);
   const seed=Array.from({length:dom.window.localStorage.length},(_,i)=>{const key=dom.window.localStorage.key(i);return[key,dom.window.localStorage.getItem(key)];});
   dom.window.close();dom=boot(seed,false,null,['ru-RU']);d=dom.window.document;
   assert.equal(d.documentElement.lang,'en');

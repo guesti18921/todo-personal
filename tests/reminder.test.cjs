@@ -20,7 +20,7 @@ function plugin() {
   async requestPermissions() { calls.push('request'); return { display: permission }; },
   async checkPermissions() { return { display: permission }; },
   async checkExactNotificationSetting() { return { exact_alarm: 'denied' }; },
-  async createChannel() {}, async getPending() { return { notifications: pending }; },
+  async createChannel() {}, async listChannels() { return { channels: [{ id: 'todo-reminders', importance: 4 }] }; }, async getPending() { return { notifications: pending }; },
   async getDeliveredNotifications() { return { notifications: [] }; },
   async removeAllDeliveredNotifications() {}, async removeDeliveredNotifications() {},
   async cancelAll() { calls.push('cancelAll'); pending = []; },
@@ -28,6 +28,20 @@ function plugin() {
   async schedule({ notifications }) { calls.push('schedule'); pending.push(...notifications); }
  };
 }
+test('granted app permission never reports success for a blocked notification channel, and unblocking restores scheduling', async () => {
+ const m = await modules(), p = plugin(), disk = storage(); let importance = 0, state;
+ p.listChannels = async () => ({ channels: [{ id: 'todo-reminders', importance }] });
+ const engine = m.createReminderEngine({ native: true, plugin: p, storage: disk,
+  getRecords: () => [{ entry: entry(), type: 'task' }], onDue() {}, onStatus: value => { state = value; }, now: () => now });
+ await engine.setAccount('a'); await engine.configure(true);
+ assert.equal(state.permission, 'granted'); assert.match(state.error, /Android отключил канал/);
+ assert.equal(state.scheduled, 0); assert.equal(p.pending.length, 0);
+ importance = 4; await engine.refresh();
+ assert.equal(state.error, ''); assert.equal(state.scheduled, 1); assert.equal(p.pending.length, 1);
+ p.listChannels = async () => ({ channels: [] }); await engine.refresh();
+ assert.match(state.error, /Не удалось создать канал/);
+ assert.equal(p.pending.length, 1, 'a failed channel check must not destroy an existing alarm');
+});
 test('reminder timing, invalid input, snooze and account-specific stable IDs', async () => {
  const m = await modules(); const item = entry();
  assert.equal(m.reminderMoment(item).getHours(), 17); assert.equal(m.reminderMoment(item).getMinutes(), 45);
