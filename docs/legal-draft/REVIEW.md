@@ -22,15 +22,34 @@ Custom SMTP is enabled: smtp.resend.com, port 465, sender
 noreply@m1strell.com, display name TO-DO, minimum interval 60 seconds.
 No SMTP credentials were collected or changed.
 
-## Publication blockers
+## Publication status and owner decisions
 
-No working support mailbox has been created yet. The Gmail address in the HTML
-is an unverified draft placeholder: Google account creation failed. Do not publish
-these pages or ship these contact links until a working mailbox replaces it and
-receiving/replying are tested. support@m1strell.com is planned via Timeweb;
-Timeweb tariff migration is blocked and deferred pending support resolution.
-Confirm the proposed support turnaround and correspondence retention with the
-mailbox owner before publication.
+Updated 2026-10-08: support@m1strell.com was created on the paid Timeweb
+mail tariff. Receiving mail from Gmail and replying have both been tested.
+Gmail initially classified replies as spam with DKIM no-key errors. The domain
+uses Cloudflare authoritative DNS; the Timeweb DKIM public key and an initial
+DMARC policy are now published there. Offline cryptographic verification of the
+received test email succeeds with that published key. A new Gmail delivery check
+is pending. Do not represent spam filtering as fixed until that check.
+
+Privacy and deletion drafts now use support@m1strell.com throughout. Timeweb
+is disclosed separately from Resend: support correspondence uses Timeweb;
+authentication emails use Resend. Google is listed for optional sign-in only.
+Supabase API/database log access on Free is one day; this is not a promise that
+all internal provider copies are erased within one day. Android 0.4.12 backup
+exclusions are described without promising universal device-transfer behavior.
+
+Before public deployment, the owner must accept these concrete commitments:
+- Monitor the support mailbox and complete verified account deletion requests
+  within 30 days after ownership is confirmed.
+- Remove resolved support correspondence, including Trash, within 30 days after
+  resolution unless applicable law requires retaining it.
+
+These 30-day periods are proposed operating commitments, not a claim that Google
+Play universally mandates 30 days. The HTML remains a review draft until accepted.
+A public privacy notice also requires final developer/controller identity and
+intended distribution/audience review, especially for any applicable regional law.
+No public pages or APK links have been deployed in this draft update.
 
 Provider infrastructure backups are distinct from the app's local conflict
 recovery copies. Free does not include paid-plan daily backup access; that does
@@ -40,7 +59,7 @@ The active SMTP provider was confirmed as Resend by the user dashboard screensho
 
 ## Publication work after the check
 
-Finalize the retention section and support handling expectations. Copy the three
+Finalize the retention section and support handling commitments. Copy the three
 public assets to dist on both the mobile branch and published main branch without
 replacing main's desktop application. Add a privacy link on the sign-in screen
 and in mobile Settings, plus a support link. Publish Pages and verify both public
@@ -60,6 +79,7 @@ https://guesti18921.github.io/todo-personal/delete-account.html
 - https://supabase.com/pricing
 - https://supabase.com/docs/guides/platform/backups
 - https://resend.com/security/gdpr
+- https://timeweb.com/ru/personal-data-apps/
 
 These are drafts, not confirmation of Google Play approval or complete legal
 compliance. Data Safety and the intended distribution/audience still need review.
@@ -71,5 +91,4 @@ manual linking OFF, Email and Google providers ON. CAPTCHA is OFF; leaked
 password protection is OFF (Pro feature). Email limit 30/project/hour; sign-in
 and signup limit 30/IP/5 minutes; token verification 30/IP/5 minutes; token
 refresh 150/IP/5 minutes. IP forwarding OFF. Minimum password length was 6;
-user instructed to set 8, saved state still needs confirmation. Weak-password
-message updated to 8 in mobile source, not yet shipped in APK or website.
+user instructed to set 8, saved state still needs confirmation. The client weak-password message uses 8 in Android 0.4.12; the backend saved value still needs confirmation.
