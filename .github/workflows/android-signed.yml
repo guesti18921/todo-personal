@@ -1,4 +1,4 @@
-name: Build Android signed APK
+name: Build Android signed APK and AAB
 
 on:
   workflow_dispatch:
@@ -40,14 +40,16 @@ jobs:
         run: npm run test:ui
       - name: Prepare Android project
         run: npm run android:prepare
-      - name: Assemble unsigned release APK without signing secrets
+      - name: Build unsigned release APK and AAB without signing secrets
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
-      - name: Transfer unsigned APK to isolated signing job
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
+      - name: Transfer unsigned releases to isolated signing job
         uses: actions/upload-artifact@v4
         with:
-          name: unsigned-apk-intermediate
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          name: unsigned-release-intermediate
+          path: |
+            android/app/build/outputs/apk/release/app-release-unsigned.apk
+            android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 1
 
@@ -70,12 +72,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Download APK as data
+      - name: Download releases as data
         uses: actions/download-artifact@v4
         with:
-          name: unsigned-apk-intermediate
+          name: unsigned-release-intermediate
           path: unsigned
-      - name: Sign APK and verify the permanent certificate
+      - name: Sign releases and verify the permanent certificate
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -100,6 +102,7 @@ jobs:
             const options = { stdio: ['ignore', 'pipe', 'pipe'] };
             const certificate = execFileSync('keytool', ['-exportcert', '-keystore', key, '-storetype', 'PKCS12', '-alias', 'todo-personal', '-storepass:env', 'ANDROID_KEYSTORE_PASSWORD'], options);
             const expected = crypto.createHash('sha256').update(certificate).digest('hex');
+            if (expected !== '29171284f14c47ce93ce8658fcc2eba94aed25db0a3b954283a3c2183855fe6b') throw Error('Permanent certificate changed');
             stage = 'finding Android signing tools';
             const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
             const folder = path.join(sdk, 'build-tools');
@@ -110,7 +113,7 @@ jobs:
             fs.mkdirSync('signed', { recursive: true });
             const apk = 'signed/todo-personal.apk';
             stage = 'signing the APK';
-            execFileSync(signer, ['sign', '--ks', key, '--ks-key-alias', 'todo-personal', '--ks-pass', 'env:ANDROID_KEYSTORE_PASSWORD', '--key-pass', 'env:ANDROID_KEYSTORE_PASSWORD', '--out', apk, 'unsigned/app-release-unsigned.apk'], options);
+            execFileSync(signer, ['sign', '--ks', key, '--ks-key-alias', 'todo-personal', '--ks-pass', 'env:ANDROID_KEYSTORE_PASSWORD', '--key-pass', 'env:ANDROID_KEYSTORE_PASSWORD', '--out', apk, 'unsigned/apk/release/app-release-unsigned.apk'], options);
             stage = 'verifying the APK signature';
             const output = execFileSync(signer, ['verify', '--verbose', '--print-certs', apk], { ...options, encoding: 'utf8' });
             stage = 'comparing the public certificate';
@@ -123,11 +126,18 @@ jobs:
               console.error('Android build-tools version: ' + version);
               throw Error('Certificate mismatch');
             }
+            stage = 'signing the AAB';
+            const aab = 'signed/todo-personal.aab';
+            execFileSync('jarsigner', ['-keystore', key, '-storetype', 'PKCS12', '-storepass:env', 'ANDROID_KEYSTORE_PASSWORD', '-keypass:env', 'ANDROID_KEYSTORE_PASSWORD', '-sigalg', 'SHA256withRSA', '-digestalg', 'SHA-256', '-signedjar', aab, 'unsigned/bundle/release/app-release.aab', 'todo-personal'], options);
+            stage = 'verifying every AAB entry and its certificate';
+            fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'VerifyBundle.java'), "import java.io.*; import java.util.*; import java.util.jar.*; import java.security.*; import java.security.cert.Certificate;\nclass VerifyBundle {\n  public static void main(String[] args) throws Exception {\n    int count = 0;\n    try (JarFile jar = new JarFile(args[0], true)) {\n      var entries = jar.entries();\n      while (entries.hasMoreElements()) {\n        var entry = entries.nextElement();\n        if (entry.isDirectory()) continue;\n        try (var in = jar.getInputStream(entry)) { in.transferTo(OutputStream.nullOutputStream()); }\n        if (entry.getName().toUpperCase(Locale.ROOT).startsWith(\"META-INF/\")) continue;\n        var signers = entry.getCodeSigners();\n        if (signers == null || signers.length != 1) throw new SecurityException(\"Unsigned entry or unexpected signers\");\n        Certificate cert = signers[0].getSignerCertPath().getCertificates().get(0);\n        String digest = HexFormat.of().formatHex(MessageDigest.getInstance(\"SHA-256\").digest(cert.getEncoded()));\n        if (!digest.equals(args[1])) throw new SecurityException(\"Bundle certificate mismatch\");\n        count++;\n      }\n      if (count == 0 || jar.getEntry(\"BundleConfig.pb\") == null || jar.getEntry(\"base/manifest/AndroidManifest.xml\") == null)\n        throw new SecurityException(\"Invalid bundle structure\");\n    }\n    System.out.println(\"AAB signatures verified for \" + count + \" entries.\");\n  }\n}");
+            const bundleCheck = execFileSync('java', [path.join(process.env.RUNNER_TEMP, 'VerifyBundle.java'), aab, expected], { ...options, encoding: 'utf8' });
+            console.log(bundleCheck.trim());
             fs.writeFileSync('signed/certificate-sha256.txt', expected + '\n');
             console.log('APK signature verified. Public certificate SHA-256: ' + expected);
           } catch (error) {
             fs.rmSync('signed', { recursive: true, force: true });
-            console.error('Signing failed at: ' + stage + '. No APK will be published.');
+            console.error('Signing failed at: ' + stage + '. No release files will be published.');
             if (Number.isInteger(error.status)) console.error('Tool exit code: ' + error.status);
             if (stage.includes('key') || stage.includes('secrets')) console.error('Check both repository secrets, PKCS12 format and alias todo-personal.');
             process.exitCode = 1;
@@ -135,12 +145,13 @@ jobs:
             fs.rmSync(key, { force: true });
           }
           NODE
-      - name: Upload verified signed APK
+      - name: Upload verified signed APK and AAB
         uses: actions/upload-artifact@v4
         with:
           name: todo-personal-android-signed
           path: |
             signed/todo-personal.apk
+            signed/todo-personal.aab
             signed/certificate-sha256.txt
           if-no-files-found: error
           retention-days: 30
