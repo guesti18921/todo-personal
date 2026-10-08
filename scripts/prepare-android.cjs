@@ -12,6 +12,15 @@ let manifest = fs.readFileSync(manifestPath, 'utf8');
 manifest = manifest.replace('android:allowBackup="true"', 'android:allowBackup="false"')
     .replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/todo_icon"')
     .replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/todo_icon"');
+// Android 12+ OEM device transfers can ignore allowBackup alone.
+// Exclude local notebooks, auth sessions and reminder state from both transports.
+manifest = manifest.replace(/\s+android:(fullBackupContent|dataExtractionRules)="[^"]*"/g, '');
+manifest = manifest.replace('<application', '<application\n        android:fullBackupContent="@xml/backup_rules"\n        android:dataExtractionRules="@xml/data_extraction_rules"');
+const backupXml = path.join(root, 'android/app/src/main/res/xml');
+fs.mkdirSync(backupXml, { recursive: true });
+for (const name of ['backup_rules.xml', 'data_extraction_rules.xml']) {
+    fs.copyFileSync(path.join(root, 'native/android', name), path.join(backupXml, name));
+}
 if (!manifest.includes('android:scheme="todopersonal"')) {
     manifest = manifest.replace('</activity>', `    <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -38,8 +47,8 @@ for (const name of ['ReminderClock.java', 'ReminderClockReceiver.java']) {
 }
 const gradlePath = path.join(root, 'android/app/build.gradle');
 const gradle = fs.readFileSync(gradlePath, 'utf8')
-    .replace(/versionCode \d+/, 'versionCode 15')
-    .replace(/versionName "[^"]+"/, 'versionName "0.4.11"');
+    .replace(/versionCode \d+/, 'versionCode 16')
+    .replace(/versionName "[^"]+"/, 'versionName "0.4.12"');
 fs.writeFileSync(gradlePath, gradle);
 const drawable = path.join(root, 'android/app/src/main/res/drawable');
 fs.mkdirSync(drawable, { recursive: true });
