@@ -7,6 +7,7 @@ export function parseAuthLink(value) {
     if (url.protocol !== 'todopersonal:' || url.hostname !== 'auth-callback' ||
         url.username || url.password || url.port || !['', '/'].includes(url.pathname)) return null;
     const params = new URLSearchParams(url.hash ? url.hash.slice(1) : url.search.slice(1));
+    if (!url.hash && !url.search) return null; // Open-app link contains no credentials.
     if (params.has('error') || params.has('error_code')) return { error: true };
     if (params.get('type') === 'recovery') return { error: true };
     const access_token = params.get('access_token');

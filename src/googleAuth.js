@@ -5,7 +5,7 @@ export function authErrorMessage(error) {
     if (code === 'invalid_credentials') return 'Неверная почта или пароль. Проверьте их и попробуйте снова.';
     if (code === 'email_not_confirmed') return 'Подтвердите почту: откройте ссылку из письма, затем войдите.';
     if (code === 'user_already_exists') return 'Аккаунт с этой почтой уже существует. Попробуйте войти.';
-    if (code === 'weak_password') return 'Придумайте более надёжный пароль: минимум 6 символов.';
+    if (code === 'weak_password') return 'Придумайте более надёжный пароль: минимум 8 символов.';
     if (code.includes('rate_limit') || error?.status === 429) return 'Слишком много попыток. Подождите немного и попробуйте снова.';
     if (code === 'provider_disabled' || code === 'validation_failed') return 'Этот способ входа сейчас недоступен. Используйте почту и пароль.';
     return 'Не удалось войти. Проверьте соединение и попробуйте снова.';

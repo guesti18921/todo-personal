@@ -385,7 +385,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.9/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.10/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -692,5 +692,59 @@ test('a deletion marker blocks cached Auth reopening even if storage cleanup rem
   assert.equal(w.document.querySelector('#auth-screen').hidden, false);
   assert.equal(w.localStorage.getItem('todo-personal:deleted-account:'+id), '1');
   assert.doesNotMatch(w.document.querySelector('.mn-list').textContent, /Alpha overdue/);
+ } finally { w.close(); }
+});
+
+
+test('forgot password sends only email and dedicated redirect, without notebook sign-in', async () => {
+ const requests = [];
+ const dom = boot([], false, async (url, options = {}) => {
+  if (String(url).includes('/recover')) { requests.push({ url: String(url), body: JSON.parse(options.body) }); return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }); }
+  return new Response('{"external":{"google":false}}', { status: 200, headers: { 'content-type': 'application/json' } });
+ });
+ try {
+  await wait(); const d = dom.window.document;
+  d.querySelector('#auth-email').value = 'test@example.com';
+  d.querySelector('#auth-password').value = 'not-to-send';
+  d.querySelector('#auth-forgot').click();
+  assert.equal(d.querySelector('#auth-password').value, '');
+  assert.equal(d.querySelector('#auth-form').hidden, true);
+  assert.equal(d.querySelector('#auth-recovery-email').value, 'test@example.com');
+  d.querySelector('#auth-recovery-form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait();
+  assert.equal(requests.length, 1); assert.equal(requests[0].body.email, 'test@example.com');
+  assert.equal(requests[0].body.password, undefined);
+  assert.equal(new URL(requests[0].url).searchParams.get('redirect_to'), 'https://guesti18921.github.io/todo-personal/reset-password.html');
+  assert.match(d.querySelector('#auth-message').textContent, /Если аккаунт/);
+  assert.equal(d.querySelector('#todo-app').hidden, true);
+  d.querySelector('#auth-recovery-back').click(); assert.equal(d.querySelector('#auth-form').hidden, false);
+  d.querySelector('#auth-switch').click(); assert.equal(d.querySelector('#auth-forgot').hidden, true);
+  assert.equal(d.querySelector('#auth-password').minLength, 8);
+ } finally { dom.window.close(); }
+});
+
+test('reset page strips URL tokens and changes only recovery account without persisting session', async () => {
+ const exp = Math.floor(Date.now() / 1000) + 86400;
+ const jwt = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url') + '.' + Buffer.from(JSON.stringify({ sub: id, exp, role: 'authenticated' })).toString('base64url') + '.test';
+ const page = fs.readFileSync('dist/reset-password.html', 'utf8');
+ const dom = new JSDOM(page, { url: 'https://test.local/reset-password.html#type=recovery&access_token='+jwt+'&refresh_token=test-refresh', runScripts: 'outside-only', virtualConsole });
+ const w = dom.window, writes = [];
+ Object.assign(w, { TextEncoder, TextDecoder, Request, Response, Headers, fetch: async (url, options = {}) => {
+  if (options.method === 'PUT') writes.push(JSON.parse(options.body));
+  return new Response(JSON.stringify({ id, email: 'test@example.com', aud: 'authenticated', role: 'authenticated' }), { status: 200, headers: { 'content-type': 'application/json' } });
+ } });
+ w.localStorage.setItem('existing-notebook-account', 'keep');
+ try {
+  w.eval(w.document.querySelector('script').textContent);
+  assert.equal(w.location.hash, '');
+  w.eval(fs.readFileSync('dist/password-reset.js', 'utf8')); await wait();
+  assert.equal(w.todoRecoveryFragment, undefined);
+  const d = w.document; assert.equal(d.querySelector('#reset-form').hidden, false);
+  d.querySelector('#new-password').value = d.querySelector('#repeat-password').value = 'new-password-123';
+  d.querySelector('#reset-form').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true })); await wait();
+  assert.equal(writes.length, 1); assert.equal(writes[0].password, 'new-password-123');
+  assert.equal(d.querySelector('#reset-form').hidden, true);
+  assert.equal(d.querySelector('#return-message').hidden, false);
+  assert.equal(w.localStorage.length, 1); assert.equal(w.localStorage.getItem('existing-notebook-account'), 'keep');
  } finally { w.close(); }
 });

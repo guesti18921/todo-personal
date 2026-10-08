@@ -29,6 +29,14 @@
                     <button id="auth-submit" type="submit">Войти</button>
                 </form>
                 <button class="auth-card__switch" id="auth-switch" type="button">Создать аккаунт</button>
+                <button class="auth-card__switch" id="auth-forgot" type="button" data-auth-text="Забыли пароль?">Забыли пароль?</button>
+                <form id="auth-recovery-form" hidden>
+                    <h2 data-auth-text="Восстановление пароля">Восстановление пароля</h2>
+                    <label for="auth-recovery-email" data-auth-text="Почта аккаунта">Почта аккаунта</label>
+                    <input id="auth-recovery-email" type="email" autocomplete="email" required>
+                    <button id="auth-recovery-send" type="submit" data-auth-text="Отправить письмо">Отправить письмо</button>
+                    <button class="auth-card__switch" id="auth-recovery-back" type="button" data-auth-text="Вернуться к входу">Вернуться к входу</button>
+                </form>
                 <div class="auth-confirm" id="auth-confirm" hidden>
     <h2 data-auth-text="Проверьте почту">Проверьте почту</h2>
     <p data-auth-text="Ссылка для подтверждения отправлена на:">Ссылка для подтверждения отправлена на:</p>

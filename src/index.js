@@ -12,6 +12,7 @@ import { authErrorMessage, createGoogleLogin, googleProviderEnabled } from './go
 import { createClient } from '@supabase/supabase-js';
 import { createEmailConfirmation, EMAIL_CONFIRMATION_URL } from './emailConfirmation.js';
 import { requestAccountDeletion, clearDeletedAccount, isAccountDeleted } from './accountDeletion.js';
+import { PASSWORD_RESET_URL } from './passwordRecovery.js';
 let mobileUI = null;
 let reminderEngine = null;
 const retiredAccounts = new Set();
@@ -265,6 +266,12 @@ const authPassword = document.querySelector('#auth-password');
 const authGoogle = document.querySelector('#auth-google');
 const authGoogleArea = document.querySelector('#auth-google-area');
 const passwordToggle = document.querySelector('#auth-password-toggle');
+const authForgot = document.querySelector('#auth-forgot');
+const recoveryForm = document.querySelector('#auth-recovery-form');
+const recoveryEmail = document.querySelector('#auth-recovery-email');
+const recoverySend = document.querySelector('#auth-recovery-send');
+const recoveryBack = document.querySelector('#auth-recovery-back');
+let recoveryRequestBusy = false;
 let googleEnabled = false;
 let checkingGoogle = false;
 const logout = document.querySelector('#logout-btn');
@@ -344,6 +351,45 @@ window.addEventListener('online', () => languagePreferences.sync());
 window.addEventListener('focus', () => languagePreferences.sync());
 
 function updateGoogleVisibility() { authGoogleArea.hidden = !googleEnabled || Boolean(activeUser) || authConfirm.hidden === false || authForm.hidden; }
+function closeRecoveryForm() {
+    recoveryForm.hidden = true;
+    recoveryForm.reset();
+    authForm.hidden = Boolean(activeUser);
+    authSwitch.hidden = Boolean(activeUser);
+    authForgot.hidden = Boolean(activeUser) || registering;
+    updateGoogleVisibility();
+}
+authForgot.addEventListener('click', () => {
+    if (activeUser || authSubmit.disabled) return;
+    emailConfirmation.stop();
+    recoveryEmail.value = document.querySelector('#auth-email').value.trim();
+    authPassword.value = '';
+    authForm.hidden = authSwitch.hidden = authForgot.hidden = true;
+    recoveryForm.hidden = false;
+    authMessage.textContent = '';
+    updateGoogleVisibility();
+    recoveryEmail.focus();
+});
+recoveryBack.addEventListener('click', () => {
+    if (recoveryRequestBusy) return;
+    closeRecoveryForm();
+    authMessage.textContent = '';
+});
+recoveryForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (recoveryRequestBusy) return;
+    recoveryRequestBusy = true;
+    recoverySend.disabled = recoveryBack.disabled = recoveryEmail.disabled = true;
+    authMessage.textContent = t('Отправляем письмо…');
+    try {
+        const { error } = await confirmationAuth.auth.resetPasswordForEmail(recoveryEmail.value.trim(), { redirectTo: PASSWORD_RESET_URL });
+        authMessage.textContent = error
+            ? t(['over_email_send_rate_limit', 'over_request_rate_limit'].includes(error.code)
+                ? 'Слишком много писем. Подождите немного и повторите попытку.' : 'Не удалось отправить письмо. Проверьте интернет и попробуйте снова.')
+            : t('Если аккаунт с этой почтой существует, письмо для смены пароля будет отправлено. Проверьте входящие и спам. Ссылку можно открыть на любом устройстве.');
+    } catch (_) { authMessage.textContent = t('Не удалось отправить письмо. Проверьте интернет и попробуйте снова.'); }
+    finally { recoveryRequestBusy = false; recoverySend.disabled = recoveryBack.disabled = recoveryEmail.disabled = false; }
+});
 async function refreshGoogleProvider() {
     if (checkingGoogle || activeUser) return;
     checkingGoogle = true;
@@ -480,6 +526,9 @@ supabase.auth.onAuthStateChange((_event, session) => {
     authTitle.hidden = false;
     authForm.hidden = Boolean(id);
     authSwitch.hidden = Boolean(id);
+    recoveryForm.hidden = true;
+    recoveryForm.reset();
+    authForgot.hidden = Boolean(id) || registering;
     updateGoogleVisibility();
     if (!id) refreshGoogleProvider();
     retryLoad.hidden = switchAccount.hidden = true;
@@ -502,6 +551,8 @@ authSwitch.addEventListener('click', () => {
     authSubmit.textContent = registering ? t('Создать аккаунт') : t('Войти');
     authSwitch.textContent = registering ? t('Уже есть аккаунт? Войти') : t('Создать аккаунт');
     authPassword.autocomplete = registering ? 'new-password' : 'current-password';
+    authPassword.minLength = registering ? 8 : 6;
+    authForgot.hidden = registering;
 });
 
 authConfirmBack.addEventListener('click', () => {
@@ -519,6 +570,8 @@ authConfirmBack.addEventListener('click', () => {
     authSubmit.textContent = t('Войти');
     authSwitch.textContent = t('Создать аккаунт');
     authPassword.autocomplete = 'current-password';
+    authPassword.minLength = 6;
+    authForgot.hidden = false;
 });
 authForm.addEventListener('submit', async event => {
     event.preventDefault();
@@ -535,6 +588,7 @@ authForm.addEventListener('submit', async event => {
         else if ((signUp && !error && !data.session) || error?.code === 'email_not_confirmed' || error?.message === 'Email not confirmed') {
     authForm.hidden = true;
     authSwitch.hidden = true;
+    authForgot.hidden = true;
     updateGoogleVisibility();
     authTitle.hidden = true;
     authMessage.textContent = '';

@@ -1,7 +1,6 @@
 # TO-DO Personal privacy and deletion pages — review draft
 
-Confirmed 2026-10-08: support address todopersonal.support@gmail.com;
-Supabase Free plan; the user tested Android 0.4.9 account deletion successfully.
+Confirmed 2026-10-08: Supabase Free plan; the user tested Android 0.4.9 account deletion successfully.
 
 The HTML pages are in Russian and English, contain no sign-in, tracking scripts,
 forms or third-party font requests, and share a local stylesheet. The deletion
@@ -14,27 +13,30 @@ passwords or login codes, delete the verified user in Supabase Authentication
 correspondence should be removed from the mailbox within 30 days after closure,
 including Trash, unless an applicable legal obligation requires retaining it.
 
-## Blocking factual check before publication
+## Confirmed backend settings 2026-10-08
 
-Inspect Authentication > Configuration > Audit Logs > Write audit logs to the
-database. Optional auth.audit_log_entries storage is independent of accessible
-platform-log retention. Do not assume its rows disappear with auth.users or
-claim that every security log is deleted after one hour or one day.
-If database audit logging exists, verify its actual retention and existing rows
-before finalizing the policy. A read-only count contains no user emails or tokens:
+User dashboard screenshots confirm database audit logging is disabled and the
+read-only auth.audit_log_entries count is 0 (both dates NULL). No cleanup needed.
+Platform logs remain independent of this table.
+Custom SMTP is enabled: smtp.resend.com, port 465, sender
+noreply@m1strell.com, display name TO-DO, minimum interval 60 seconds.
+No SMTP credentials were collected or changed.
 
-```sql
-select count(*) as entries,
-       min(created_at) as oldest_entry,
-       max(created_at) as newest_entry
-from auth.audit_log_entries;
-```
+## Publication blockers
+
+No working support mailbox has been created yet. The Gmail address in the HTML
+is an unverified draft placeholder: Google account creation failed. Do not publish
+these pages or ship these contact links until a working mailbox replaces it and
+receiving/replying are tested. support@m1strell.com is planned via Timeweb;
+Timeweb tariff migration is blocked and deferred pending support resolution.
+Confirm the proposed support turnaround and correspondence retention with the
+mailbox owner before publication.
 
 Provider infrastructure backups are distinct from the app's local conflict
 recovery copies. Free does not include paid-plan daily backup access; that does
 not establish that every provider infrastructure copy is erased immediately.
 Resend states that email and log data is retained for 30 days on standard plans.
-Confirm the active SMTP provider is still Resend if settings have changed.
+The active SMTP provider was confirmed as Resend by the user dashboard screenshot.
 
 ## Publication work after the check
 
@@ -61,3 +63,13 @@ https://guesti18921.github.io/todo-personal/delete-account.html
 
 These are drafts, not confirmation of Google Play approval or complete legal
 compliance. Data Safety and the intended distribution/audience still need review.
+
+## Additional authentication review 2026-10-08
+
+Dashboard confirms email confirmation ON, new signups ON, anonymous sign-ins OFF,
+manual linking OFF, Email and Google providers ON. CAPTCHA is OFF; leaked
+password protection is OFF (Pro feature). Email limit 30/project/hour; sign-in
+and signup limit 30/IP/5 minutes; token verification 30/IP/5 minutes; token
+refresh 150/IP/5 minutes. IP forwarding OFF. Minimum password length was 6;
+user instructed to set 8, saved state still needs confirmation. Weak-password
+message updated to 8 in mobile source, not yet shipped in APK or website.

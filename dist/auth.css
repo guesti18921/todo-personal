@@ -74,7 +74,7 @@
     outline-offset: 1px;
 }
 
-#auth-submit {
+#auth-submit, #auth-recovery-send {
     margin-top: 8px;
     padding: 12px;
     border: 0;
@@ -90,7 +90,7 @@
     background: #501f3a;
 }
 
-#auth-submit:disabled {
+#auth-submit:disabled, #auth-recovery-send:disabled {
     opacity: .6;
     cursor: wait;
 }
@@ -169,3 +169,4 @@
     color: #501f3a;
     font-weight: 700;
 }
+

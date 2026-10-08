@@ -1,5 +1,14 @@
 // Interface text only. Never pass entry contents through this dictionary.
 export default {
+  "Забыли пароль?": "Forgot password?",
+  "Восстановление пароля": "Password recovery",
+  "Почта аккаунта": "Account email",
+  "Отправить письмо": "Send email",
+  "Отправляем письмо…": "Sending email…",
+  "Слишком много писем. Подождите немного и повторите попытку.": "Too many emails. Wait a little and try again.",
+  "Не удалось отправить письмо. Проверьте интернет и попробуйте снова.": "Could not send the email. Check your connection and try again.",
+  "Если аккаунт с этой почтой существует, письмо для смены пароля будет отправлено. Проверьте входящие и спам. Ссылку можно открыть на любом устройстве.": "If an account with this email exists, a password reset email will be sent. Check your inbox and spam. You can open the link on any device.",
+
   "Ожидаем подтверждение почты. Откройте письмо на любом устройстве. После подтверждения вход здесь завершится автоматически в течение 30 секунд.": "Waiting for email confirmation. Open the email on any device. After confirmation, sign-in here will finish automatically within 30 seconds.",
   "Нет соединения. Продолжим проверку подтверждения, когда появится интернет.": "No connection. We will resume checking your confirmation when you are online.",
   "Ожидание завершено. Если почта подтверждена, вернитесь к входу и введите пароль.": "Waiting has ended. If your email is confirmed, return to sign-in and enter your password.",
@@ -193,7 +202,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.9": "TO-DO Personal · version 0.4.9",
+  "TO-DO Personal · версия 0.4.10": "TO-DO Personal · version 0.4.10",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",
@@ -267,7 +276,7 @@ export default {
   "Вход отменён. Можно попробовать снова или войти по почте.": "Sign-in cancelled. Try again or sign in with email.",
   "Неверная почта или пароль. Проверьте их и попробуйте снова.": "Incorrect email or password. Check them and try again.",
   "Аккаунт с этой почтой уже существует. Попробуйте войти.": "An account with this email already exists. Try signing in.",
-  "Придумайте более надёжный пароль: минимум 6 символов.": "Choose a stronger password with at least 6 characters.",
+  "Придумайте более надёжный пароль: минимум 8 символов.": "Choose a stronger password with at least 8 characters.",
   "Слишком много попыток. Подождите немного и попробуйте снова.": "Too many attempts. Wait a little and try again.",
   "Этот способ входа сейчас недоступен. Используйте почту и пароль.": "This sign-in method is unavailable. Use email and password.",
   "Подтвердите почту: откройте ссылку из письма, затем войдите.": "Confirm your email: open the link in the email, then sign in.",

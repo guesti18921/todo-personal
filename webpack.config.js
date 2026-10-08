@@ -1,9 +1,10 @@
 const path = require('path');
 
 module.exports = {
-  entry: './src/index.js',
+  entry: { main: './src/index.js', 'password-reset': './src/passwordResetPage.js' },
   output: {
-    filename: 'main.js',
+    filename: '[name].js',
+    chunkFilename: 'chunks/[id].[contenthash].js',
     path: path.resolve(__dirname, 'dist'),
   },
 //     optimization: {

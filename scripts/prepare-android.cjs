@@ -24,8 +24,8 @@ if (!manifest.includes('android:scheme="todopersonal"')) {
 fs.writeFileSync(manifestPath, manifest);
 const gradlePath = path.join(root, 'android/app/build.gradle');
 const gradle = fs.readFileSync(gradlePath, 'utf8')
-    .replace(/versionCode \d+/, 'versionCode 13')
-    .replace(/versionName "[^"]+"/, 'versionName "0.4.9"');
+    .replace(/versionCode \d+/, 'versionCode 14')
+    .replace(/versionName "[^"]+"/, 'versionName "0.4.10"');
 fs.writeFileSync(gradlePath, gradle);
 const drawable = path.join(root, 'android/app/src/main/res/drawable');
 fs.mkdirSync(drawable, { recursive: true });
