@@ -199,6 +199,7 @@ export async function readCloudChanges() {
     }
     if (probe.data.revision === revision) {
         c.syncedAt = new Date().toISOString();
+        if (!c.localSaved) stash(c);
         report(c, c.localSaved ? 'Saved' : 'Loaded from cloud — local storage unavailable');
         return null;
     }

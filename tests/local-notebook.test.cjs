@@ -408,3 +408,16 @@ test('local edits during a cloud revision check are retained', async () => {
     assert.equal(store.getDraft().notes[0].title, 'Local edit');
     assert.equal(store.hasPendingChanges(), true);
 });
+
+
+test('revision-only checks recover a previously failed local snapshot', async () => {
+ const f = fixture(), { store } = await f.load();
+ f.accounts.set('a', { ...empty(), revision: 0 });
+ f.failWrites = true;
+ await store.openNotebook('a');
+ assert.equal(store.isLocallySaved(), false);
+ f.failWrites = false;
+ await store.readCloudChanges();
+ assert.equal(store.isLocallySaved(), true);
+ assert.ok(f.disk.get('todo-personal:local:a'));
+});
