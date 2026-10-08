@@ -1,4 +1,4 @@
-# TO-DO Personal privacy and deletion pages — review draft
+# TO-DO Personal privacy and account deletion — publication notes
 
 Confirmed 2026-10-08: Supabase Free plan; the user tested Android 0.4.9 account deletion successfully.
 
@@ -6,11 +6,11 @@ The HTML pages are in Russian and English, contain no sign-in, tracking scripts,
 forms or third-party font requests, and share a local stylesheet. The deletion
 page opens an email draft and also displays the address for manual use. It does
 not claim that opening the email app submits a request or automatically deletes
-an account. Its proposed support turnaround is 30 days after ownership checks.
+an account. Its support turnaround is at most 30 days after ownership checks.
 The mailbox owner must monitor requests, verify ownership without collecting
 passwords or login codes, delete the verified user in Supabase Authentication
-> Users (which cascades notebooks), and notify the requester. Support deletion
-correspondence should be removed from the mailbox within 30 days after closure,
+> Users (which cascades notebooks), and notify the requester. Resolved support
+correspondence must be removed from the mailbox within 30 days after closure,
 including Trash, unless an applicable legal obligation requires retaining it.
 
 ## Confirmed backend settings 2026-10-08
@@ -39,17 +39,21 @@ Supabase API/database log access on Free is one day; this is not a promise that
 all internal provider copies are erased within one day. Android 0.4.12 backup
 exclusions are described without promising universal device-transfer behavior.
 
-Before public deployment, the owner must accept these concrete commitments:
-- Monitor the support mailbox and complete verified account deletion requests
-  within 30 days after ownership is confirmed.
-- Remove resolved support correspondence, including Trash, within 30 days after
+Owner accepted mailbox monitoring, manual deletion handling, email confirmation,
+correspondence cleanup and limited data use during the 2026-10-08 conversation.
+After clarifying that in-app deletion is automatic and only email requests need
+manual handling, the owner instructed completion and publication of the pages.
+The agreed public commitments are:
+- Complete verified account deletion requests within 30 days of ownership
+  confirmation, without deliberately delaying until the last day.
+- Remove resolved support correspondence, including Trash, within 30 days of
   resolution unless applicable law requires retaining it.
+These are operating commitments, not a universal Google Play deadline.
 
-These 30-day periods are proposed operating commitments, not a claim that Google
-Play universally mandates 30 days. The HTML remains a review draft until accepted.
-A public privacy notice also requires final developer/controller identity and
-intended distribution/audience review, especially for any applicable regional law.
-No public pages or APK links have been deployed in this draft update.
+The notice identifies TO-DO Personal and its developer contact. Final Play listing
+identity, audience, distribution regions and Data Safety answers must be checked
+against the notice when setting up Play Console; this publication is not a claim
+of full compliance with every regional privacy law or Google Play approval.
 
 Provider infrastructure backups are distinct from the app's local conflict
 recovery copies. Free does not include paid-plan daily backup access; that does
@@ -57,18 +61,37 @@ not establish that every provider infrastructure copy is erased immediately.
 Resend states that email and log data is retained for 30 days on standard plans.
 The active SMTP provider was confirmed as Resend by the user dashboard screenshot.
 
-## Publication work after the check
+## Published assets and remaining work
 
-Finalize the retention section and support handling commitments. Copy the three
-public assets to dist on both the mobile branch and published main branch without
-replacing main's desktop application. Add a privacy link on the sign-in screen
-and in mobile Settings, plus a support link. Publish Pages and verify both public
-URLs without authentication. Prepare the next Android update with the same signing
-certificate, so the in-app privacy link ships with the release.
+Canonical source: docs/legal/privacy.html, delete-account.html and legal.css.
+Identical copies in dist are deployed at the root site and mobile preview.
+Deployment 37825737571 completed successfully on 2026-10-08; application tests,
+build and mobile UI tests passed. GitHub Pages redirects to todo.m1strell.com.
+Pages contain no login requirement, analytics, forms or external assets.
+The contact is also written out so the request works without a mailto handler.
 
-Expected public URLs:
-https://guesti18921.github.io/todo-personal/privacy.html
-https://guesti18921.github.io/todo-personal/delete-account.html
+Public URLs:
+https://todo.m1strell.com/privacy.html
+https://todo.m1strell.com/delete-account.html
+
+Remaining: add the public privacy link to sign-in and Settings, plus support and
+external account-deletion links, then ship them in the next signed Android build.
+Complete Play Console Data Safety and regional/audience checks. Gmail filtering
+verification is deferred at the owner's request; do not claim it is resolved.
+
+## Manual support deletion procedure
+
+1. Read the request; identify the account email in Supabase Authentication > Users.
+2. Send a deletion confirmation to the address recorded on that account. Do not
+   rely solely on a sender display name or unverified From header. Wait for a reply
+   confirming deletion. Never request passwords, sign-in codes or notebook contents.
+3. If that email cannot be accessed, do not delete based only on knowledge of the
+   address. Use an authenticated in-app deletion route or a separately verified
+   recovery process; do not promise that every lost-email request can be verified.
+4. Delete only the confirmed account via Supabase Authentication > Users. The
+   notebooks foreign key has ON DELETE CASCADE. Check that both records are gone.
+5. Notify the user by email, then remove resolved correspondence (including Trash)
+   within the agreed period. Do not include credentials or private entry text in logs.
 
 ## Primary references checked 2026-10-08
 
@@ -81,7 +104,7 @@ https://guesti18921.github.io/todo-personal/delete-account.html
 - https://resend.com/security/gdpr
 - https://timeweb.com/ru/personal-data-apps/
 
-These are drafts, not confirmation of Google Play approval or complete legal
+Publication is not confirmation of Google Play approval or complete legal
 compliance. Data Safety and the intended distribution/audience still need review.
 
 ## Additional authentication review 2026-10-08
