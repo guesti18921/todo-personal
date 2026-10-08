@@ -782,3 +782,14 @@ if (!isNativeApp() && 'serviceWorker' in navigator) {
     });
 } else if (isNativeApp()) mobileUI.setOfflineReady(true);
 window.addEventListener('online', () => { if (ready) refreshCloud(); });
+
+// Public documents open outside the native notebook and never replace its state.
+document.addEventListener('click', event => {
+    const link = event.target.closest?.('a[data-public-page]');
+    if (!link) return;
+    link.hash = getLanguage();
+    if (isNativeApp()) {
+        event.preventDefault();
+        openAuthBrowser(link.href).catch(() => showAccountMessage(t('Не удалось открыть страницу. Проверьте интернет и попробуйте снова.')));
+    }
+});

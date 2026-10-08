@@ -385,7 +385,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.12/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.13/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -747,4 +747,19 @@ test('reset page strips URL tokens and changes only recovery account without per
   assert.equal(d.querySelector('#return-message').hidden, false);
   assert.equal(w.localStorage.length, 1); assert.equal(w.localStorage.getItem('existing-notebook-account'), 'keep');
  } finally { w.close(); }
+});
+
+
+test('public documents are grouped in settings and privacy is available before login', async () => {
+ const dom = boot(listFixture().seed);
+ try {
+  await ready(dom);
+  const d = dom.window.document;
+  assert.equal(d.querySelector('.auth-legal a').href, 'https://todo.m1strell.com/privacy.html');
+  d.querySelector('[data-view="settings"]').click();
+  const links = [...d.querySelectorAll('.mn-about-links a')];
+  assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
+  assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.13');
+ } finally { dom.window.close(); }
 });

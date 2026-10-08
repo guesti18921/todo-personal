@@ -13,6 +13,7 @@ function fixture(existing = new Map()) {
     const timers = new Map();
     let sequence = 0, failWrites = false, online = true, requests = 0, heldUpload, heldRead;
     const accounts = new Map();
+    const selections = [];
     const storage = {
         getItem: key => disk.get(key) ?? null,
         setItem(key, value) { if (failWrites) throw new Error('Quota exceeded'); disk.set(key, value); },
@@ -21,9 +22,10 @@ function fixture(existing = new Map()) {
     const cloud = {
         from() {
             const conditions = {};
-            let update, inserted;
+            let update, inserted, selected;
             const request = () => {
                 requests++;
+                selections.push(selected);
                 if (!online) return { data: null, error: new Error('Network unavailable') };
                 const row = accounts.get(conditions.user_id);
                 if (update) {
@@ -40,7 +42,7 @@ function fixture(existing = new Map()) {
                 return { data: row ? json(row) : null, error: null };
             };
             const q = {
-                select() { return this; },
+                select(columns = '*') { selected = columns; return this; },
                 eq(key, value) { conditions[key] = value; return this; },
                 update(value) { update = value; return this; },
                 insert(value) { inserted = value; return this; },
@@ -79,6 +81,7 @@ function fixture(existing = new Map()) {
         set online(value) { online = value; },
         set failWrites(value) { failWrites = value; },
         get requests() { return requests; },
+        selections,
         holdNextRead() { let release; heldRead = new Promise(resolve => { release = resolve; }); return release; },
         holdNextUpload() {
             let release;
@@ -374,4 +377,34 @@ test('a mixed task/note batch is persisted as one snapshot and failed storage le
  // The caller can revert a rejected batch and retry the original snapshot.
  store.saveNotebook(next); f.failWrites = false; assert.equal(store.saveNotebook(next), true);
  assert.deepEqual(json(store.getDraft()), next);
+});
+
+
+test('unchanged cloud checks transfer only revision; changed checks fetch contents', async () => {
+    const f = fixture(), { store } = await f.load();
+    f.accounts.set('a', { ...empty(), revision: 0 });
+    await store.openNotebook('a');
+    f.selections.length = 0;
+    const before = f.disk.get('todo-personal:local:a');
+    assert.equal(await store.readCloudChanges(), null);
+    assert.deepEqual(f.selections, ['revision']);
+    assert.equal(f.disk.get('todo-personal:local:a'), before, 'unchanged checks do not rewrite local contents');
+    f.accounts.set('a', { ...empty(), revision: 1, notes: [{ id: 'n', title: 'Remote', text: '' }] });
+    f.selections.length = 0;
+    assert.equal((await store.readCloudChanges()).notes[0].title, 'Remote');
+    assert.deepEqual(f.selections, ['revision', 'revision,todos,notes']);
+});
+
+test('local edits during a cloud revision check are retained', async () => {
+    const f = fixture(), { store } = await f.load();
+    f.accounts.set('a', { ...empty(), revision: 0 });
+    await store.openNotebook('a');
+    f.accounts.set('a', { ...empty(), revision: 1, notes: [{ id: 'cloud', title: 'Remote' }] });
+    const release = f.holdNextRead();
+    const read = store.readCloudChanges();
+    store.savePart('notes', [{ id: 'local', title: 'Local edit' }]);
+    release();
+    assert.equal(await read, null);
+    assert.equal(store.getDraft().notes[0].title, 'Local edit');
+    assert.equal(store.hasPendingChanges(), true);
 });

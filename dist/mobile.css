@@ -137,3 +137,10 @@
 
 .auth-language { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; font-size: 14px; }
 .auth-language select { font: inherit; color: inherit; background: #fff; border: 1px solid #cbbfc3; border-radius: 8px; padding: 8px 12px; max-width: 55%; }
+
+.mn-main .mn-version { color: #715160; font-size: 13px; margin-bottom: 12px; }
+.mn-about-links { display: grid; }
+.mn-about-links a { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 52px; padding: 12px 0; border-top: 1px solid #eadfe2; color: #501f3a; font-size: 15px; line-height: 1.45; text-decoration: none; }
+.mn-about-links a > span:last-child { color: #367f75; font-size: 24px; }
+.mn-about-links a:focus-visible { outline: 2px solid #367f75; outline-offset: 3px; border-radius: 4px; }
+.mn-about-links a:hover { color: #367f75; }

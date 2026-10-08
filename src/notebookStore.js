@@ -185,21 +185,30 @@ export async function readCloudChanges() {
     const c = context;
     if (!c || c.dirty || c.running) return null;
     const revision = c.revision;
-    const { data, error } = await supabase.from('notebooks').select('*').eq('user_id', c.id).single();
-    if (context !== c || c.dirty || c.running || c.revision !== revision) return null;
+    // Check only the revision before downloading notebook contents.
+    const current = () => context === c && !c.dirty && !c.running && c.revision === revision;
+    const probe = await supabase.from('notebooks').select('revision').eq('user_id', c.id).single();
+    if (!current()) return null;
+    if (probe.error) {
+        report(c, c.localSaved ? 'Saved locally — connection unavailable' : 'Connection unavailable — local storage unavailable');
+        return null;
+    }
+    if (!Number.isSafeInteger(probe.data?.revision) || probe.data.revision < revision) {
+        report(c, 'Cloud revision is older; local data has been retained.');
+        return null;
+    }
+    if (probe.data.revision === revision) {
+        c.syncedAt = new Date().toISOString();
+        report(c, c.localSaved ? 'Saved' : 'Loaded from cloud — local storage unavailable');
+        return null;
+    }
+    const { data, error } = await supabase.from('notebooks').select('revision,todos,notes').eq('user_id', c.id).single();
+    if (!current()) return null;
     if (error) {
         report(c, c.localSaved ? 'Saved locally — connection unavailable' : 'Connection unavailable — local storage unavailable');
         return null;
     }
-    if (data.revision < revision) {
-        report(c, 'Cloud revision is older; local data has been retained.');
-        return null;
-    }
-    if (data.revision === revision) {
-        c.syncedAt = new Date().toISOString(); stash(c);
-        report(c, c.localSaved ? 'Saved' : 'Loaded from cloud — local storage unavailable');
-        return null;
-    }
+    if (!Number.isSafeInteger(data?.revision) || data.revision <= revision) return null;
     const cloud = { todos: data.todos, notes: data.notes };
     const normalized = normalizeNotebook(cloud);
     c.revision = data.revision;

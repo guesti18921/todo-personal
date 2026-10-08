@@ -170,3 +170,7 @@
     font-weight: 700;
 }
 
+
+.auth-legal { margin-top: 24px; padding-top: 16px; border-top: 1px solid #eadfe2; text-align: center; }
+.auth-legal a { display: inline-block; padding: 8px 4px; color: #715160; font-size: 13px; line-height: 1.5; text-underline-offset: 3px; }
+.auth-legal a:focus-visible { outline: 2px solid #367f75; outline-offset: 3px; }
