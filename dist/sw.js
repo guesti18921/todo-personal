@@ -1,7 +1,7 @@
 // Only public app files are cached. Supabase requests and account data never pass through this cache.
 const BASE = new URL('./', self.location.href).href;
 const PREFIX = `todo-personal-shell:${new URL(BASE).pathname}:`;
-const CACHE = PREFIX + '43fad9b3686d9ce0a96b';
+const CACHE = PREFIX + '8fbddac1cadb38262b40';
 const ASSETS = ['index.html', 'main.js?v=10-tap', 'main.css', 'auth.css?v=2', 'mobile.css?v=9-clear'];
 self.addEventListener('install', event => event.waitUntil((async () => {
     const cache = await caches.open(CACHE);

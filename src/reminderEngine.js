@@ -94,7 +94,7 @@ export function createReminderEngine({ native, plugin, storage, getRecords, isRe
             for (const old of pending) {
                 if (!recordsReady && (!old.extra?.account || old.extra.account === account)) continue;
                 const next = wanted.get(old.id);
-                if (next && old.extra?.signature === next.extra.signature && old.title === next.title && old.isExactNotification === exact) unchanged.add(old.id);
+                if (next && old.extra?.signature === next.extra.signature && old.extra?.wallTime === next.extra.wallTime && old.title === next.title && old.isExactNotification === exact) unchanged.add(old.id);
                 // Android retains triggered notifications in getPending(). Keep valid
                 // past alarms as well: an inexact alarm may still be waiting to fire.
                 else if (!(currentById.get(old.id)?.schedule.at <= clock && old.extra?.signature === currentById.get(old.id)?.extra.signature)) cancel.push({ id: old.id });

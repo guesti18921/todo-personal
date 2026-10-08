@@ -45,7 +45,8 @@ export function notificationPlan(records, account, now = new Date(), { includePa
         if (!account || !at || (!includePast && at <= now)) return [];
         const text = record.type === 'task' ? record.entry.name : record.entry.title || record.entry.text;
         const body = String(text || '').slice(0, 300);
-        const extra = { account, entryId: record.entry.id, at: at.toISOString() };
+        const extra = { account, entryId: record.entry.id, at: at.toISOString(),
+            wallTime: `${dateValue(at)}T${timeValue(at)}:00` };
         extra.signature = JSON.stringify([account, record.entry.id, extra.at, body]);
         return [{ id, title: record.type === 'task' ? 'Пора выполнить задачу' : 'Напоминание о заметке', body,
             schedule: { at, allowWhileIdle: true }, channelId: 'todo-reminders', extra }];

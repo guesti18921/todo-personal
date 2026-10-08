@@ -11,6 +11,25 @@ async function modules() {
  return { ...model.namespace, ...engine.namespace };
 }
 const now = new Date(2026, 9, 6, 17, 30);
+test('native alarm metadata preserves local calendar time and upgrades pending legacy alarms', async () => {
+ const m = await modules(), p = plugin(), disk = storage();
+ const item = entry();
+ const planned = m.notificationPlan([{ entry: item, type: 'task' }], 'a', now)[0];
+ assert.equal(planned.extra.wallTime, '2026-10-07T17:45:00');
+ assert.equal(planned.extra.at, planned.schedule.at.toISOString());
+ disk.setItem('todo-personal:reminders-enabled:a', 'true');
+ const engine = m.createReminderEngine({ native: true, plugin: p, storage: disk,
+  getRecords: () => [{ entry: item, type: 'task' }], onDue() {}, onStatus() {}, now: () => now });
+ await engine.setAccount('a');
+ delete p.pending[0].extra.wallTime;
+ const count = p.calls.filter(x => x === 'schedule').length;
+ await engine.refresh();
+ assert.equal(p.pending.length, 1);
+ assert.equal(p.pending[0].extra.wallTime, '2026-10-07T17:45:00');
+ assert.equal(p.calls.filter(x => x === 'schedule').length, count + 1);
+ await engine.refresh();
+ assert.equal(p.calls.filter(x => x === 'schedule').length, count + 1, 'subsequent refresh does not duplicate migrated alarm');
+});
 const entry = () => ({ id: 'one', name: 'Позвонить 😀', date: '2026-10-07', time: '18:00', reminder: { mode: '15' } });
 function storage() { const values = new Map(); return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }; }
 function plugin() {
