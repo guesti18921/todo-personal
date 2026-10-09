@@ -38,6 +38,18 @@ test('a late deletion response cannot clear a different account or a renewed ses
   assert.equal(await pending, false); assert.equal(f.deleted.length, 0);
  }
 });
+test('both real Auth wire formats recognize deletion and the request specifies API version', async () => {
+ for (const body of [
+  { code: 403, error_code: 'user_not_found', msg: 'User from sub claim in JWT does not exist' },
+  { code: 'user_not_found', message: 'User from sub claim in JWT does not exist' },
+ ]) {
+  const f = await fixture(async () => ({ status: 403, json: async () => body }));
+  assert.equal(await f.check(), true); assert.deepEqual(f.deleted, ['a']);
+  assert.equal(f.calls[0][1].headers['X-Supabase-Api-Version'], '2024-01-01');
+ }
+ const expired = await fixture(async () => ({ status: 403, json: async () => ({ code: 403, error_code: 'bad_jwt' }) }));
+ assert.equal(await expired.check(), false); assert.equal(expired.deleted.length, 0);
+});
 test('overlapping checks share a request and failures allow retry', async () => {
  let resolve; const f = await fixture(() => new Promise(r => { resolve = r; }));
  const first = f.check(); assert.equal(f.check(), first); await Promise.resolve();

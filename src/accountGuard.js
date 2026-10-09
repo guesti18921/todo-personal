@@ -14,12 +14,13 @@ export function createAccountGuard({ storage, fetch, serverUrl, publicKey, getOw
         pending = Promise.resolve().then(async () => {
             try {
                 const response = await fetch(`${serverUrl}/auth/v1/user`, {
-                    headers: { apikey: publicKey, Authorization: `Bearer ${token}` },
+                    headers: { apikey: publicKey, Authorization: `Bearer ${token}`, 'X-Supabase-Api-Version': '2024-01-01' },
                     cache: 'no-store',
                 });
                 if (![401, 403, 404].includes(response.status)) return false;
                 const body = await response.json();
-                if (body?.code !== 'user_not_found' || getOwner() !== owner) return false;
+                const errorCode = typeof body?.code === 'string' ? body.code : body?.error_code;
+                if (errorCode !== 'user_not_found' || getOwner() !== owner) return false;
                 // A login/account switch may have happened while the request ran.
                 const latest = JSON.parse(storage.getItem(AUTH_STORAGE_KEY));
                 if (latest?.user?.id !== owner || latest.access_token !== token) return false;

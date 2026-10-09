@@ -682,7 +682,7 @@ test('server-confirmed remote deletion closes an open editor and clears only the
  const extra = [['todo-personal:local:another-account', 'KEEP'], [draftKey, '{"text":"PRIVATE DRAFT"}'], ['todo-personal:recovery:'+id+':test', 'PRIVATE BACKUP']];
  const dom = boot([...f.seed, ...extra], false, async request => {
   const url = String(request?.url || request);
-  if (url.includes('/auth/v1/user')) return new Response(JSON.stringify(deleted ? { code: 'user_not_found', message: 'User not found' } : { id }), { status: deleted ? 403 : 200, headers: { 'Content-Type': 'application/json' } });
+  if (url.includes('/auth/v1/user')) return new Response(JSON.stringify(deleted ? { code: 403, error_code: 'user_not_found', msg: 'User from sub claim in JWT does not exist' } : { id }), { status: deleted ? 403 : 200, headers: { 'Content-Type': 'application/json' } });
   if (url.includes('/auth/v1/logout')) return new Response(null, { status: 204 });
   throw new TypeError('offline');
  });
