@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createEmailConfirmation, EMAIL_CONFIRMATION_URL } from './emailConfirmation.js';
 import { requestAccountDeletion, clearDeletedAccount, isAccountDeleted } from './accountDeletion.js';
 import { PASSWORD_RESET_URL } from './passwordRecovery.js';
+import { createAccountGuard } from './accountGuard.js';
 let mobileUI = null;
 let reminderEngine = null;
 const retiredAccounts = new Set();
@@ -476,6 +477,41 @@ authMessage.after(retryLoad, switchAccount);
 switchAccount.addEventListener('click', () => signOutAccount());
 retryLoad.addEventListener('click', () => { if (activeUser) loadAccount(activeUser, generation); });
 
+const checkAccount = createAccountGuard({
+    storage: localStorage, fetch: boundedFetch, serverUrl: SUPABASE_URL,
+    publicKey: SUPABASE_PUBLIC_KEY, getOwner: () => activeUser,
+    async onDeleted(owner) {
+        if (activeUser !== owner) return;
+        retiredAccounts.add(owner);
+        ++generation;
+        resetScreen();
+        activeUser = null;
+        activeUserEmail = '';
+        languagePreferences.bindUser(null);
+        mobileUI?.setAccount(null);
+        const cleaned = clearDeletedAccount(localStorage, owner);
+        const remindersCleared = await reminderEngine?.setAccount(null);
+        // Avoid signing out a new account if the user logged in during cleanup.
+        if (activeUser) return;
+        try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) {}
+        if (activeUser) return;
+        authScreen.hidden = false;
+        authConfirm.hidden = true;
+        authTitle.hidden = false;
+        authForm.hidden = authSwitch.hidden = false;
+        authForm.reset();
+        registering = false;
+        authTitle.textContent = authSubmit.textContent = t('Войти');
+        authSwitch.textContent = t('Создать аккаунт');
+        authPassword.autocomplete = 'current-password';
+        authForgot.hidden = false;
+        updateGoogleVisibility();
+        authMessage.textContent = t(cleaned && remindersCleared !== false
+            ? 'Аккаунт удалён на другом устройстве. Локальные записи очищены.'
+            : 'Аккаунт удалён. Не удалось полностью очистить данные на устройстве. Очистите данные приложения в настройках телефона.');
+    }
+});
+
 async function loadAccount(id, ticket) {
     retryLoad.disabled = switchAccount.disabled = true;
     authMessage.textContent = t('Открываем ваши записи…');
@@ -490,6 +526,7 @@ async function loadAccount(id, ticket) {
         todoApp.inert = false;
         retryLoad.hidden = switchAccount.hidden = true;
         setTimeout(refreshCloud, 0);
+        setTimeout(checkAccount, 0);
     } catch (error) {
         if (ticket !== generation) return;
         closeNotebook();
@@ -686,6 +723,11 @@ async function refreshCloud() {
 }
 setInterval(refreshCloud, 10000);
 window.addEventListener('focus', refreshCloud);
+// Account validation must also run while editing or waiting to sync offline edits.
+setInterval(() => { if (!document.hidden && !changingAccount) checkAccount(); }, 10000);
+window.addEventListener('focus', checkAccount);
+window.addEventListener('online', checkAccount);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkAccount(); });
 reminderEngine = createReminderEngine({
     native: isNativeApp(), plugin: LocalNotifications, storage: localStorage, localize: t,
     getRecords: () => ready && isLocallySaved() ? listEntries(todos, notes) : [],
@@ -768,6 +810,7 @@ const handleAuthLink = createAuthLinkHandler({ auth: supabase.auth, onStatus(res
     }
 } });
 setupNativeApp({ ui: mobileUI, onAuthLink: handleAuthLink, onResume: async () => {
+    await checkAccount();
     await flushNotebook();
     reminderEngine.refresh();
     refreshCloud();

@@ -1,5 +1,6 @@
 // Interface text only. Never pass entry contents through this dictionary.
 export default {
+    'Аккаунт удалён на другом устройстве. Локальные записи очищены.': 'Account deleted on another device. Local records have been cleared.',
   "Закреплено": "Pinned",
   "Закреплённые": "Pinned entries",
   "Закрепить сверху": "Pin to top",
