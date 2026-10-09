@@ -724,13 +724,15 @@ async function deleteAccount() {
 }
 
 async function refreshCloud() {
-    if (!ready || polling || changingAccount || document.hidden || hasPendingChanges()) return;
-    if (document.activeElement?.matches('input, textarea, [contenteditable="true"]')) return;
-    if (document.querySelector('.create-new-open, .edit-popup-open, .details-popup-open')) return;
-    if (mobileUI?.isEditing()) return;
+    if (!ready || polling || changingAccount || document.hidden) return;
+    const checkOnly = Boolean(document.activeElement?.matches('input, textarea, [contenteditable="true"]')
+        || document.querySelector('.create-new-open, .edit-popup-open, .details-popup-open')
+        || mobileUI?.isEditing());
     polling = true;
     try {
-        const state = await readCloudChanges();
+        if (hasPendingChanges()) await flushNotebook();
+        if (!ready || changingAccount || hasPendingChanges()) return;
+        const state = await readCloudChanges({ checkOnly });
         if (state && ready) applyState(state);
     } finally { polling = false; }
 }

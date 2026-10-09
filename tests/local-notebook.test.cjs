@@ -11,7 +11,7 @@ function fixture(existing = new Map()) {
     const disk = existing;
     const listeners = new Map();
     const timers = new Map();
-    let sequence = 0, failWrites = false, online = true, requests = 0, heldUpload, heldRead;
+    let sequence = 0, failWrites = false, online = true, requests = 0, heldUpload, heldRead, failure;
     const accounts = new Map();
     const selections = [];
     const storage = {
@@ -27,6 +27,7 @@ function fixture(existing = new Map()) {
                 requests++;
                 selections.push(selected);
                 if (!online) return { data: null, error: new Error('Network unavailable') };
+                if (failure) return { data: null, error: failure };
                 const row = accounts.get(conditions.user_id);
                 if (update) {
                     if (!row || row.revision !== conditions.revision) return { data: [], error: null };
@@ -78,6 +79,7 @@ function fixture(existing = new Map()) {
     context.testSupabase = cloud;
     return {
         disk, accounts, timers, listeners,
+        set failure(value) { failure = value; },
         set online(value) { online = value; },
         set failWrites(value) { failWrites = value; },
         get requests() { return requests; },
@@ -420,4 +422,52 @@ test('revision-only checks recover a previously failed local snapshot', async ()
  await store.readCloudChanges();
  assert.equal(store.isLocallySaved(), true);
  assert.ok(f.disk.get('todo-personal:local:a'));
+});
+
+test('recovered connection is checked during editing without replacing newer cloud data', async () => {
+    const f = fixture(), { store } = await f.load();
+    f.accounts.set('a', { ...empty(), revision: 0 });
+    await store.openNotebook('a');
+    f.online = false;
+    await store.readCloudChanges({ checkOnly: true });
+    assert.equal(store.getSyncDetails().phase, 'offline');
+    f.online = true;
+    await store.readCloudChanges({ checkOnly: true });
+    assert.equal(store.getSyncDetails().phase, 'synced');
+    f.accounts.set('a', { ...empty(), revision: 1, notes: [{ id: 'remote', text: 'remote' }] });
+    const before = json(store.getDraft());
+    assert.equal(await store.readCloudChanges({ checkOnly: true }), null);
+    assert.equal(store.getSyncDetails().phase, 'available');
+    assert.deepEqual(json(store.getDraft()), before);
+    assert.equal((await store.readCloudChanges()).notes[0].text, 'remote');
+});
+test('server authentication, permissions and throttling are not reported as offline', async () => {
+    const f = fixture(), { store } = await f.load();
+    f.accounts.set('a', { ...empty(), revision: 0 });
+    await store.openNotebook('a');
+    for (const [failure, phase] of [[{ status: 401 }, 'auth'], [{ code: '42501' }, 'permission'], [{ status: 429 }, 'limited'], [{ status: 503 }, 'server']]) {
+        f.failure = failure;
+        await store.readCloudChanges();
+        assert.equal(store.getSyncDetails().phase, phase);
+    }
+    store.savePart('notes', [{ id: 'local', text: 'keep me' }]);
+    assert.equal(await store.flushNotebook(), false);
+    assert.equal(store.getSyncDetails().phase, 'server');
+    assert.equal(store.getSyncDetails().dirty, true);
+    assert.equal(store.getDraft().notes[0].text, 'keep me');
+    f.failure = null;
+    await f.listeners.get('online')();
+    assert.equal(f.accounts.get('a').notes[0].text, 'keep me');
+});
+
+test('browser offline hints cannot turn a reachable server into a false offline status', async () => {
+    const f = fixture(), { store } = await f.load();
+    f.accounts.set('a', { ...empty(), revision: 0 });
+    await store.openNotebook('a');
+    await f.listeners.get('offline')();
+    assert.equal(store.getSyncDetails().phase, 'synced');
+    store.savePart('notes', [{ id: 'n', text: 'still connected' }]);
+    await f.listeners.get('offline')();
+    assert.equal(store.getSyncDetails().phase, 'synced');
+    assert.equal(f.accounts.get('a').notes[0].text, 'still connected');
 });

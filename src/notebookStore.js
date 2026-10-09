@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient.js';
 import { normalizeNotebook, readLocalNotebook, writeLocalNotebook } from './localNotebook.js';
 
+import { syncFailurePhase } from './syncFailure.js';
 import { stable, combineNotebooks, compareNotebooks, notebookSummary } from './syncModel.js';
 
 // Writes are serialized and conditional on the revision read from the server.
@@ -59,6 +60,10 @@ function report(c, message) {
     else if (message.startsWith('Cloud revision')) c.phase = 'older';
     else c.phase = 'local';
     if (context === c) notify(message, getSyncDetails());
+}
+function reportFailure(c, error) {
+    c.phase = syncFailurePhase(error);
+    if (context === c) notify(c.localSaved ? 'Sync unavailable' : 'Not saved: sync unavailable. Keep this tab open.', getSyncDetails());
 }
 function scheduleRetry(c) {
     clearTimeout(retryTimer);
@@ -174,14 +179,14 @@ export async function flushNotebook() {
             report(c, c.localSaved ? 'Saved' : 'Saved to cloud — local storage unavailable');
             return !c.dirty;
         } catch (error) {
-            report(c, c.localSaved ? 'Saved locally — connection unavailable; sync will retry' : `Not saved: ${error.message || 'Connection failed'}. Keep this tab open.`);
+            reportFailure(c, error);
             scheduleRetry(c);
             return false;
         } finally { c.running = null; }
     })();
     return c.running;
 }
-export async function readCloudChanges() {
+export async function readCloudChanges({ checkOnly = false } = {}) {
     const c = context;
     if (!c || c.dirty || c.running) return null;
     const revision = c.revision;
@@ -190,7 +195,7 @@ export async function readCloudChanges() {
     const probe = await supabase.from('notebooks').select('revision').eq('user_id', c.id).single();
     if (!current()) return null;
     if (probe.error) {
-        report(c, c.localSaved ? 'Saved locally — connection unavailable' : 'Connection unavailable — local storage unavailable');
+        reportFailure(c, probe.error);
         return null;
     }
     if (!Number.isSafeInteger(probe.data?.revision) || probe.data.revision < revision) {
@@ -203,10 +208,15 @@ export async function readCloudChanges() {
         report(c, c.localSaved ? 'Saved' : 'Loaded from cloud — local storage unavailable');
         return null;
     }
+    if (checkOnly) {
+        c.phase = 'available';
+        if (context === c) notify('Cloud changes available', getSyncDetails());
+        return null;
+    }
     const { data, error } = await supabase.from('notebooks').select('revision,todos,notes').eq('user_id', c.id).single();
     if (!current()) return null;
     if (error) {
-        report(c, c.localSaved ? 'Saved locally — connection unavailable' : 'Connection unavailable — local storage unavailable');
+        reportFailure(c, error);
         return null;
     }
     if (!Number.isSafeInteger(data?.revision) || data.revision <= revision) return null;
@@ -264,8 +274,9 @@ window.addEventListener('beforeunload', event => {
     if (context?.dirty && !context.localSaved) { event.preventDefault(); event.returnValue = ''; }
 });
 function resumeSync() {
-    if (context?.dirty) flushNotebook();
+    if (context?.dirty) return flushNotebook();
 }
-window.addEventListener('offline', () => { if (context) report(context, 'Saved locally — connection unavailable'); });
+// Network events are hints; only a failed server request proves unavailability.
+window.addEventListener('offline', resumeSync);
 window.addEventListener('online', resumeSync);
 window.addEventListener('focus', resumeSync);

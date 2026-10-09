@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
+import { Network } from '@capacitor/network';
 import { App } from '@capacitor/app';
 import { offerDeletedAccountReset } from './localDataReset.js';
 
@@ -20,6 +21,7 @@ export async function setupNativeApp({ ui, onResume, onAuthLink }) {
         if (isActive) onResume();
         else ui.saveDraft();
     });
+    await Network.addListener('networkStatusChange', () => { onResume(); });
     await App.addListener('backButton', () => {
         const active = document.activeElement;
         if (active?.matches('input, textarea, [contenteditable="true"]')) {

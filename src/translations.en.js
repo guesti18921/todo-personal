@@ -1,5 +1,17 @@
 // Interface text only. Never pass entry contents through this dictionary.
 export default {
+  "Нужно обновить вход": "Sign-in needs refreshing",
+  "Сервер не принял авторизацию. Записи сохранены на устройстве. Попробуйте синхронизировать снова; если ошибка повторяется, войдите в аккаунт заново.": "The server rejected authorization. Entries are saved on this device. Try syncing again; if the error persists, sign in again.",
+  "Нет доступа к синхронизации": "Sync access denied",
+  "Сервер отклонил доступ к записям. Локальная копия сохранена. Обратитесь в поддержку.": "The server denied access to entries. Your local copy is saved. Contact support.",
+  "Синхронизация отложена": "Sync delayed",
+  "Сервер временно ограничил запросы. Записи сохранены на устройстве. Повторим отправку автоматически.": "The server temporarily limited requests. Entries are saved on this device. Upload will retry automatically.",
+  "Сервер временно недоступен": "Server temporarily unavailable",
+  "Сервер не смог обработать запрос. Записи сохранены на устройстве. Попробуем снова.": "The server could not process the request. Entries are saved on this device. We will retry.",
+  "Есть изменения в аккаунте": "Account has new changes",
+  "Связь с сервером восстановлена. Обновим записи после завершения редактирования или выбора.": "Server connection restored. Entries will update after editing or selection is finished.",
+  "Записи сохранены здесь. Не удалось связаться с сервером, даже если Wi-Fi подключён. Попробуем соединиться снова; можно продолжать работу.": "Entries are saved here. The server could not be reached, even with Wi-Fi connected. We will retry; you can keep working.",
+
     'Аккаунт удалён на другом устройстве. Локальные записи очищены.': 'Account deleted on another device. Local records have been cleared.',
   "Закреплено": "Pinned",
   "Закреплённые": "Pinned entries",
@@ -219,7 +231,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.16": "TO-DO Personal · version 0.4.16",
+  "TO-DO Personal · версия 0.4.17": "TO-DO Personal · version 0.4.17",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",
