@@ -47,8 +47,8 @@ for (const name of ['ReminderClock.java', 'ReminderClockReceiver.java']) {
 }
 const gradlePath = path.join(root, 'android/app/build.gradle');
 const gradle = fs.readFileSync(gradlePath, 'utf8')
-    .replace(/versionCode \d+/, 'versionCode 18')
-    .replace(/versionName "[^"]+"/, 'versionName "0.4.14"');
+    .replace(/versionCode \d+/, 'versionCode 19')
+    .replace(/versionName "[^"]+"/, 'versionName "0.4.15"');
 fs.writeFileSync(gradlePath, gradle);
 const drawable = path.join(root, 'android/app/src/main/res/drawable');
 fs.mkdirSync(drawable, { recursive: true });
