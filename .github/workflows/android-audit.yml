@@ -1,0 +1,79 @@
+name: Audit Android runtime dependencies
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-local-first-2026-10-06]
+    paths: ['.github/workflows/android-audit.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm run build && npm run android:prepare
+      - name: Resolve all release runtime modules
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/runtime-audit.gradle" <<'GRADLE'
+          import groovy.json.JsonOutput
+          import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+          gradle.projectsEvaluated {
+            def app = gradle.rootProject.project(':app')
+            app.tasks.register('exportRuntimeAudit') {
+              doLast {
+                def components = app.configurations.getByName('releaseRuntimeClasspath').incoming.resolutionResult.allComponents
+                def modules = components.findAll { it.id instanceof ModuleComponentIdentifier }.collect {
+                  [name: it.id.group + ':' + it.id.module, version: it.id.version]
+                }.unique().sort { a,b -> a.name <=> b.name }
+                def target = new File(gradle.rootProject.projectDir.parentFile, 'android-runtime-modules.json')
+                target.text = JsonOutput.prettyPrint(JsonOutput.toJson(modules))
+                println('Resolved release runtime modules: ' + modules.size())
+              }
+            }
+          }
+          GRADLE
+          cd android
+          ./gradlew :app:exportRuntimeAudit --init-script "$RUNNER_TEMP/runtime-audit.gradle" --no-daemon
+      - name: Check exact Maven versions against OSV
+        shell: bash
+        run: |
+          python3 <<'PY'
+          import json, urllib.request, datetime
+          from pathlib import Path
+          modules = json.loads(Path('android-runtime-modules.json').read_text())
+          queries = [{'package': {'name': m['name'], 'ecosystem': 'Maven'}, 'version': m['version']} for m in modules]
+          request = urllib.request.Request('https://api.osv.dev/v1/querybatch', data=json.dumps({'queries': queries}).encode(), headers={'Content-Type': 'application/json'})
+          with urllib.request.urlopen(request, timeout=60) as response:
+              batch = json.load(response)
+          results = batch.get('results', [])
+          if len(results) != len(modules):
+              raise RuntimeError('Incomplete OSV response')
+          if any(r.get('next_page_token') for r in results):
+              raise RuntimeError('OSV pagination needs follow-up; audit not complete')
+          rows = [{**m, 'vulnerabilities': r.get('vulns', [])} for m,r in zip(modules,results)]
+          report = {'checked_at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'scope': 'releaseRuntimeClasspath Maven modules only', 'results': rows}
+          Path('android-runtime-osv-audit.json').write_text(json.dumps(report, indent=2))
+          hits = [{**m, 'ids': [v['id'] for v in r.get('vulns', [])]} for m,r in zip(modules,results) if r.get('vulns')]
+          print(json.dumps({'checked_modules': len(modules), 'matches': hits}, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-runtime-security-audit
+          path: |
+            android-runtime-modules.json
+            android-runtime-osv-audit.json
+          if-no-files-found: error
+          retention-days: 30
