@@ -62,3 +62,24 @@ test('undo refuses newer edits, deletions or type changes without partially reve
         assert.equal(applyListChanges(records, changes, true), false); assert.deepEqual(json(records), beforeUndo);
     }
 });
+
+
+test('chronological browsing keeps pins first and unknown dates last in either direction', async () => {
+ const { browseEntries } = await fixture();
+ const entries = [note('new', '', { createdAt: '2026-10-09T12:00:00Z', updatedAt: '2026-10-10T12:00:00Z' }), note('old', '', { createdAt: '2026-10-01T12:00:00Z', updatedAt: '2026-10-11T12:00:00Z' }), note('unknown'), note('pin', '', { pinned: true, createdAt: '2026-10-05T12:00:00Z' })];
+ assert.deepEqual(json(browseEntries(entries, { sort: 'oldest' })).map(r => r.entry.id), ['pin', 'old', 'new', 'unknown']);
+ assert.deepEqual(json(browseEntries(entries, { sort: 'newest' })).map(r => r.entry.id), ['pin', 'new', 'old', 'unknown']);
+});
+test('batch removal restores exact order and refuses newer records without partial deletion', async () => {
+ const { prepareRemoval, applyRemoval } = await fixture();
+ const state = { todos: { home: [task('a').entry, task('b').entry, task('c').entry] }, notes: [note('n').entry] }, original = json(state);
+ const removal = prepareRemoval(state, ['a', 'c', 'n']);
+ assert.equal(applyRemoval(state, removal), true);
+ assert.deepEqual(state.todos.home.map(e => e.id), ['b']);
+ assert.equal(state.notes.length, 0);
+ assert.equal(applyRemoval(state, removal, true), true);
+ assert.deepEqual(json(state), original);
+ state.notes[0].title = 'Changed';
+ assert.equal(applyRemoval(state, removal), false);
+ assert.equal(state.todos.home.length, 3);
+});

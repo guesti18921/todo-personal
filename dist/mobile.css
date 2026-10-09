@@ -144,3 +144,9 @@
 .mn-about-links a > span:last-child { color: #367f75; font-size: 24px; }
 .mn-about-links a:focus-visible { outline: 2px solid #367f75; outline-offset: 3px; border-radius: 4px; }
 .mn-about-links a:hover { color: #367f75; }
+
+.mn-pinned-mark { display: block; width: fit-content; margin-bottom: 6px; color: #367f75; font-size: 12px; font-weight: 600; }
+.mn-entry-pin { display: flex; align-items: center; gap: 10px; margin: 18px 0; font-size: 15px; }
+.mn-entry-pin input { width: 20px; height: 20px; accent-color: #367f75; }
+.mn-bulk-panel .mn-danger { color: #922b43; border-color: #c38d9e; }
+.mn-bulk-panel .mn-primary.mn-danger { background: #922b43; color: #fff; }

@@ -2,6 +2,11 @@ import { dateValue, reminderMoment } from './reminderModel.js';
 import { suggestDeadline } from './deadlineParser.js';
 import { stable } from './syncModel.js';
 
+export function entryTimestamp(entry) {
+    const value = Date.parse(entry.createdAt || entry.updatedAt || '');
+    return Number.isFinite(value) ? value : null;
+}
+
 export function browseEntries(records, { view = 'all', filter = 'all', due = 'all', query = '', sort = 'deadline', now = new Date() } = {}) {
     const day = dateValue(now), tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
     const search = query.trim().normalize('NFC').toLocaleLowerCase();
@@ -18,6 +23,12 @@ export function browseEntries(records, { view = 'all', filter = 'all', due = 'al
         return [e.name, e.title, e.details, e.text].some(text => String(text || '').normalize('NFC').toLocaleLowerCase().includes(search));
     });
     return found.sort((a, b) => {
+        if (Boolean(a.entry.pinned) !== Boolean(b.entry.pinned)) return a.entry.pinned ? -1 : 1;
+        if (view === 'all' && ['oldest', 'newest'].includes(sort)) {
+            const left = entryTimestamp(a.entry), right = entryTimestamp(b.entry);
+            if (left === null || right === null) return left === right ? a.entry.id.localeCompare(b.entry.id) : left === null ? 1 : -1;
+            return (sort === 'newest' ? right - left : left - right) || a.entry.id.localeCompare(b.entry.id);
+        }
         if (view === 'done') return String(b.entry.completedAt || '').localeCompare(String(a.entry.completedAt || '')) || a.entry.id.localeCompare(b.entry.id);
         if (sort === 'updated') return String(b.entry.updatedAt || '').localeCompare(String(a.entry.updatedAt || '')) || a.entry.id.localeCompare(b.entry.id);
         if (Boolean(a.entry.date) !== Boolean(b.entry.date)) return a.entry.date ? -1 : 1;
@@ -57,6 +68,24 @@ export function applyListChanges(records, changes, undo = false) {
     for (const { record, change } of pairs) {
         for (const key of Object.keys(record.entry)) delete record.entry[key];
         Object.assign(record.entry, JSON.parse(JSON.stringify(undo ? change.before : change.after)));
+    }
+    return true;
+}
+
+
+export function prepareRemoval(state, ids) {
+    const selected = new Set(ids);
+    const lists = [...Object.entries(state.todos).map(([project, list]) => ({ type: 'task', project, list })), { type: 'note', project: null, list: state.notes }];
+    return lists.flatMap(({ type, project, list }) => list.flatMap((entry, index) => selected.has(entry.id) ? [{ type, project, index, entry: JSON.parse(JSON.stringify(entry)) }] : []));
+}
+export function applyRemoval(state, changes, restore = false) {
+    const current = prepareRemoval(state, changes.map(c => c.entry.id));
+    if (restore ? current.length !== 0 : current.length !== changes.length || changes.some(c => !current.some(r => r.type === c.type && r.project === c.project && stable(r.entry) === stable(c.entry)))) return false;
+    if (changes.some(c => !Array.isArray(c.type === 'note' ? state.notes : state.todos[c.project]))) return false;
+    for (const c of [...changes].sort((a, b) => a.index - b.index)) {
+        const list = c.type === 'note' ? state.notes : state.todos[c.project];
+        if (restore) list.splice(Math.min(c.index, list.length), 0, JSON.parse(JSON.stringify(c.entry)));
+        else list.splice(list.findIndex(e => e.id === c.entry.id), 1);
     }
     return true;
 }

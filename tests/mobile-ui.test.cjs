@@ -385,7 +385,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.13/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.14/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -760,6 +760,65 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.13');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.14');
+ } finally { dom.window.close(); }
+});
+
+
+test('all entries group by date and pinned notes stay on top after restart', async () => {
+ const f = listFixture(); let dom = boot(f.seed);
+ try {
+  await ready(dom); let d = dom.window.document;
+  d.querySelector('[data-view="all"]').click();
+  assert.deepEqual([...d.querySelectorAll('.mn-open')].map(b => b.dataset.open), ['a', 'b', 'c', 'n']);
+  assert.equal(d.querySelectorAll('.mn-list .mn-group').length, 4);
+  d.querySelector('[data-open="n"]').click();
+  const pin = d.querySelector('[name="pinned"]'); pin.checked = true; pin.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  d.querySelector('[data-save]').click();
+  assert.equal(d.querySelector('.mn-open').dataset.open, 'n');
+  assert.equal(d.querySelector('.mn-list .mn-group').textContent, 'Закреплённые');
+  const snapshot = Array.from({ length: dom.window.localStorage.length }, (_, i) => { const key = dom.window.localStorage.key(i); return [key, dom.window.localStorage.getItem(key)]; });
+  dom.window.close(); dom = boot(snapshot); await ready(dom); d = dom.window.document;
+  d.querySelector('[data-view="all"]').click(); assert.equal(d.querySelector('.mn-open').dataset.open, 'n');
+  d.querySelector('[data-open="n"]').click(); const unpin = d.querySelector('[name="pinned"]'); unpin.checked = false; unpin.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  d.querySelector('[data-save]').click(); assert.equal(d.querySelector('.mn-open').dataset.open, 'a');
+ } finally { dom.window.close(); }
+});
+test('delete all affects only search results, requires confirmation and supports undo', async () => {
+ const dom = boot(listFixture().seed);
+ try {
+  await ready(dom); const d = dom.window.document;
+  d.querySelector('[data-view="all"]').click();
+  const search = d.querySelector('#mn-search'); search.value = 'note'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  d.querySelector('[data-selection-toggle]').click(); d.querySelector('[data-select-visible]').click(); d.querySelector('[data-bulk="delete"]').click();
+  assert.equal(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.length, 1);
+  d.querySelector('[data-cancel-removal]').click(); d.querySelector('[data-bulk="delete"]').click(); d.querySelector('[data-confirm-removal]').click();
+  const removed = JSON.parse(dom.window.localStorage.getItem(cacheKey)).state;
+  assert.equal(removed.notes.length, 0); assert.equal(removed.todos.home.length, 4);
+  d.querySelector('[data-undo]').click(); assert.equal(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.length, 1);
+ } finally { dom.window.close(); }
+});
+test('success messages expire after three seconds without removing the saved entry', async () => {
+ const dom = boot(listFixture().seed);
+ try {
+  await ready(dom); const d = dom.window.document, realTimer = dom.window.setTimeout; let expiry;
+  dom.window.setTimeout = (fn, ms, ...args) => { if (ms === 3000) expiry = fn; return realTimer(fn, ms, ...args); };
+  d.querySelector('[data-view="all"]').click(); d.querySelector('[data-open="a"]').click(); d.querySelector('[data-save]').click();
+  assert.match(d.querySelector('.mn-message').textContent, /Запись сохранена/); assert.equal(typeof expiry, 'function');
+  expiry(); assert.equal(d.querySelector('.mn-message').textContent, ''); assert.ok(d.querySelector('[data-open="a"]'));
+ } finally { dom.window.close(); }
+});
+
+test('failed batch deletion retains all entries and shows a persistent error', async () => {
+ const dom = boot(listFixture().seed);
+ try {
+  await ready(dom); const d = dom.window.document, storage = dom.window.localStorage;
+  const before = storage.getItem(cacheKey), prototype = Object.getPrototypeOf(storage), original = prototype.setItem;
+  prototype.setItem = function(key, value) { if (key === cacheKey) throw Error('Quota exceeded'); return original.call(this, key, value); };
+  d.querySelector('[data-view="all"]').click(); d.querySelector('[data-selection-toggle]').click(); d.querySelector('[data-select-visible]').click();
+  d.querySelector('[data-bulk="delete"]').click(); d.querySelector('[data-confirm-removal]').click();
+  assert.equal(storage.getItem(cacheKey), before);
+  assert.equal(d.querySelectorAll('.mn-card').length, 4);
+  assert.match(d.querySelector('.mn-message').textContent, /Не удалось сохранить действие/);
  } finally { dom.window.close(); }
 });

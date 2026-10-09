@@ -480,8 +480,7 @@ export const domManipulator = (function () {
         const index = toDo.dataset.index;
 
         toDoObject[project][index].checked = !toDoObject[project][index].checked;
-        console.log(toDoObject[project]);
-    
+
         // save todos to local storage
         savePart("todos", toDoObject);
 
@@ -553,13 +552,6 @@ export const domManipulator = (function () {
             toDosManager.changeCurrentProject(e.target.textContent);
         }
 
-        console.log("you are in folder", toDosManager.getCurrentProject());
-
-    
-
-
-
-        
         // render all to-dos from all projects if on the home page. otherwise
         // only render the relevent to-do items
         if (toDosManager.getCurrentProject() === 'home') {
@@ -602,11 +594,6 @@ export const domManipulator = (function () {
                 toDosManager.changeCurrentProject(e.target.childNodes[0].textContent);
             }
 
-            console.log("you are in folder", toDosManager.getCurrentProject());
-
-
-
-            
             // render all to-dos from all projects if on the home page. otherwise
             // only render the relevent to-do items
             if (toDosManager.getCurrentProject() === 'home') {
@@ -797,9 +784,6 @@ export const domManipulator = (function () {
             renderAllToDos(todos, display);
             // update nave link to show home active
             document.querySelector('.nav').children.item(0).classList.add('nav__selected');
-            console.log(document.querySelector('.nav').children.item(0));
-
-            
 
         })
     }
@@ -959,7 +943,7 @@ export const toDosManager = (function () {
         // only render the relevent to-do items
         if (getCurrentProject() === 'home') {
             domManipulator.renderAllToDos(toDoList, display);
-            console.log(toDoList);
+
         } else {
             domManipulator.renderToDos(toDoList, display);
         }
@@ -1036,7 +1020,6 @@ export const toDosManager = (function () {
             
             // sets the current folder variable to nav item that was clicked
             toDosManager.changeCurrentProject(newProject);
-            console.log("you are in folder", toDosManager.getCurrentProject());
 
             // render all to-dos from all projects if on the home page. otherwise
             // only render the relevent to-do items
@@ -1062,11 +1045,11 @@ export const toDosManager = (function () {
             // render all to-dos from all projects if on the home page. otherwise
             // only render the relevent to-do items
             if (newProject.toLowerCase() === 'home') {
-                console.log(`${newProject} already exists. changing folder to ${newProject}`);
+
                 changeCurrentProject(newProject);
                 domManipulator.renderAllToDos(todos, display);
             } else {
-                console.log(`${newProject} already exists. changing folder to ${newProject}`);
+
                 changeCurrentProject(newProject);
                 domManipulator.renderToDos(todos, display);
             }
@@ -1124,7 +1107,7 @@ export const toDosManager = (function () {
 
                 // update nave link to show home active
                 document.querySelector('.nav').children.item(0).classList.add('nav__selected');
-                console.log(document.querySelector('.nav').children.item(0));
+
             }
         }
         
@@ -1283,7 +1266,7 @@ export const notesManager = (function () {
 
     // delete selected note and refresh the notes
     function deleteNote(e, notes) {
-        console.log(notes);
+
         const i = e.target.parentElement.dataset.index;
         notes.splice(i, 1);
         arrangeNotes(notes);

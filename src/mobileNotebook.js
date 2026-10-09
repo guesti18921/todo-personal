@@ -1,5 +1,5 @@
 import { t, ui, getLanguage } from './i18n.js';
-import { browseEntries, prepareListAction, applyListChanges } from './listActions.js';
+import { browseEntries, prepareListAction, applyListChanges, entryTimestamp, prepareRemoval, applyRemoval } from './listActions.js';
 import { createEntryId } from './localNotebook.js';
 import { syncPresentation as rawSyncPresentation, notebookSummary } from './syncModel.js';
 import { suggestDeadline } from './deadlineParser.js';
@@ -27,7 +27,7 @@ export function todayGroups(records, day = localDateString()) {
 export function saveEntry(todos, notes, fields, previous = null) {
     const id = previous?.entry.id || createEntryId();
     const stamp = new Date().toISOString();
-    const common = { ...(previous?.entry || {}), id, date: fields.date || '', time: fields.date ? fields.time || '' : '', today: !fields.date && Boolean(fields.today), deadlineDismissed: fields.deadlineDismissed || '', deadlineAnchor: fields.deadlineAnchor || previous?.entry.deadlineAnchor || null, updatedAt: stamp };
+    const common = { ...(previous?.entry || {}), id, date: fields.date || '', time: fields.date ? fields.time || '' : '', today: !fields.date && Boolean(fields.today), deadlineDismissed: fields.deadlineDismissed || '', deadlineAnchor: fields.deadlineAnchor || previous?.entry.deadlineAnchor || null, createdAt: previous?.entry.createdAt || previous?.entry.updatedAt || stamp, pinned: fields.pinned === undefined ? Boolean(previous?.entry.pinned) : Boolean(fields.pinned), updatedAt: stamp };
     common.reminder = normalizeReminder(fields.reminder ?? previous?.entry.reminder);
     if (previous && previous.type !== fields.type) {
         if (previous.type === 'note') notes.splice(notes.findIndex(entry => entry.id === id), 1);
@@ -77,7 +77,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
     reminderBanner.before(syncNotice);
     const main = shell.querySelector('.mn-main'), nav = shell.querySelector('.mn-nav'), add = shell.querySelector('.mn-add'), message = shell.querySelector('.mn-message');
     let view = 'today', editor = false, editingId = null, creating = false, type = 'task', query = '', filter = 'all', account = null, draftSafe = true, statusText = '', undo = null, undoTimer;
-    let dueFilter = 'all', listSort = 'deadline', selecting = false, selected = new Set();
+    let dueFilter = 'all', listSort = 'oldest', selecting = false, selected = new Set();
     const records = () => listEntries(todos, notes);
     const find = id => records().find(record => record.entry.id === id);
     const draftKey = () => `todo-personal:entry-draft:${account}`;
@@ -88,18 +88,24 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
     let reminderState = { native: false, enabled: false, permission: 'unknown', exact: false, scheduled: 0, error: '' }, reminderQueue = [], reminderBusy = false;
     const suggestionKey = value => value ? `${value.date}|${value.time}` : '';
     function readPreferences() {
-        try { const prefs = JSON.parse(localStorage.getItem(preferencesKey())); smartDates = prefs?.smartDates !== false; listSort = prefs?.listSort === 'updated' ? 'updated' : 'deadline'; }
-        catch (_) { smartDates = true; listSort = 'deadline'; }
+        try { const prefs = JSON.parse(localStorage.getItem(preferencesKey())); smartDates = prefs?.smartDates !== false; listSort = ['oldest', 'newest', 'updated', 'deadline'].includes(prefs?.listSort) ? prefs.listSort : 'oldest'; }
+        catch (_) { smartDates = true; listSort = 'oldest'; }
     }
-    const say = text => { message.textContent = t(text); };
+    let messageTimer, pendingRemoval = null;
+    const say = text => {
+        clearTimeout(messageTimer); clearTimeout(undoTimer); undo = null;
+        message.textContent = t(text);
+        const important = /не удалось|не закрывайте|не сохран|cannot|could not|unsaved|do not close|failed/i.test(text);
+        if (text && !important) messageTimer = setTimeout(() => { message.textContent = ''; }, 3000);
+    };
     function offerUndo(text, action) {
-        clearTimeout(undoTimer);
+        clearTimeout(undoTimer); clearTimeout(messageTimer);
         undo = action;
         message.innerHTML = ui`${text} <button type="button" data-undo>Отменить</button>`;
         undoTimer = setTimeout(() => { if (undo === action) { undo = null; say(''); } }, 8000);
     }
     function fields() {
-        return { type, text: main.querySelector('[name="text"]').value, details: main.querySelector('[name="details"]').value, date: main.querySelector('[name="date"]').value, time: main.querySelector('[name="time"]').value, today: main.querySelector('[name="today"]').checked, deadlineDismissed: dismissedDeadline, deadlineAnchor,
+        return { type, pinned: main.querySelector('[name="pinned"]').checked, text: main.querySelector('[name="text"]').value, details: main.querySelector('[name="details"]').value, date: main.querySelector('[name="date"]').value, time: main.querySelector('[name="time"]').value, today: main.querySelector('[name="today"]').checked, deadlineDismissed: dismissedDeadline, deadlineAnchor,
             reminder: normalizeReminder({ mode: main.querySelector('[name="reminderMode"]').value, date: main.querySelector('[name="reminderDate"]').value, time: main.querySelector('[name="reminderTime"]').value }) };
     }
     function stashDraft() {
@@ -138,7 +144,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
         if (reminder) labels.push(reminder + (reminderState.enabled ? '' : t(' · на этом устройстве выключено')));
         if (entry.conflictCopy) labels.push(t('Копия с устройства'));
         if (project && !['home', 'today', 'week'].includes(project)) labels.push(project);
-        return `<article class="mn-card ${entry.checked ? 'mn-completed' : ''}">${selecting ? ui`<button class="mn-select" type="button" data-select="${escape(entry.id)}" aria-pressed="${selected.has(entry.id)}" aria-label="Выбрать: ${escape(text)}">${selected.has(entry.id) ? '✓' : '○'}</button>` : kind === 'task' ? `<button class="mn-check" type="button" data-check="${escape(entry.id)}" aria-label="${entry.checked ? t('Вернуть в активные') : t('Выполнить')}: ${escape(text)}">${entry.checked ? '✓' : '○'}</button>` : t('<span class="mn-note-label">Заметка</span>')}<button class="mn-open" type="button" data-open="${escape(entry.id)}"><span class="mn-title" dir="auto">${escape(text)}</span>${details ? `<span class="mn-details" dir="auto">${escape(details)}</span>` : ''}<span class="mn-meta">${escape(labels.join(' · '))}</span></button></article>`;
+        return `<article class="mn-card ${entry.checked ? 'mn-completed' : ''}">${selecting ? ui`<button class="mn-select" type="button" data-select="${escape(entry.id)}" aria-pressed="${selected.has(entry.id)}" aria-label="Выбрать: ${escape(text)}">${selected.has(entry.id) ? '✓' : '○'}</button>` : kind === 'task' ? `<button class="mn-check" type="button" data-check="${escape(entry.id)}" aria-label="${entry.checked ? t('Вернуть в активные') : t('Выполнить')}: ${escape(text)}">${entry.checked ? '✓' : '○'}</button>` : t('<span class="mn-note-label">Заметка</span>')}<button class="mn-open" type="button" data-open="${escape(entry.id)}">${entry.pinned ? `<span class="mn-pinned-mark">${t('Закреплено')}</span>` : ''}<span class="mn-title" dir="auto">${escape(text)}</span>${details ? `<span class="mn-details" dir="auto">${escape(details)}</span>` : ''}<span class="mn-meta">${escape(labels.join(' · '))}</span></button></article>`;
     }
     function group(label, list) { return list.length ? `<section><h2 class="mn-group">${label}</h2>${list.map(card).join('')}</section>` : ''; }
     function languageSettings() { return ui`<section class="mn-setting"><h2>Язык интерфейса</h2><select class="mn-input" data-language aria-label="Язык интерфейса"><option value="ru" ${getLanguage() === 'ru' ? 'selected' : ''}>Русский</option><option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>English</option></select><p>Язык можно изменить в любой момент. Текст записей не переводится.</p></section>`; }
@@ -149,10 +155,25 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
         renderBulk(found);
         let html;
         if (view === 'today') {
-            const groups = todayGroups(found);
-            html = group(t('Просрочено'), groups.overdue) + group(t('Сегодня'), groups.today) + group(t('Без срока · добавлено в Сегодня'), groups.pinned);
+            const pinned = found.filter(r => r.entry.pinned);
+            const groups = todayGroups(found.filter(r => !r.entry.pinned));
+            html = group(t('Закреплённые'), pinned) + group(t('Просрочено'), groups.overdue) + group(t('Сегодня'), groups.today) + group(t('Без срока · добавлено в Сегодня'), groups.pinned);
         } else {
-            html = found.map(card).join('');
+            const pinned = found.filter(r => r.entry.pinned), regular = found.filter(r => !r.entry.pinned);
+            html = group(t('Закреплённые'), pinned);
+            if (view === 'all') {
+                const buckets = new Map();
+                for (const record of regular) {
+                    const timestamp = ['oldest', 'newest'].includes(listSort) ? entryTimestamp(record.entry) : listSort === 'updated' ? Date.parse(record.entry.updatedAt || '') : record.entry.date ? new Date(record.entry.date + 'T12:00:00').getTime() : null;
+                    const day = timestamp !== null && Number.isFinite(timestamp) ? localDateString(new Date(timestamp)) : '';
+                    if (!buckets.has(day)) buckets.set(day, []);
+                    buckets.get(day).push(record);
+                }
+                for (const [day, list] of buckets) {
+                    const label = day ? new Intl.DateTimeFormat(getLanguage(), { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(day + 'T12:00:00')) : t(listSort === 'deadline' ? 'Без срока' : 'Дата неизвестна');
+                    html += group(label, list);
+                }
+            } else html += regular.map(card).join('');
         }
         main.querySelector('.mn-list').innerHTML = html || `<p class="mn-empty">${query || filter !== 'all' || dueFilter !== 'all' ? t('По выбранным условиям ничего не найдено. Измените поиск или сбросьте фильтры.') : view === 'today' ? t('На сегодня ничего не запланировано.') : view === 'done' ? t('Здесь появятся выполненные задачи.') : t('Записей пока нет. Нажмите +, чтобы создать первую.')}</p>`;
     }
@@ -171,7 +192,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
         if (view === 'sync') { renderSync(); return; }
         if (view === 'delete-account') { renderDeletion(); return; }
         if (view === 'settings') {
-            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button><button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.13</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
+            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button><button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.14</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
             return;
         }
         // Android's keyboard changes the viewport. Keep the focused search
@@ -199,18 +220,35 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
     }
     function visibleEntries() { return browseEntries(records(), { view, filter, due: dueFilter, query, sort: listSort }); }
     function listControls() {
-        return ui`${view === 'all' ? ui`<details class="mn-list-options" ${dueFilter !== 'all' ? 'open' : ''}><summary>Срок и порядок записей${dueFilter !== 'all' ? t(' · фильтр включён') : ''}</summary><div class="mn-list-selects"><label>Срок<select class="mn-input" data-due-filter>${[['all', t('Любой срок')], ['overdue', t('Просрочено')], ['today', t('Сегодня')], ['tomorrow', t('Завтра')], ['none', t('Без срока')]].map(([key, label]) => `<option value="${key}" ${dueFilter === key ? 'selected' : ''}>${t(label)}</option>`).join('')}</select></label><label>Порядок<select class="mn-input" data-list-sort>${[['deadline', t('Сначала ближайший срок')], ['updated', t('Сначала недавно изменённые')]].map(([key, label]) => `<option value="${key}" ${listSort === key ? 'selected' : ''}>${t(label)}</option>`).join('')}</select></label></div></details>` : ''}<div class="mn-list-tools"><button type="button" class="mn-secondary" data-selection-toggle>${selecting ? t('Завершить выбор') : t('Выбрать несколько')}</button><button type="button" class="mn-secondary" data-reset-filters ${query || filter !== 'all' || dueFilter !== 'all' ? '' : 'hidden'}>Сбросить фильтры</button></div>`;
+        return ui`${view === 'all' ? ui`<details class="mn-list-options" ${dueFilter !== 'all' ? 'open' : ''}><summary>Срок и порядок записей${dueFilter !== 'all' ? t(' · фильтр включён') : ''}</summary><div class="mn-list-selects"><label>Срок<select class="mn-input" data-due-filter>${[['all', t('Любой срок')], ['overdue', t('Просрочено')], ['today', t('Сегодня')], ['tomorrow', t('Завтра')], ['none', t('Без срока')]].map(([key, label]) => `<option value="${key}" ${dueFilter === key ? 'selected' : ''}>${t(label)}</option>`).join('')}</select></label><label>Порядок<select class="mn-input" data-list-sort>${[['oldest', t('Сначала старые')], ['newest', t('Сначала новые')], ['deadline', t('Сначала ближайший срок')], ['updated', t('Сначала недавно изменённые')]].map(([key, label]) => `<option value="${key}" ${listSort === key ? 'selected' : ''}>${t(label)}</option>`).join('')}</select></label></div></details>` : ''}<div class="mn-list-tools"><button type="button" class="mn-secondary" data-selection-toggle>${selecting ? t('Завершить выбор') : t('Выбрать несколько')}</button><button type="button" class="mn-secondary" data-reset-filters ${query || filter !== 'all' || dueFilter !== 'all' ? '' : 'hidden'}>Сбросить фильтры</button></div>`;
     }
     function renderBulk(found) {
         const area = main.querySelector('.mn-bulk'); if (!area) return;
         area.classList.toggle('mn-bulk-selecting', selecting);
         const reset = main.querySelector('[data-reset-filters]'); if (reset) reset.hidden = !query && filter === 'all' && dueFilter === 'all';
+        if (pendingRemoval) { area.innerHTML = ui`<section class="mn-bulk-panel" role="alert"><p>Удалить выбранные записи (${pendingRemoval.length})?</p><p>Их напоминания также будут отменены.</p><div><button type="button" class="mn-secondary" data-cancel-removal>Отмена</button><button type="button" class="mn-primary mn-danger" data-confirm-removal>Удалить выбранные</button></div></section>`; return; }
         if (!selecting) { area.innerHTML = ui`<p class="mn-result-count">Записей: ${found.length}</p>`; return; }
         const tasks = found.filter(r => selected.has(r.entry.id) && r.type === 'task').length;
-        area.innerHTML = ui`<section class="mn-bulk-panel" aria-label="Действия с выбранными записями"><p role="status">Выбрано: ${selected.size}</p><div><button type="button" class="mn-secondary" data-select-visible ${found.length ? '' : 'disabled'}>${selected.size === found.length && found.length ? t('Снять выбор') : t('Выбрать все найденные')}</button>${view === 'done' ? ui`<button type="button" class="mn-primary" data-bulk="restore" ${tasks ? '' : 'disabled'}>Вернуть задачи в активные (${tasks})</button>` : ui`<button type="button" class="mn-primary" data-bulk="complete" ${tasks ? '' : 'disabled'}>Выполнить задачи (${tasks})</button><button type="button" class="mn-secondary" data-bulk="tomorrow" ${selected.size ? '' : 'disabled'}>Перенести на завтра</button>`}</div><details class="mn-bulk-help"><summary>Что изменится?</summary><p>${view === 'done' ? t('Вернутся только выбранные задачи. Напоминания можно включить в каждой записи.') : t('Выполнение относится только к задачам и отменяет их напоминания. Перенос меняет срок задач и заметок, сохраняя время. Напоминания «В срок» и «За…» следуют за сроком; выбранные отдельно остаются на своей дате.')}</p></details></section>`;
+        area.innerHTML = ui`<section class="mn-bulk-panel" aria-label="Действия с выбранными записями"><p role="status">Выбрано: ${selected.size}</p><div><button type="button" class="mn-secondary" data-select-visible ${found.length ? '' : 'disabled'}>${selected.size === found.length && found.length ? t('Снять выбор') : t('Выбрать все найденные')}</button>${view === 'done' ? ui`<button type="button" class="mn-primary" data-bulk="restore" ${tasks ? '' : 'disabled'}>Вернуть задачи в активные (${tasks})</button>` : ui`<button type="button" class="mn-primary" data-bulk="complete" ${tasks ? '' : 'disabled'}>Выполнить задачи (${tasks})</button><button type="button" class="mn-secondary" data-bulk="tomorrow" ${selected.size ? '' : 'disabled'}>Перенести на завтра</button>`}<button type="button" class="mn-secondary mn-danger" data-bulk="delete" ${selected.size ? '' : 'disabled'}>Удалить выбранные (${selected.size})</button></div><details class="mn-bulk-help"><summary>Что изменится?</summary><p>${view === 'done' ? t('Вернутся только выбранные задачи. Напоминания можно включить в каждой записи.') : t('Выполнение относится только к задачам и отменяет их напоминания. Перенос меняет срок задач и заметок, сохраняя время. Напоминания «В срок» и «За…» следуют за сроком; выбранные отдельно остаются на своей дате.')}</p></details></section>`;
     }
-    function clearSelection() { selecting = false; selected.clear(); }
+    function clearSelection() { pendingRemoval = null; selecting = false; selected.clear(); }
+    function deleteSelection() {
+        const changes = pendingRemoval;
+        pendingRemoval = null;
+        if (!changes || !applyRemoval({ todos, notes }, changes)) { say(t('Записи изменились. Выберите их заново.')); renderList(); return; }
+        if (persist() === false) {
+            applyRemoval({ todos, notes }, changes, true); persist(); renderList();
+            say(t('Не удалось сохранить действие на устройстве. Изменения отменены. Освободите место и попробуйте снова.')); return;
+        }
+        selecting = false; selected.clear(); render();
+        offerUndo(t('Записи удалены.'), () => {
+            if (!applyRemoval({ todos, notes }, changes, true)) return false;
+            if (persist() !== false) return true;
+            applyRemoval({ todos, notes }, changes); persist(); return false;
+        });
+    }
     function bulkAction(action) {
+        if (action === 'delete') { pendingRemoval = prepareRemoval({ todos, notes }, [...selected]); renderBulk(visibleEntries()); return; }
         const changes = prepareListAction(visibleEntries(), selected, action);
         if (!changes.length) { say(t('Изменять нечего: выбранные записи уже имеют этот срок или состояние.')); return; }
         if (!applyListChanges(records(), changes)) { say(t('Записи изменились. Выберите их заново.')); return; }
@@ -281,7 +319,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
         type = previous?.type || (draft?.type === 'note' ? 'note' : 'task');
         dismissedDeadline = entry?.deadlineDismissed || draft?.deadlineDismissed || '';
         nav.hidden = true; add.hidden = true;
-        main.innerHTML = ui`<div class="mn-editor-header"><button type="button" class="mn-back" data-back>← Назад</button><button type="button" class="mn-primary" data-save>Сохранить</button></div><h1>${previous ? t('Запись') : t('Новая запись')}</h1>${draft ? t('<p class="mn-draft-restored">Черновик восстановлен. Нажмите «Сохранить», когда закончите.</p>') : ''}<div class="mn-types">${[['task', t('Задача')], ['note', t('Заметка')]].map(([value, label]) => `<button type="button" data-type="${value}" aria-pressed="${type === value}">${label}</button>`).join('')}</div><p class="mn-type-help">${type === 'task' ? t('Можно отметить выполненной.') : t('Для мыслей и информации.')}</p><label for="mn-text">Что записать?</label><textarea class="mn-input mn-text" id="mn-text" name="text" dir="auto" placeholder="Запишите мысль или задачу">${escape(text)}</textarea><aside class="mn-suggestion" aria-label="Предложенный срок" aria-live="polite" hidden></aside><details class="mn-language-examples"><summary>Как указать срок словами</summary><p>Можно написать день недели или срок через число минут, часов, дней или недель. Проверьте предложенную дату перед применением.</p><ul>${[[t('Русский'), 'в пятницу в 18:00; через 2 часа'], ['English', 'Friday at 6 pm; in 2 hours'], ['Deutsch', 'Freitag um 18:00; in 2 Stunden'], ['Italiano', 'venerdì alle 18:00; tra 2 ore'], ['Español', 'viernes a las 18:00; en 2 horas'], ['Français', 'vendredi à 18:00; dans 2 heures'], ['Português', 'sexta-feira às 18:00; daqui a 2 horas'], ['中文', '星期五18:00; 2小时后'], ['日本語', '金曜日18:00; 2時間後'], ['한국어', '금요일 18:00; 2시간 후']].map(([language, sample]) => `<li><strong>${language}:</strong> ${sample}</li>`).join('')}</ul><p>«Следующая пятница» означает пятницу следующей недели. «Через 2 часа» отсчитывается от ввода фразы. Текст записи не сокращается и не переводится.</p></details><details ${details ? 'open' : ''}><summary>Подробности</summary><label for="mn-details">Дополнительный текст</label><textarea class="mn-input" id="mn-details" name="details" dir="auto">${escape(details)}</textarea></details><label for="mn-date">Срок · необязательно</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-date" name="date" value="${escape(entry?.date || draft?.date || '')}"><input class="mn-input" type="time" name="time" aria-label="Время срока" value="${escape(entry?.time || draft?.time || '')}"></div><div class="mn-filters"><button type="button" data-date="today">Сегодня</button><button type="button" data-date="tomorrow">Завтра</button><button type="button" data-date="none">Без срока</button></div><p class="mn-deadline-help"></p><label class="mn-pin"><input type="checkbox" name="today" ${(entry ? (entry.today ?? (previous?.project === 'today')) : draft?.today) ? 'checked' : ''}>Также показать в «Сегодня» без срока</label><section class="mn-reminder-form"><h2>Напоминание</h2><label for="mn-reminder-mode">Когда напомнить?</label><select class="mn-input" id="mn-reminder-mode" name="reminderMode">${REMINDER_OPTIONS.map(([value, label]) => `<option value="${value}" ${reminder.mode === value ? 'selected' : ''}>${t(label)}</option>`).join('')}</select><div class="mn-reminder-custom" hidden><label for="mn-reminder-date">Дата напоминания</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-reminder-date" name="reminderDate" value="${escape(reminder.date)}"><input class="mn-input" type="time" name="reminderTime" aria-label="Время напоминания" value="${escape(reminder.time)}"></div></div><p class="mn-reminder-preview" aria-live="polite"></p><p class="mn-reminder-device"></p><button type="button" class="mn-secondary" data-enable-reminders>Включить напоминания на этом устройстве</button></section>${previous?.type === 'task' ? `<button type="button" class="mn-secondary" data-complete="${escape(id)}">${entry.checked ? t('Вернуть в активные') : t('Выполнить задачу')}</button>` : ''}${previous ? ui`<button type="button" class="mn-delete" data-delete="${escape(id)}">Удалить запись</button>` : ''}`;
+        main.innerHTML = ui`<div class="mn-editor-header"><button type="button" class="mn-back" data-back>← Назад</button><button type="button" class="mn-primary" data-save>Сохранить</button></div><h1>${previous ? t('Запись') : t('Новая запись')}</h1>${draft ? t('<p class="mn-draft-restored">Черновик восстановлен. Нажмите «Сохранить», когда закончите.</p>') : ''}<div class="mn-types">${[['task', t('Задача')], ['note', t('Заметка')]].map(([value, label]) => `<button type="button" data-type="${value}" aria-pressed="${type === value}">${label}</button>`).join('')}</div><p class="mn-type-help">${type === 'task' ? t('Можно отметить выполненной.') : t('Для мыслей и информации.')}</p><label for="mn-text">Что записать?</label><textarea class="mn-input mn-text" id="mn-text" name="text" dir="auto" placeholder="Запишите мысль или задачу">${escape(text)}</textarea><aside class="mn-suggestion" aria-label="Предложенный срок" aria-live="polite" hidden></aside><details class="mn-language-examples"><summary>Как указать срок словами</summary><p>Можно написать день недели или срок через число минут, часов, дней или недель. Проверьте предложенную дату перед применением.</p><ul>${[[t('Русский'), 'в пятницу в 18:00; через 2 часа'], ['English', 'Friday at 6 pm; in 2 hours'], ['Deutsch', 'Freitag um 18:00; in 2 Stunden'], ['Italiano', 'venerdì alle 18:00; tra 2 ore'], ['Español', 'viernes a las 18:00; en 2 horas'], ['Français', 'vendredi à 18:00; dans 2 heures'], ['Português', 'sexta-feira às 18:00; daqui a 2 horas'], ['中文', '星期五18:00; 2小时后'], ['日本語', '金曜日18:00; 2時間後'], ['한국어', '금요일 18:00; 2시간 후']].map(([language, sample]) => `<li><strong>${language}:</strong> ${sample}</li>`).join('')}</ul><p>«Следующая пятница» означает пятницу следующей недели. «Через 2 часа» отсчитывается от ввода фразы. Текст записи не сокращается и не переводится.</p></details><details ${details ? 'open' : ''}><summary>Подробности</summary><label for="mn-details">Дополнительный текст</label><textarea class="mn-input" id="mn-details" name="details" dir="auto">${escape(details)}</textarea></details><label class="mn-entry-pin"><input type="checkbox" name="pinned" ${(entry?.pinned ?? draft?.pinned) ? 'checked' : ''}>Закрепить сверху</label><label for="mn-date">Срок · необязательно</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-date" name="date" value="${escape(entry?.date || draft?.date || '')}"><input class="mn-input" type="time" name="time" aria-label="Время срока" value="${escape(entry?.time || draft?.time || '')}"></div><div class="mn-filters"><button type="button" data-date="today">Сегодня</button><button type="button" data-date="tomorrow">Завтра</button><button type="button" data-date="none">Без срока</button></div><p class="mn-deadline-help"></p><label class="mn-pin"><input type="checkbox" name="today" ${(entry ? (entry.today ?? (previous?.project === 'today')) : draft?.today) ? 'checked' : ''}>Также показать в «Сегодня» без срока</label><section class="mn-reminder-form"><h2>Напоминание</h2><label for="mn-reminder-mode">Когда напомнить?</label><select class="mn-input" id="mn-reminder-mode" name="reminderMode">${REMINDER_OPTIONS.map(([value, label]) => `<option value="${value}" ${reminder.mode === value ? 'selected' : ''}>${t(label)}</option>`).join('')}</select><div class="mn-reminder-custom" hidden><label for="mn-reminder-date">Дата напоминания</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-reminder-date" name="reminderDate" value="${escape(reminder.date)}"><input class="mn-input" type="time" name="reminderTime" aria-label="Время напоминания" value="${escape(reminder.time)}"></div></div><p class="mn-reminder-preview" aria-live="polite"></p><p class="mn-reminder-device"></p><button type="button" class="mn-secondary" data-enable-reminders>Включить напоминания на этом устройстве</button></section>${previous?.type === 'task' ? `<button type="button" class="mn-secondary" data-complete="${escape(id)}">${entry.checked ? t('Вернуть в активные') : t('Выполнить задачу')}</button>` : ''}${previous ? ui`<button type="button" class="mn-delete" data-delete="${escape(id)}">Удалить запись</button>` : ''}`;
         updateDate();
         if (!id && !draft) main.querySelector('[name="text"]').focus();
     }
@@ -415,9 +453,11 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
                 });
             } catch (_) { say(t('Не удалось удалить черновик. Он сохранён на устройстве.')); }
         }
-        else if (button.hasAttribute('data-selection-toggle')) { selecting = !selecting; selected.clear(); render(); }
-        else if (button.hasAttribute('data-select')) { const id = button.dataset.select; if (selected.has(id)) selected.delete(id); else selected.add(id); renderList(); }
-        else if (button.hasAttribute('data-select-visible')) { const found = visibleEntries(); selected = selected.size === found.length ? new Set() : new Set(found.map(r => r.entry.id)); renderList(); }
+        else if (button.hasAttribute('data-selection-toggle')) { pendingRemoval = null; selecting = !selecting; selected.clear(); render(); }
+        else if (button.hasAttribute('data-select')) { pendingRemoval = null; const id = button.dataset.select; if (selected.has(id)) selected.delete(id); else selected.add(id); renderList(); }
+        else if (button.hasAttribute('data-select-visible')) { pendingRemoval = null; const found = visibleEntries(); selected = selected.size === found.length ? new Set() : new Set(found.map(r => r.entry.id)); renderList(); }
+        else if (button.hasAttribute('data-cancel-removal')) { pendingRemoval = null; renderBulk(visibleEntries()); }
+        else if (button.hasAttribute('data-confirm-removal')) deleteSelection();
         else if (button.hasAttribute('data-bulk')) bulkAction(button.dataset.bulk);
         else if (button.hasAttribute('data-reset-filters')) { query = ''; filter = 'all'; dueFilter = 'all'; selected.clear(); render(); }
         else if (button.hasAttribute('data-sync-open')) openSync();
@@ -495,7 +535,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
         else if (button.hasAttribute('data-logout')) { logout(); }
     });
     shell.addEventListener('input', event => {
-        if (event.target.id === 'mn-search') { query = event.target.value; selected.clear(); renderList(); }
+        if (event.target.id === 'mn-search') { pendingRemoval = null; query = event.target.value; selected.clear(); renderList(); }
         else if (editor) {
             if (['date', 'time'].includes(event.target.name)) {
                 dismissedDeadline = suggestionKey(parseSuggestion());
@@ -507,9 +547,9 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
     });
     shell.addEventListener('change', event => {
         if (event.target.matches('[data-language]')) { changeLanguage(event.target.value); render(); return; }
-        if (event.target.hasAttribute('data-due-filter')) { dueFilter = event.target.value; selected.clear(); render(); }
+        if (event.target.hasAttribute('data-due-filter')) { pendingRemoval = null; dueFilter = event.target.value; selected.clear(); render(); }
         else if (event.target.hasAttribute('data-list-sort')) {
-            const previous = listSort; listSort = event.target.value === 'updated' ? 'updated' : 'deadline';
+            const previous = listSort; listSort = ['oldest', 'newest', 'updated', 'deadline'].includes(event.target.value) ? event.target.value : 'oldest';
             try { localStorage.setItem(preferencesKey(), JSON.stringify({ smartDates, listSort })); }
             catch (_) { listSort = previous; say(t('Не удалось сохранить порядок записей на устройстве.')); }
             render();
