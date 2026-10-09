@@ -1,4 +1,4 @@
-# Preview publication: 35668b4b5a2f443db861040e9d23f64c3e8eb222
+# Preview publication: 05a34818a296e6256faa984586bfb74e52ab8835
 name: Publish TO-DO
 
 on:
@@ -29,7 +29,7 @@ jobs:
       - name: Get mobile preview
         uses: actions/checkout@v4
         with:
-          ref: android-local-first-2026-10-06
+          ref: 05a34818a296e6256faa984586bfb74e52ab8835
           path: mobile
       - name: Set up Node
         uses: actions/setup-node@v4
