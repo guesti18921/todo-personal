@@ -4,7 +4,7 @@ import { supabase, SUPABASE_URL, SUPABASE_PUBLIC_KEY } from './supabaseClient.js
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { createReminderEngine } from './reminderEngine.js';
 import { listEntries, createMobileNotebook } from './mobileNotebook.js';
-import { isNativeApp, setupNativeApp, openAuthBrowser } from './nativeApp.js';
+import { isNativeApp, setupNativeApp, openAuthBrowser, resetDeletedAccountData } from './nativeApp.js';
 import { readCachedAccount } from './localAccount.js';
 import { AUTH_REDIRECT_URL, createAuthLinkHandler } from './authDeepLink.js';
 import { boundedFetch } from './networkFetch.js';
@@ -509,8 +509,20 @@ const checkAccount = createAccountGuard({
         authMessage.textContent = t(cleaned && remindersCleared !== false
             ? 'Аккаунт удалён на другом устройстве. Локальные записи очищены.'
             : 'Аккаунт удалён. Не удалось полностью очистить данные на устройстве. Очистите данные приложения в настройках телефона.');
+        await offerLocalResetAfterDeletion();
     }
 });
+
+async function offerLocalResetAfterDeletion() {
+    try {
+        const result = await resetDeletedAccountData(() => activeUser, t);
+        if (!activeUser && result.offered && !result.resetRequested) {
+            authMessage.textContent = t('Аккаунт удалён. Локальные записи недоступны, но остатки текста могут оставаться в файлах. Для полной очистки удалите данные приложения в настройках Android.');
+        }
+    } catch (_) {
+        if (!activeUser) authMessage.textContent = t('Аккаунт удалён. Для полной очистки удалите данные приложения в настройках Android.');
+    }
+}
 
 async function loadAccount(id, ticket) {
     retryLoad.disabled = switchAccount.disabled = true;
@@ -702,6 +714,7 @@ async function deleteAccount() {
             authPassword.autocomplete = 'current-password';
             updateGoogleVisibility();
             authMessage.textContent = t(cleaned && remindersCleared !== false ? 'Аккаунт и записи удалены.' : 'Аккаунт удалён. Не удалось полностью очистить данные на устройстве. Очистите данные приложения в настройках телефона.');
+            await offerLocalResetAfterDeletion();
         }
     } catch (_) {
         if (!deleted) throw new Error(t('Удаление не подтверждено. Проверьте интернет и повторите попытку.'));

@@ -67,8 +67,9 @@ test('PKCE code exchange works and errors never display credential URLs', async 
 test('native launch and running app deliver callbacks through the same handler', async () => {
     const events = new Map(), received = [];
     const context = vm.createContext({ document: { documentElement: { classList: { add() {} } } } });
-    const capacitor = new vm.SyntheticModule(['Capacitor'], function () {
-        this.setExport('Capacitor', { isNativePlatform: () => true });
+    const capacitor = new vm.SyntheticModule(['Capacitor', 'registerPlugin'], function () {
+        this.setExport('Capacitor', { isNativePlatform: () => true, getPlatform: () => 'android' });
+        this.setExport('registerPlugin', () => ({}));
     }, { context });
     const app = new vm.SyntheticModule(['App'], function () {
         this.setExport('App', {
@@ -79,7 +80,9 @@ test('native launch and running app deliver callbacks through the same handler',
     const native = new vm.SourceTextModule(readFileSync('src/nativeApp.js', 'utf8'), { context });
     const opened = [];
     const browser = new vm.SyntheticModule(['Browser'], function () { this.setExport('Browser', { async open(options) { opened.push(options.url); } }); }, { context });
-    await native.link(name => name === '@capacitor/core' ? capacitor : name === '@capacitor/browser' ? browser : app);
+    const reset = new vm.SourceTextModule(readFileSync('src/localDataReset.js', 'utf8'), { context });
+    await reset.link(() => {});
+    await native.link(name => name === './localDataReset.js' ? reset : name === '@capacitor/core' ? capacitor : name === '@capacitor/browser' ? browser : app);
     await native.evaluate();
     await native.namespace.setupNativeApp({ ui: {}, onResume() {}, onAuthLink: async url => received.push(url) });
     assert.deepEqual(received, [callback]);

@@ -1,6 +1,12 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { App } from '@capacitor/app';
+import { offerDeletedAccountReset } from './localDataReset.js';
+
+const localDataReset = registerPlugin('LocalDataReset');
+export function resetDeletedAccountData(getOwner, localize) {
+    return offerDeletedAccountReset({ native: Capacitor.getPlatform() === 'android', plugin: localDataReset, getOwner, localize });
+}
 
 export function isNativeApp() { return Capacitor.isNativePlatform(); }
 
