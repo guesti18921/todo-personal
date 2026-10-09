@@ -1,4 +1,4 @@
-# Preview publication: 7b6e25b76587360b79e15b4a3aba99d0a520da74
+# Preview publication: 0dcdd6300bdcadc39e2259234a6b075a9494770e
 name: Publish TO-DO
 
 on:
@@ -29,7 +29,7 @@ jobs:
       - name: Get mobile preview
         uses: actions/checkout@v4
         with:
-          ref: 7b6e25b76587360b79e15b4a3aba99d0a520da74
+          ref: 0dcdd6300bdcadc39e2259234a6b075a9494770e
           path: mobile
       - name: Set up Node
         uses: actions/setup-node@v4
