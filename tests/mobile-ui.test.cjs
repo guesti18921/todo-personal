@@ -354,6 +354,64 @@ function listFixture() {
  const seed = [['sb-ihvwqqvndmwtislvgamd-auth-token', JSON.stringify({ access_token: jwt, refresh_token: 'test-only', expires_at: exp, expires_in: 86400, token_type: 'bearer', user: { id, email: 'test@example.com', aud: 'authenticated', role: 'authenticated' } })], [cacheKey, JSON.stringify({ schemaVersion: 1, state, revision: 0, dirty: false, savedAt: new Date().toISOString() })]];
  return { seed, state, date };
 }
+test('untrusted record text, attributes and restored drafts remain literal in both interface languages', async () => {
+ const payload = '<img src=x onerror="window.__injected=1"><svg onload="window.__injected=2"></svg><script>window.__injected=3</script>&quot;';
+ const details = '</textarea><img src=x onerror="window.__injected=4">';
+ for (const language of ['ru-RU', 'en-US']) {
+  const f = listFixture();
+  f.state.todos.home = [{ id: 't" onclick="window.__injected=5', name: payload, details, date: '', time: '', today: true }];
+  f.state.notes = [{ id: 'n', title: payload, text: details, date: '', today: true }];
+  f.seed[1][1] = JSON.stringify({ schemaVersion: 1, state: f.state, revision: 0, dirty: false });
+  const draft = { type: 'note', text: payload, details, date: '', time: '', reminder: { mode: 'none' } };
+  const dom = boot([...f.seed, [draftKey, JSON.stringify(draft)]], false, null, [language]);
+  const w = dom.window, d = w.document;
+  const safe = () => {
+   assert.equal(d.querySelector('.mobile-notebook script, .mobile-notebook img, .mobile-notebook svg, .mobile-notebook iframe'), null);
+   assert.equal(d.querySelector('.mobile-notebook [onclick], .mobile-notebook [onerror], .mobile-notebook [onload]'), null);
+   assert.equal(w.__injected, undefined);
+  };
+  try {
+   await ready(dom); d.querySelector('[data-view="all"]').click();
+   assert.equal(d.querySelector('.mn-title').textContent, payload);
+   assert.equal(d.querySelector('.mn-details').textContent, details); safe();
+   const search = d.querySelector('#mn-search'); search.value = '<img'; search.dispatchEvent(new w.Event('input', { bubbles: true }));
+   assert.equal(d.querySelectorAll('.mn-card').length, 2); safe();
+   const taskButton = Array.from(d.querySelectorAll('[data-open]')).find(x => x.dataset.open === f.state.todos.home[0].id);
+   assert.ok(taskButton); taskButton.click();
+   assert.equal(d.querySelector('#mn-text').value, payload);
+   assert.equal(d.querySelector('[name="details"]').value, details); safe();
+   d.querySelector('[data-back]').click();
+   d.querySelector('[data-continue-draft]').click();
+   assert.equal(d.querySelector('#mn-text').value, payload);
+   assert.equal(d.querySelector('[name="details"]').value, details); safe();
+   d.querySelector('[data-save]').click(); safe();
+   const saved = JSON.parse(w.localStorage.getItem(cacheKey)).state.notes;
+   assert.ok(saved.some(n => n.title === payload && n.text === details));
+  } finally { w.close(); }
+ }
+});
+test('a due reminder displays markup as text without creating executable elements', async () => {
+ const payload = '<img src=x onerror="window.__injected=1"><svg onload="window.__injected=2"></svg>';
+ const f = listFixture(); f.state.todos.home = []; f.state.notes = [];
+ f.seed[1][1] = JSON.stringify({ schemaVersion: 1, state: f.state, revision: 0, dirty: false });
+ const dom = boot(f.seed), w = dom.window, d = w.document;
+ const input = (selector, value) => { const el = d.querySelector(selector); el.value = value; el.dispatchEvent(new w.Event('input', { bubbles: true })); el.dispatchEvent(new w.Event('change', { bubbles: true })); };
+ try {
+  await ready(dom); const Original = w.Date; let clock = new Original(); clock.setSeconds(0, 0);
+  w.Date = class extends Original { constructor(...args) { super(...(args.length ? args : [clock.getTime()])); } static now() { return clock.getTime(); } };
+  const future = new Original(clock.getTime() + 120000);
+  const day = [future.getFullYear(), String(future.getMonth() + 1).padStart(2, '0'), String(future.getDate()).padStart(2, '0')].join('-');
+  const time = [future.getHours(), future.getMinutes()].map(n => String(n).padStart(2, '0')).join(':');
+  d.querySelector('.mn-add').click(); input('#mn-text', payload);
+  input('[name="reminderMode"]', 'custom'); input('[name="reminderDate"]', day); input('[name="reminderTime"]', time);
+  d.querySelector('[data-enable-reminders]').click(); await wait(); d.querySelector('[data-save]').click();
+  clock = new Original(clock.getTime() + 180000); w.dispatchEvent(new w.Event('focus')); await wait();
+  const banner = d.querySelector('.mn-reminder-banner'); assert.equal(banner.hidden, false);
+  assert.equal(banner.querySelector('p').textContent, payload);
+  assert.equal(banner.querySelector('img, svg, script, [onerror], [onload]'), null);
+  assert.equal(w.__injected, undefined);
+ } finally { w.close(); }
+});
 test('draft recovery is visible after restart, discard is reversible and storage failure preserves the draft', async () => {
  const f = listFixture(), draft = { type: 'note', text: 'Черновик 中文 <script>test</script>', details: 'Не потерять', date: '', time: '', reminder: { mode: 'none' } };
  const dom = boot([...f.seed, [draftKey, JSON.stringify(draft)]]), d = dom.window.document;
