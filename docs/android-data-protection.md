@@ -37,3 +37,29 @@ immediately purged. Normal sign-out still retains account-scoped offline copies.
 
 Regression checks: `tests/account-guard.test.cjs` and the packaged UI test
 `server-confirmed remote deletion closes an open editor and clears only the deleted account`.
+
+## Next Android release hardening (prepared, not in APK 0.4.14)
+
+The generated manifest explicitly rejects cleartext HTTP. Capacitor configuration
+explicitly disables WebView debugging, mixed content and bridge logging. The
+default broad external/cache FileProvider paths are replaced with app-scoped
+`Pictures/` and an explicit `shared/` cache directory. The separate notification
+sound provider remains unchanged. Verify these settings in the next signed APK;
+checking the generated scaffold does not prove that an already-installed APK has them.
+
+The npm audit on 2026-10-09 initially reported three moderate dependency warnings
+from one underlying advisory, GHSA-w5hq-g745-h8pq, through CLI -> xcode -> uuid.
+These are development dependencies, not notebook runtime dependencies. A scoped
+override pins xcode's uuid to patched 11.1.1; the post-change audit reports zero
+known npm vulnerabilities. Xcode UUID generation and Android preparation work.
+This audit does not cover the full Maven/Android transitive dependency graph or
+prove absence of unknown vulnerabilities.
+
+References:
+- https://github.com/uuidjs/uuid/security/advisories/GHSA-w5hq-g745-h8pq
+- https://developer.android.com/privacy-and-security/risks/file-providers
+
+The owner explicitly chose to retain readable notification text on the lock
+screen and readable app previews in Android Recents; no screenshot blocking or
+preview-hiding option is added. These are visible-data privacy choices, not
+evidence of cross-account access.

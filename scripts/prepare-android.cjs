@@ -14,11 +14,11 @@ manifest = manifest.replace('android:allowBackup="true"', 'android:allowBackup="
     .replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/todo_icon"');
 // Android 12+ OEM device transfers can ignore allowBackup alone.
 // Exclude local notebooks, auth sessions and reminder state from both transports.
-manifest = manifest.replace(/\s+android:(fullBackupContent|dataExtractionRules)="[^"]*"/g, '');
-manifest = manifest.replace('<application', '<application\n        android:fullBackupContent="@xml/backup_rules"\n        android:dataExtractionRules="@xml/data_extraction_rules"');
+manifest = manifest.replace(/\s+android:(fullBackupContent|dataExtractionRules|usesCleartextTraffic)="[^"]*"/g, '');
+manifest = manifest.replace('<application', '<application\n        android:usesCleartextTraffic="false"\n        android:fullBackupContent="@xml/backup_rules"\n        android:dataExtractionRules="@xml/data_extraction_rules"');
 const backupXml = path.join(root, 'android/app/src/main/res/xml');
 fs.mkdirSync(backupXml, { recursive: true });
-for (const name of ['backup_rules.xml', 'data_extraction_rules.xml']) {
+for (const name of ['backup_rules.xml', 'data_extraction_rules.xml', 'file_paths.xml']) {
     fs.copyFileSync(path.join(root, 'native/android', name), path.join(backupXml, name));
 }
 if (!manifest.includes('android:scheme="todopersonal"')) {
