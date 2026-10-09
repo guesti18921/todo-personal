@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # Reviewed snapshot. Update explicitly for each new app version.
-          ref: b3157d00000918315984a792360b7d180074867d
+          ref: f8cdfdabe9ca6d34176c44ac3ebf02e8193118b0
           persist-credentials: false
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -38,11 +38,25 @@ jobs:
         run: npm run build
       - name: Test mobile flows
         run: npm run test:ui
+      - name: Install Chromium for visual and accessibility checks
+        run: npx playwright install --with-deps chromium --only-shell
+      - name: Audit layouts, accessibility and real browser sync
+        run: npm run test:browser
+      - name: Keep browser audit screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-browser-audit
+          path: audit-output/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Prepare Android project
         run: npm run android:prepare
       - name: Build unsigned release APK and AAB without signing secrets
         working-directory: android
         run: ./gradlew assembleRelease bundleRelease --no-daemon
+      - name: Audit release APK manifest and packaged files
+        run: python3 scripts/audit-apk.py android/app/build/outputs/apk/release/app-release-unsigned.apk
       - name: Transfer unsigned releases to isolated signing job
         uses: actions/upload-artifact@v4
         with:
