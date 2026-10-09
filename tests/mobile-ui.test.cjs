@@ -822,3 +822,16 @@ test('failed batch deletion retains all entries and shows a persistent error', a
   assert.match(d.querySelector('.mn-message').textContent, /Не удалось сохранить действие/);
  } finally { dom.window.close(); }
 });
+
+
+test('changing filters cancels a pending deletion confirmation', async () => {
+ const dom = boot(listFixture().seed);
+ try {
+  await ready(dom); const d = dom.window.document;
+  d.querySelector('[data-view="all"]').click(); d.querySelector('[data-selection-toggle]').click(); d.querySelector('[data-select-visible]').click(); d.querySelector('[data-bulk="delete"]').click();
+  assert.ok(d.querySelector('[data-confirm-removal]'));
+  d.querySelector('[data-filter="note"]').click();
+  assert.equal(d.querySelector('[data-confirm-removal]'), null);
+  assert.equal(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.length, 1);
+ } finally { dom.window.close(); }
+});

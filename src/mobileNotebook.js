@@ -226,6 +226,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
         const area = main.querySelector('.mn-bulk'); if (!area) return;
         area.classList.toggle('mn-bulk-selecting', selecting);
         const reset = main.querySelector('[data-reset-filters]'); if (reset) reset.hidden = !query && filter === 'all' && dueFilter === 'all';
+        if (pendingRemoval && (pendingRemoval.length !== selected.size || pendingRemoval.some(c => !selected.has(c.entry.id)))) pendingRemoval = null;
         if (pendingRemoval) { area.innerHTML = ui`<section class="mn-bulk-panel" role="alert"><p>Удалить выбранные записи (${pendingRemoval.length})?</p><p>Их напоминания также будут отменены.</p><div><button type="button" class="mn-secondary" data-cancel-removal>Отмена</button><button type="button" class="mn-primary mn-danger" data-confirm-removal>Удалить выбранные</button></div></section>`; return; }
         if (!selecting) { area.innerHTML = ui`<p class="mn-result-count">Записей: ${found.length}</p>`; return; }
         const tasks = found.filter(r => selected.has(r.entry.id) && r.type === 'task').length;
