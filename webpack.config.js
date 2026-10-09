@@ -11,7 +11,7 @@ module.exports = {
 //     minimize: false
 //   },
   mode: "production",
-  devtool: 'inline-source-map',
+  devtool: false,
   
   
 };

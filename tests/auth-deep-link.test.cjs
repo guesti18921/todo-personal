@@ -89,7 +89,7 @@ test('native launch and running app deliver callbacks through the same handler',
     assert.deepEqual(received, [callback]);
     events.get('appUrlOpen')({ url: callback });
     assert.deepEqual(received, [callback, callback]);
-    events.get('networkStatusChange')({ connected: true, connectionType: 'wifi' });
+    await events.get('networkStatusChange')({ connected: true, connectionType: 'wifi' });
     assert.equal(received.at(-1), 'resume');
     await native.namespace.openAuthBrowser('https://example.com');
     assert.deepEqual(opened, ['https://example.com']);

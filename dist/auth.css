@@ -174,3 +174,12 @@
 .auth-legal { margin-top: 24px; padding-top: 16px; border-top: 1px solid #eadfe2; text-align: center; }
 .auth-legal a { display: inline-block; padding: 8px 4px; color: #715160; font-size: 13px; line-height: 1.5; text-underline-offset: 3px; }
 .auth-legal a:focus-visible { outline: 2px solid #367f75; outline-offset: 3px; }
+
+.auth-screen { background: #f7f3ee; min-height: 100dvh; padding: calc(20px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom)); }
+.auth-card { background: #fffdfb; border: 1px solid #ddccd1; border-radius: 14px; box-shadow: 0 8px 28px #501f3a12; }
+.auth-card__body { padding: 26px; }
+.auth-card input { border-color: #cdb9c1; border-radius: 8px; min-height: 48px; }
+#auth-submit, #auth-recovery-send { background: #367f75; color: #fff; border-radius: 8px; min-height: 48px; }
+#auth-submit:hover, #auth-recovery-send:hover { background: #28665d; }
+.auth-card button:focus-visible, .auth-language select:focus-visible { outline: 3px solid #367f75; outline-offset: 3px; }
+@media (max-width: 350px) { .auth-card__body { padding: 20px; } }

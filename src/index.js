@@ -7,6 +7,7 @@ import { listEntries, createMobileNotebook } from './mobileNotebook.js';
 import { isNativeApp, setupNativeApp, openAuthBrowser, resetDeletedAccountData } from './nativeApp.js';
 import { readCachedAccount } from './localAccount.js';
 import { AUTH_REDIRECT_URL, createAuthLinkHandler } from './authDeepLink.js';
+import { syncFailurePhase } from './syncFailure.js';
 import { boundedFetch } from './networkFetch.js';
 import { authErrorMessage, createGoogleLogin, googleProviderEnabled } from './googleAuth.js';
 import { createClient } from '@supabase/supabase-js';
@@ -438,8 +439,7 @@ function applyState(state) {
     Object.assign(todos, { home: [], today: [], week: [] }, state.todos);
     notes.splice(0, notes.length, ...state.notes);
     toDosManager.changeCurrentProject('home');
-    domManipulator.renderAllToDos(todos, display);
-    domManipulator.renderProjectNames(todos, display);
+    if (!mobileUI) { domManipulator.renderAllToDos(todos, display); domManipulator.renderProjectNames(todos, display); }
     document.querySelectorAll('.nav__selected').forEach(el => el.classList.remove('nav__selected'));
     document.querySelector('.nav').children.item(0).classList.add('nav__selected');
     mobileUI?.render();
@@ -544,7 +544,13 @@ async function loadAccount(id, ticket) {
         closeNotebook();
         authMessage.textContent = error instanceof SyntaxError || /^(Invalid|Unsupported) (local |notebook)/.test(error?.message || '')
             ? t('Не удалось прочитать сохранённые записи. Данные на устройстве оставлены без изменений. Попробуйте обновить приложение.')
-            : t('Не удалось открыть записи. Проверьте интернет и попробуйте снова. Если это первый вход на устройстве, для загрузки записей нужна сеть.');
+            : t({
+                auth: 'Не удалось подтвердить вход. Войдите в аккаунт заново.',
+                permission: 'Сервер отклонил доступ к блокноту. Повторите вход; если ошибка останется, обратитесь в поддержку.',
+                limited: 'Сервер временно ограничил запросы. Подождите немного и повторите загрузку.',
+                server: 'Сервер не смог загрузить блокнот. Попробуйте снова немного позже.',
+                request: 'Не удалось обработать запрос загрузки блокнота. Повторите попытку или обратитесь в поддержку.'
+            }[syncFailurePhase(error)] || 'Не удалось открыть записи. Проверьте интернет и попробуйте снова. Если это первый вход на устройстве, для загрузки записей нужна сеть.');
         retryLoad.hidden = switchAccount.hidden = false;
     } finally {
         if (ticket === generation) retryLoad.disabled = switchAccount.disabled = false;
@@ -725,7 +731,7 @@ async function deleteAccount() {
 
 async function refreshCloud() {
     if (!ready || polling || changingAccount || document.hidden) return;
-    const checkOnly = Boolean(document.activeElement?.matches('input, textarea, [contenteditable="true"]')
+    const checkOnly = () => Boolean(document.activeElement?.matches('input, textarea, [contenteditable="true"]')
         || document.querySelector('.create-new-open, .edit-popup-open, .details-popup-open')
         || mobileUI?.isEditing());
     polling = true;
@@ -755,8 +761,8 @@ mobileUI = createMobileNotebook({
     root: todoApp, todos, notes, changeLanguage,
     persist() {
         const saved = saveNotebook({ todos, notes });
-        domManipulator.renderAllToDos(todos, display);
-        domManipulator.renderProjectNames(todos, display);
+        // The legacy desktop DOM is hidden; render only the active notebook.
+        if (!mobileUI) { domManipulator.renderAllToDos(todos, display); domManipulator.renderProjectNames(todos, display); }
         mobileUI?.render();
         reminderEngine.refresh();
         return saved;

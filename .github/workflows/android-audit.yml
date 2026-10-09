@@ -68,8 +68,11 @@ jobs:
           Path('android-runtime-osv-audit.json').write_text(json.dumps(report, indent=2))
           hits = [{**m, 'ids': [v['id'] for v in r.get('vulns', [])]} for m,r in zip(modules,results) if r.get('vulns')]
           print(json.dumps({'checked_modules': len(modules), 'matches': hits}, indent=2))
+          if hits:
+              raise RuntimeError('Known runtime vulnerabilities require review before release')
           PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: android-runtime-security-audit
           path: |
@@ -77,3 +80,4 @@ jobs:
             android-runtime-osv-audit.json
           if-no-files-found: error
           retention-days: 30
+

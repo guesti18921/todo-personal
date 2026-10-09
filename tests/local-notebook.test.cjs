@@ -22,12 +22,12 @@ function fixture(existing = new Map()) {
     const cloud = {
         from() {
             const conditions = {};
-            let update, inserted, selected;
+            let update, inserted, selected, single = false;
             const request = () => {
                 requests++;
                 selections.push(selected);
                 if (!online) return { data: null, error: new Error('Network unavailable') };
-                if (failure) return { data: null, error: failure };
+                if (failure) return failure.error ? { data: null, ...failure } : { data: null, error: failure };
                 const row = accounts.get(conditions.user_id);
                 if (update) {
                     if (!row || row.revision !== conditions.revision) return { data: [], error: null };
@@ -43,13 +43,15 @@ function fixture(existing = new Map()) {
                 return { data: row ? json(row) : null, error: null };
             };
             const q = {
+                retry() { return this; },
                 select(columns = '*') { selected = columns; return this; },
                 eq(key, value) { conditions[key] = value; return this; },
                 update(value) { update = value; return this; },
                 insert(value) { inserted = value; return this; },
-                async maybeSingle() { return request(); },
-                async single() { if (heldRead) { const gate = heldRead; heldRead = null; await gate; } return request(); },
+                maybeSingle() { return this; },
+                single() { single = true; return this; },
                 then(yes, no) {
+                    if (single && heldRead) { const gate = heldRead; heldRead = null; return gate.then(request).then(yes, no); }
                     if (update && heldUpload) {
                         const gate = heldUpload;
                         heldUpload = null;
@@ -470,4 +472,34 @@ test('browser offline hints cannot turn a reachable server into a false offline 
     await f.listeners.get('offline')();
     assert.equal(store.getSyncDetails().phase, 'synced');
     assert.equal(f.accounts.get('a').notes[0].text, 'still connected');
+});
+
+test('actual PostgREST envelope status is retained without exposing response bodies', async () => {
+ const f = fixture(), { store } = await f.load();
+ f.accounts.set('a', { ...empty(), revision: 0 }); await store.openNotebook('a');
+ for (const [status, phase] of [[401, 'auth'], [403, 'permission'], [429, 'limited'], [503, 'server'], [400, 'request']]) {
+  f.failure = { status, error: { message: 'secret note token private@example.com', code: '' } };
+  await store.readCloudChanges();
+  assert.equal(store.getSyncDetails().phase, phase);
+  assert.equal(store.getSyncDetails().failure.status, status);
+  assert.doesNotMatch(JSON.stringify(store.getSyncDetails().failure), /secret|private|token/);
+ }
+ f.failure = { status: 406, error: { code: 'PGRST116', message: 'No rows' } };
+ await store.readCloudChanges(); assert.equal(store.getSyncDetails().phase, 'account-data');
+ store.savePart('notes', [{ id: 'n', text: 'safe local entry' }]);
+ f.failure = { status: 429, error: { message: 'slow down' } };
+ assert.equal(await store.flushNotebook(), false); assert.equal(store.getSyncDetails().phase, 'limited');
+});
+test('opening the editor while a cloud download is pending defers the replacement', async () => {
+ const f = fixture(), { store } = await f.load();
+ f.accounts.set('a', { ...empty(), revision: 0 }); await store.openNotebook('a');
+ f.accounts.set('a', { ...empty(), revision: 1, notes: [{ id: 'remote', text: 'remote text' }] });
+ let editing = false;
+ const release = f.holdNextRead();
+ const pending = store.readCloudChanges({ checkOnly: () => editing });
+ editing = true; release();
+ assert.equal(await pending, null); assert.equal(store.getDraft().notes.length, 0);
+ assert.equal(store.getSyncDetails().phase, 'available');
+ editing = false;
+ assert.equal((await store.readCloudChanges({ checkOnly: () => editing })).notes[0].text, 'remote text');
 });

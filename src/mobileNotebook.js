@@ -96,6 +96,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
         clearTimeout(messageTimer); clearTimeout(undoTimer); undo = null;
         message.textContent = t(text);
         const important = /не удалось|не закрывайте|не сохран|cannot|could not|unsaved|do not close|failed/i.test(text);
+        message.dataset.error = String(important);
         if (text && !important) messageTimer = setTimeout(() => { message.textContent = ''; }, 3000);
     };
     function offerUndo(text, action) {
@@ -192,7 +193,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
         if (view === 'sync') { renderSync(); return; }
         if (view === 'delete-account') { renderDeletion(); return; }
         if (view === 'settings') {
-            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button><button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.17</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
+            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button><button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.18</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
             return;
         }
         // Android's keyboard changes the viewport. Keep the focused search
@@ -265,6 +266,12 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
             applyListChanges(records(), changes); persist(); return false;
         });
     }
+    function saveChanges(changes, reverse = false) {
+        if (!applyListChanges(records(), changes, reverse)) return false;
+        if (persist() !== false) return true;
+        applyListChanges(records(), changes, !reverse); persist(); return false;
+    }
+    const actionFailed = () => say(t('Не удалось сохранить действие на устройстве. Изменения отменены. Освободите место и попробуйте снова.'));
     function timestamp(value) {
         if (!value || Number.isNaN(new Date(value).getTime())) return t('пока не подтверждено');
         return new Intl.DateTimeFormat(getLanguage(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
@@ -272,23 +279,45 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
     function counts(state) { const c = notebookSummary(state); return ui`Задач: ${c.tasks} · выполнено: ${c.completed} · заметок: ${c.notes}`; }
     function syncSettings() {
         const info = syncPresentation(syncDetails);
-        return ui`<section class="mn-setting"><h2>Сохранение и синхронизация</h2><p class="mn-settings-status">${escape(info.title)}</p><p>${escape(info.explanation)}</p><details><summary>Работа без интернета</summary><p class="mn-offline-ready">${offlineReady ? t('Офлайн-запуск готов на этом устройстве.') : t('Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.')}</p></details><button type="button" class="mn-secondary" data-sync-open>Сохранение и резервная копия</button></section>`;
+        return ui`<section class="mn-setting"><h2>Сохранение и синхронизация</h2><p class="mn-settings-status">${escape(info.title)}</p><p class="mn-settings-explanation">${escape(info.explanation)}</p><details><summary>Работа без интернета</summary><p class="mn-offline-ready">${offlineReady ? t('Офлайн-запуск готов на этом устройстве.') : t('Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.')}</p></details><button type="button" class="mn-secondary" data-sync-open>Сохранение и резервная копия</button></section>`;
     }
     function updateSyncNotice() {
         const info = syncPresentation(syncDetails);
-        shell.querySelector('.mn-status').textContent = info.title + ' ›';
+        const status = shell.querySelector('.mn-status');
+        const short = { offline: 'Нет связи с сервером', local: 'На устройстве', pending: 'Ожидает отправки', request: 'Сбой синхронизации', 'account-data': 'Нет облачной копии', permission: 'Нет доступа', auth: 'Нужно войти снова', limited: 'Отправка отложена', available: 'Есть обновления', server: 'Сбой сервера', syncing: 'Отправляем', conflict: 'Две копии' }[syncDetails?.conflict ? 'conflict' : syncDetails?.phase];
+        const label = (short ? t(short) : info.title) + ' ›';
+        if (status.textContent !== label) status.textContent = label;
+        status.title = info.title;
+        status.dataset.warning = String(info.warning);
+
         syncNotice.hidden = !info.warning || !syncDetails;
-        syncNotice.innerHTML = `<p><strong>${escape(info.title)}</strong></p><p>${escape(info.explanation)}</p><button type="button" class="mn-secondary" data-sync-open>${syncDetails?.conflict ? t('Сравнить копии') : t('Открыть сохранение')}</button>`;
+        const noticeKey = `${info.title}|${info.explanation}|${Boolean(syncDetails?.conflict)}`;
+        if (syncNotice.dataset.key === noticeKey) return;
+        syncNotice.dataset.key = noticeKey;
+        const expanded = Boolean(syncNotice.querySelector('details')?.open);
+        syncNotice.innerHTML = `<details ${expanded ? 'open' : ''}><summary>${escape(info.title)}</summary><p>${escape(info.explanation)}</p><button type="button" class="mn-secondary" data-sync-open>${syncDetails?.conflict ? t('Сравнить копии') : t('Открыть сохранение')}</button></details>`;
     }
     function previewRecord(record) {
         if (!record) return t('<p>Нет в этой копии — возможно, запись удалена.</p>');
         const e = record.entry, text = record.type === 'task' ? e.name : e.title || e.text;
         return `<p dir="auto">${escape(text)}</p><p dir="auto">${escape(record.type === 'task' ? e.details : e.title ? e.text : '')}</p><p>${record.type === 'task' ? e.checked ? t('Выполненная задача') : t('Задача') : t('Заметка')} · ${escape(e.date || t('Без срока'))}${e.time ? ' · ' + escape(e.time) : ''}${t(reminderLabel(e, new Date(), getLanguage())) ? ' · ' + escape(t(reminderLabel(e, new Date(), getLanguage()))) : ''}</p>`;
     }
+    function refreshSettingsStatus() {
+        const info = syncPresentation(syncDetails);
+        const title = main.querySelector('.mn-settings-status'), explanation = main.querySelector('.mn-settings-explanation');
+        if (title) title.textContent = info.title;
+        if (explanation) explanation.textContent = info.explanation;
+        const offline = main.querySelector('.mn-offline-ready');
+        if (offline) offline.textContent = offlineReady ? t('Офлайн-запуск готов на этом устройстве.') : t('Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.');
+    }
     function renderSync() {
         const info = syncPresentation(syncDetails), disabled = syncBusy ? 'disabled' : '';
         const c = syncDetails?.counts;
-        main.innerHTML = ui`<h1>Сохранение</h1><section class="mn-setting"><h2>${escape(info.title)}</h2><p>${escape(info.explanation)}</p>${c ? ui`<p>Задач: ${c.tasks} · выполнено: ${c.completed} · заметок: ${c.notes}</p>` : ''}<p>Сохранено на устройстве: ${escape(timestamp(syncDetails?.savedAt))}</p><p>Подтверждено в аккаунте: ${escape(timestamp(syncDetails?.syncedAt))}</p><p>${offlineReady ? t('Офлайн-запуск готов.') : t('Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.')}</p><button type="button" class="mn-primary" data-sync-now ${disabled}>${syncBusy ? t('Проверяем…') : t('Синхронизировать сейчас')}</button>${canExportNotebook ? ui`<button type="button" class="mn-secondary" data-export ${disabled}>Скачать копию записей</button>` : t('<p>Скачивание файла доступно в веб-версии. Резервные копии перед объединением сохраняются на этом устройстве.</p>')}${syncDetails?.backup && canExportNotebook ? ui`<button type="button" class="mn-secondary" data-export-recovery ${disabled}>Скачать копии до последнего объединения или замены</button>` : ''}</section>${syncDetails?.conflict ? ui`<section class="mn-setting"><h2>Две копии блокнота</h2><p>Сначала получите копию из аккаунта для сравнения. До вашего выбора обе копии останутся без изменений.</p><button type="button" class="mn-secondary" data-compare ${disabled}>Получить и сравнить копии</button></section>` : ''}${syncError ? `<p class="mn-sync-error" role="alert">${escape(t(syncError))}</p>` : ''}${syncPreview ? ui`<section class="mn-setting"><h2>Сравнение копий</h2><p>На устройстве: ${escape(counts(syncPreview.local))}</p><p>В аккаунте: ${escape(counts(syncPreview.cloud))}</p><p>Различающихся записей: ${syncPreview.differences.length}</p>${syncPreview.differences.map((d, i) => ui`<details class="mn-copy-difference"><summary>Различие ${i + 1}</summary><h3>На этом устройстве</h3>${previewRecord(d.local)}<h3>В аккаунте</h3>${previewRecord(d.cloud)}</details>`).join('')}<h3>Сохранить обе копии</h3><p>Сохраним все записи обеих копий, включая удалённые только на одном устройстве. Если одна запись различается, оставим две версии. У дополнительных копий напоминания выключены, чтобы они не дублировались.</p><button type="button" class="mn-primary" data-resolve="both" ${disabled}>Сохранить обе копии</button><details><summary>Использовать только копию из аккаунта</summary><p>Текущие записи заменятся копией из аккаунта. Перед заменой обе версии сохранятся в резервную копию на этом устройстве.</p><button type="button" class="mn-secondary" data-resolve="cloud" ${disabled}>Заменить этой копией из аккаунта</button></details><p>Если во время выбора одна из копий изменится, потребуется новое сравнение.</p></section>` : ''}`;
+        const expanded = [...main.querySelectorAll('details')].filter(detail => detail.open).map(detail => detail.querySelector('summary')?.textContent);
+        const failure = syncDetails?.failure;
+        const diagnostic = failure ? [failure.status ? `HTTP ${failure.status}` : '', failure.code].filter(Boolean).join(' · ') : '';
+        main.innerHTML = ui`<h1>Сохранение</h1><section class="mn-setting"><h2>${escape(info.title)}</h2><p>${escape(info.explanation)}</p>${diagnostic ? ui`<details class="mn-diagnostic"><summary>Код для поддержки</summary><p>${escape(diagnostic)}</p></details>` : ''}${c ? ui`<p>Задач: ${c.tasks} · выполнено: ${c.completed} · заметок: ${c.notes}</p>` : ''}<p>Сохранено на устройстве: ${escape(timestamp(syncDetails?.savedAt))}</p><p>Подтверждено в аккаунте: ${escape(timestamp(syncDetails?.syncedAt))}</p><p>${offlineReady ? t('Офлайн-запуск готов.') : t('Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.')}</p><button type="button" class="mn-primary" data-sync-now ${disabled}>${syncBusy ? t('Проверяем…') : t('Синхронизировать сейчас')}</button>${canExportNotebook ? ui`<button type="button" class="mn-secondary" data-export ${disabled}>Скачать копию записей</button>` : t('<p>Скачивание файла доступно в веб-версии. Резервные копии перед объединением сохраняются на этом устройстве.</p>')}${syncDetails?.backup && canExportNotebook ? ui`<button type="button" class="mn-secondary" data-export-recovery ${disabled}>Скачать копии до последнего объединения или замены</button>` : ''}</section>${syncDetails?.conflict ? ui`<section class="mn-setting"><h2>Две копии блокнота</h2><p>Сначала получите копию из аккаунта для сравнения. До вашего выбора обе копии останутся без изменений.</p><button type="button" class="mn-secondary" data-compare ${disabled}>Получить и сравнить копии</button></section>` : ''}${syncError ? `<p class="mn-sync-error" role="alert">${escape(t(syncError))}</p>` : ''}${syncPreview ? ui`<section class="mn-setting"><h2>Сравнение копий</h2><p>На устройстве: ${escape(counts(syncPreview.local))}</p><p>В аккаунте: ${escape(counts(syncPreview.cloud))}</p><p>Различающихся записей: ${syncPreview.differences.length}</p>${syncPreview.differences.map((d, i) => ui`<details class="mn-copy-difference"><summary>Различие ${i + 1}</summary><h3>На этом устройстве</h3>${previewRecord(d.local)}<h3>В аккаунте</h3>${previewRecord(d.cloud)}</details>`).join('')}<h3>Сохранить обе копии</h3><p>Сохраним все записи обеих копий, включая удалённые только на одном устройстве. Если одна запись различается, оставим две версии. У дополнительных копий напоминания выключены, чтобы они не дублировались.</p><button type="button" class="mn-primary" data-resolve="both" ${disabled}>Сохранить обе копии</button><details><summary>Использовать только копию из аккаунта</summary><p>Текущие записи заменятся копией из аккаунта. Перед заменой обе версии сохранятся в резервную копию на этом устройстве.</p><button type="button" class="mn-secondary" data-resolve="cloud" ${disabled}>Заменить этой копией из аккаунта</button></details><p>Если во время выбора одна из копий изменится, потребуется новое сравнение.</p></section>` : ''}`;
+        main.querySelectorAll('details').forEach(detail => { if (expanded.includes(detail.querySelector('summary')?.textContent)) detail.open = true; });
     }
     function openSync() {
         clearSelection();
@@ -372,7 +401,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
         main.querySelector('[data-enable-reminders]').hidden = !active || reminderState.enabled;
     }
     function reminderSettings() {
-        return ui`<section class="mn-setting"><h2>Напоминания на этом устройстве</h2><p>${escape(deviceReminderHelp())}</p><button class="mn-secondary" type="button" data-toggle-reminders ${reminderBusy ? 'disabled' : ''}>${reminderState.enabled ? t('Выключить напоминания') : t('Включить напоминания')}</button>${reminderState.native && reminderState.enabled && !reminderState.exact ? t('<button type="button" class="mn-secondary" data-exact-reminders>Разрешить точное время</button>') : ''}<p>Напоминаний запланировано: ${reminderState.scheduled}. Выключение отменит уведомления здесь; время в записях сохранится.</p><button class="mn-secondary" type="button" data-reminder-list>Посмотреть записи с напоминаниями</button>${reminderState.error ? t('<button class="mn-secondary" type="button" data-retry-reminders>Повторить настройку</button>') : ''}</section>`;
+        return ui`<section class="mn-setting" data-reminder-setting><h2>Напоминания на этом устройстве</h2><p>${escape(deviceReminderHelp())}</p><button class="mn-secondary" type="button" data-toggle-reminders ${reminderBusy ? 'disabled' : ''}>${reminderState.enabled ? t('Выключить напоминания') : t('Включить напоминания')}</button>${reminderState.native && reminderState.enabled && !reminderState.exact ? t('<button type="button" class="mn-secondary" data-exact-reminders>Разрешить точное время</button>') : ''}<p>Напоминаний запланировано: ${reminderState.scheduled}. Выключение отменит уведомления здесь; время в записях сохранится.</p><button class="mn-secondary" type="button" data-reminder-list>Посмотреть записи с напоминаниями</button>${reminderState.error ? t('<button class="mn-secondary" type="button" data-retry-reminders>Повторить настройку</button>') : ''}</section>`;
     }
     function openReminder(record) {
         const target = record && find(record.entry.id);
@@ -473,9 +502,17 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
             const record = find(reminderQueue[0]?.id); if (!record) return;
             if (editor) { back(); if (editor) return; }
             const handled = reminderQueue[0];
+            if (!button.hasAttribute('data-reminder-close')) {
+                const before = JSON.parse(JSON.stringify(record.entry));
+                if (button.hasAttribute('data-reminder-snooze')) snoozeReminder(record.entry);
+                else toggleEntry(record);
+                const after = JSON.parse(JSON.stringify(record.entry));
+                Object.keys(record.entry).forEach(key => delete record.entry[key]); Object.assign(record.entry, before);
+                const changes = [{ id: before.id, type: record.type, project: record.project, before, after }];
+                if (!saveChanges(changes)) { actionFailed(); return; }
+                say(button.hasAttribute('data-reminder-snooze') ? t('Напоминание отложено на 10 минут. Срок записи сохранён.') : t('Задача выполнена. Её напоминание отменено.'));
+            }
             reminderQueue = reminderQueue.filter(item => item !== handled);
-            if (button.hasAttribute('data-reminder-snooze')) { snoozeReminder(record.entry); persist(); say(t('Напоминание отложено на 10 минут. Срок записи сохранён.')); }
-            if (button.hasAttribute('data-reminder-done')) { toggleEntry(record); persist(); say(t('Задача выполнена. Её напоминание отменено.')); }
             render();
         } else if (button.hasAttribute('data-toggle-reminders') || button.hasAttribute('data-enable-reminders')) {
             if (reminderBusy) return;
@@ -519,16 +556,20 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
             renderSuggestion(); changed();
         } else if (button.hasAttribute('data-check') || button.hasAttribute('data-complete')) {
             const record = find(button.dataset.check || button.dataset.complete); if (!record || record.type !== 'task') return;
-            const before = { ...record.entry };
-            toggleEntry(record);
-            persist(); editor = false; render();
-            offerUndo(record.entry.checked ? t('Задача выполнена.') : t('Задача возвращена в активные.'), () => { Object.assign(record.entry, before); persist(); });
+            const changes = prepareListAction(records(), [record.entry.id], record.entry.checked ? 'restore' : 'complete');
+            if (!saveChanges(changes)) { actionFailed(); return; }
+            editor = false; render();
+            offerUndo(record.entry.checked ? t('Задача выполнена.') : t('Задача возвращена в активные.'), () => saveChanges(changes, true));
         } else if (button.hasAttribute('data-delete')) {
             const record = find(button.dataset.delete); if (!record) return;
-            const list = record.type === 'note' ? notes : todos[record.project];
-            const index = list.findIndex(entry => entry.id === record.entry.id);
-            list.splice(index, 1);
-            persist(); editor = false; render(); offerUndo(t('Запись удалена.'), () => { list.splice(index, 0, record.entry); persist(); });
+            const changes = prepareRemoval({ todos, notes }, [record.entry.id]);
+            if (!applyRemoval({ todos, notes }, changes)) return;
+            if (persist() === false) { applyRemoval({ todos, notes }, changes, true); persist(); actionFailed(); return; }
+            editor = false; render(); offerUndo(t('Запись удалена.'), () => {
+                if (!applyRemoval({ todos, notes }, changes, true)) return false;
+                if (persist() !== false) return true;
+                applyRemoval({ todos, notes }, changes); persist(); return false;
+            });
         } else if (button.hasAttribute('data-undo') && undo) { const restored = undo(); undo = null; render(); say(restored === false ? t('Не удалось отменить: записи изменились или сохранение недоступно. Текущие записи не заменены предыдущей версией.') : t('Действие отменено.')); }
         else if (button.hasAttribute('data-delete-account')) { deletionError = ''; view = 'delete-account'; render(); }
         else if (button.hasAttribute('data-cancel-account-deletion')) { view = 'settings'; deletionError = ''; render(); }
@@ -585,7 +626,11 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
         setReminderStatus(value) {
             if (JSON.stringify(reminderState) === JSON.stringify(value)) return;
             reminderState = value;
-            if (editor) updateReminder(); else render();
+            if (editor) updateReminder();
+            else if (view === 'settings') {
+                const section = main.querySelector('[data-reminder-setting]');
+                if (section) section.outerHTML = reminderSettings();
+            } else if (!['sync', 'delete-account'].includes(view)) render();
         },
         saveDraft: stashDraft,
         back() {
@@ -600,13 +645,15 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
         setAccount(id) { if (account !== id) { clearTimeout(undoTimer); deletionBusy = false; deletionError = ''; account = id; clearSelection(); dueFilter = 'all'; reminderQueue = []; syncDetails = null; syncBusy = false; syncPreview = null; syncError = ''; updateSyncNotice(); readPreferences(); dismissedDeadline = ''; suggestion = null; deadlineAnchor = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
         setOfflineReady(value) {
             offlineReady = value;
-            if (!editor && ['settings', 'sync'].includes(view)) render();
+            if (!editor && view === 'settings') refreshSettingsStatus();
+            else if (!editor && view === 'sync') renderSync();
         },
         setStatus(text, details) {
             syncDetails = details || getSyncDetails();
             statusText = syncPresentation(syncDetails).title;
             updateSyncNotice();
-            if (!editor && ['settings', 'sync'].includes(view)) render();
+            if (!editor && view === 'settings') refreshSettingsStatus();
+            else if (!editor && view === 'sync') renderSync();
         }
     };
 }

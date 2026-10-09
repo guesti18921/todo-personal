@@ -251,7 +251,7 @@ test('mobile synchronization explains offline state, resolves conflicts with bot
  try {
   await ready(dom); await wait(); click('[data-view="all"]'); network = false;
   click('[data-open]'); input('#mn-text', 'Правка на устройстве 日本語'); click('[data-save]');
-  await until(() => doc.querySelector('.mn-status').textContent.includes('нет соединения'));
+  await until(() => doc.querySelector('.mn-sync-notice').textContent.includes('нет соединения'));
   assert.equal(doc.querySelector('.mn-sync-notice').hidden, false);
   click('[data-sync-open]'); assert.match(doc.querySelector('.mn-main').textContent, /Сохранено на устройстве/);
   assert.ok(doc.querySelector('[data-sync-now]')); assert.ok(doc.querySelector('[data-export]'));
@@ -443,7 +443,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.17/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.18/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -578,7 +578,7 @@ test('failed first account load hides server errors and allows switching account
  const dom = boot(f.seed.filter(([key]) => key !== cacheKey), false, fetcher), doc = dom.window.document;
  try {
   for (let i = 0; i < 30 && !Array.from(doc.querySelectorAll('.auth-retry')).some(b => !b.hidden); i++) await wait();
-  assert.match(doc.querySelector('#auth-message').textContent, /Не удалось открыть записи/);
+  assert.match(doc.querySelector('#auth-message').textContent, /Сервер не смог загрузить блокнот/);
   assert.equal(doc.body.textContent.includes(secret), false);
   const buttons = Array.from(doc.querySelectorAll('.auth-retry'));
   assert.equal(buttons.every(b => !b.hidden && !b.disabled), true);
@@ -843,7 +843,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.17');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.18');
  } finally { dom.window.close(); }
 });
 
@@ -916,5 +916,71 @@ test('changing filters cancels a pending deletion confirmation', async () => {
   d.querySelector('[data-filter="note"]').click();
   assert.equal(d.querySelector('[data-confirm-removal]'), null);
   assert.equal(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.length, 1);
+ } finally { dom.window.close(); }
+});
+
+test('failed single completion and deletion keep the saved record and do not announce success', async () => {
+ const f = listFixture(), dom = boot(f.seed);
+ try {
+  await ready(dom); const w = dom.window, d = w.document;
+  d.querySelector('[data-view="all"]').click();
+  const before = JSON.parse(w.localStorage.getItem(cacheKey));
+  const original = w.Storage.prototype.setItem;
+  w.Storage.prototype.setItem = function() { throw Error('Full'); };
+  const id = d.querySelector('[data-check]').dataset.check;
+  d.querySelector('[data-check]').click();
+  assert.match(d.querySelector('.mn-message').textContent, /Не удалось сохранить/);
+  assert.equal(JSON.parse(w.localStorage.getItem(cacheKey)).state.todos.home.find(e => e.id === id)?.checked, before.state.todos.home.find(e => e.id === id)?.checked);
+  d.querySelector(`[data-open="${id}"]`).click();
+  d.querySelector('[data-delete]').click();
+  assert.ok(d.querySelector('#mn-text'), 'failed deletion leaves the editor open');
+  assert.match(d.querySelector('.mn-message').textContent, /Не удалось сохранить/);
+  w.Storage.prototype.setItem = original;
+  d.querySelector('[data-back]').click();
+  assert.ok(d.querySelector(`[data-open="${id}"]`), 'record restored after rejected deletion');
+ } finally { dom.window.close(); }
+});
+test('background sync does not collapse settings or replace the language control', async () => {
+ const f = listFixture(); let reads = 0;
+ const fetcher = async url => {
+  if (String(url).includes('/rest/v1/notebooks')) { reads++; return new Response(JSON.stringify({ revision: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
+  return new Response(JSON.stringify({ id, email: 'test@example.com', role: 'authenticated', user_metadata: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+ };
+ const dom = boot(f.seed, false, fetcher);
+ try {
+  await ready(dom); await wait(); const w = dom.window, d = w.document;
+  d.querySelector('[data-view="settings"]').click();
+  const details = d.querySelector('.mn-setting details'), language = d.querySelector('[data-language]');
+  details.open = true;
+  Object.defineProperty(d, 'hidden', { value: false, configurable: true });
+  w.dispatchEvent(new w.Event('focus')); await wait();
+  assert.ok(reads >= 1);
+  assert.equal(d.querySelector('.mn-setting details'), details); assert.equal(details.open, true);
+  assert.equal(d.querySelector('[data-language]'), language);
+ } finally { dom.window.close(); }
+});
+
+test('a large notebook keeps every entry and long Unicode text through editing and offline restart', async () => {
+ const f = listFixture();
+ f.state.notes = Array.from({ length: 1000 }, (_, i) => ({ id: `large-${i}`, title: `Запись ${i} unique-${i}`, text: '日本語 😀', createdAt: '2026-10-08T10:00:00Z' }));
+ f.seed.find(([key]) => key === cacheKey)[1] = JSON.stringify({ schemaVersion: 1, state: f.state, revision: 0, dirty: false });
+ let dom = boot(f.seed);
+ try {
+  await ready(dom); let w = dom.window, d = w.document;
+  d.querySelector('[data-view="all"]').click();
+  assert.equal(d.querySelectorAll('.mn-card').length, 1003);
+  const search = d.querySelector('#mn-search'); search.value = 'unique-999'; search.dispatchEvent(new w.Event('input', { bubbles: true }));
+  assert.equal(d.querySelectorAll('.mn-card').length, 1);
+  d.querySelector('[data-open]').click();
+  const text = 'Русский 日本語 😀 café\n'.repeat(1000);
+  const field = d.querySelector('#mn-text'); field.value = text; field.dispatchEvent(new w.Event('input', { bubbles: true }));
+  d.querySelector('[data-save]').click();
+  const saved = JSON.parse(w.localStorage.getItem(cacheKey));
+  assert.equal(saved.state.notes.length, 1000); assert.equal(saved.state.notes.find(e => e.id === 'large-999').title, text);
+  const snapshot = Array.from({ length: w.localStorage.length }, (_, i) => { const key = w.localStorage.key(i); return [key, w.localStorage.getItem(key)]; });
+  w.close(); dom = boot(snapshot); await ready(dom); w = dom.window; d = w.document;
+  d.querySelector('[data-view="all"]').click();
+  const restored = JSON.parse(w.localStorage.getItem(cacheKey));
+  assert.equal(restored.state.notes.length, 1000); assert.equal(restored.state.notes.find(e => e.id === 'large-999').title, text);
  } finally { dom.window.close(); }
 });

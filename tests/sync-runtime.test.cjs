@@ -6,8 +6,8 @@ test('network timeout releases a stalled request and preserves cancellation', as
  const m = new vm.SourceTextModule(fs.readFileSync('src/networkFetch.js', 'utf8'), { context: vm.createContext({ AbortController, setTimeout, clearTimeout }) });
  await m.link(() => {}); await m.evaluate();
  const fetcher = (_url, { signal }) => new Promise((_resolve, reject) => { if (signal.aborted) reject(new Error('Aborted')); else signal.addEventListener('abort', () => reject(new Error('Aborted'))); });
- await assert.rejects(m.namespace.boundedFetch('https://server.test', {}, 10, fetcher), /Aborted/);
- const abort = new AbortController(); const request = m.namespace.boundedFetch('https://server.test', { signal: abort.signal }, 1000, fetcher); abort.abort(); await assert.rejects(request, /Aborted/);
+ await assert.rejects(m.namespace.boundedFetch('https://server.test', {}, 10, fetcher), /timed out/i);
+ const abort = new AbortController(); const request = m.namespace.boundedFetch('https://server.test', { signal: abort.signal }, 1000, fetcher); abort.abort(); await assert.rejects(request, /aborted/i);
  const result = await m.namespace.boundedFetch('https://server.test', {}, 1000, async () => 'ok'); assert.equal(result, 'ok');
 });
 function worker() {
@@ -28,4 +28,15 @@ test('offline shell caches public files and falls back for preview navigation, n
  response = null;
  w.listeners.get('fetch')({ request: { url: 'https://project.supabase.co/rest/v1/notebooks', method: 'GET' }, respondWith: p => { response = p; } }); assert.equal(response, null);
  w.listeners.get('fetch')({ request: { url: 'https://todo.test/private/account.json', method: 'GET' }, respondWith: p => { response = p; } }); assert.equal(response, null);
+});
+
+test('timeout also bounds a stalled body after headers; HTTP metadata remains intact', async () => {
+ const m = new vm.SourceTextModule(fs.readFileSync('src/networkFetch.js', 'utf8'), { context: vm.createContext({ AbortController, setTimeout, clearTimeout }) });
+ await m.link(() => {}); await m.evaluate();
+ const fake = { status: 503, ok: false, headers: new Headers(), text: () => new Promise(() => {}) };
+ const response = await m.namespace.boundedFetch('https://server.test', {}, 20, async () => fake);
+ assert.equal(response.status, 503);
+ await assert.rejects(response.text(), /timed out/);
+ const good = await m.namespace.boundedFetch('https://server.test', {}, 1000, async () => new Response(JSON.stringify({ code: '42501' }), { status: 403 }));
+ assert.equal(good.status, 403); assert.deepEqual(await good.json(), { code: '42501' });
 });

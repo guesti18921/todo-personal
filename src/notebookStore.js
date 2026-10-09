@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient.js';
 import { normalizeNotebook, readLocalNotebook, writeLocalNotebook } from './localNotebook.js';
 
-import { syncFailurePhase } from './syncFailure.js';
+import { syncFailureDetails } from './syncFailure.js';
 import { stable, combineNotebooks, compareNotebooks, notebookSummary } from './syncModel.js';
 
 // Writes are serialized and conditional on the revision read from the server.
@@ -19,7 +19,7 @@ export function getSyncDetails() {
     let backup = false;
     try { backup = Boolean(localStorage.getItem(`todo-personal:recovery-latest:${c.id}`)); } catch (_) {}
     return { phase: c.phase || 'local', localSaved: c.localSaved, dirty: c.dirty, conflict: c.conflict,
-        savedAt: c.savedAt || null, syncedAt: c.syncedAt || null, counts: notebookSummary(c.state), backup };
+        savedAt: c.savedAt || null, syncedAt: c.syncedAt || null, counts: notebookSummary(c.state), failure: c.failure || null, backup };
 }
 export function getRecoveryCopy() {
     if (!context) return null;
@@ -52,6 +52,7 @@ function stash(c) {
     return c.localSaved;
 }
 function report(c, message) {
+    c.failure = null;
     if (message.startsWith('Conflict:')) c.phase = 'conflict';
     else if (message === 'Saving...') c.phase = 'syncing';
     else if (message.includes('connection unavailable') || message.startsWith('Not saved:') || message.startsWith('Connection unavailable')) c.phase = 'offline';
@@ -61,8 +62,9 @@ function report(c, message) {
     else c.phase = 'local';
     if (context === c) notify(message, getSyncDetails());
 }
-function reportFailure(c, error) {
-    c.phase = syncFailurePhase(error);
+function reportFailure(c, error, status) {
+    c.failure = syncFailureDetails(error, status);
+    c.phase = c.failure.phase;
     if (context === c) notify(c.localSaved ? 'Sync unavailable' : 'Not saved: sync unavailable. Keep this tab open.', getSyncDetails());
 }
 function scheduleRetry(c) {
@@ -99,16 +101,16 @@ export async function openNotebook(id) {
         if (c.dirty) scheduleRetry(c);
         return copy(c.state);
     }
-    let { data, error } = await supabase.from('notebooks').select('*').eq('user_id', id).maybeSingle();
-    if (error) throw error;
+    let { data, error, status } = await supabase.from('notebooks').select('*').eq('user_id', id).maybeSingle().retry(false);
+    if (error) throw { ...error, message: error.message, status: status ?? error.status };
     if (!data) {
-        const result = await supabase.from('notebooks').insert({ user_id: id }).select().single();
+        const result = await supabase.from('notebooks').insert({ user_id: id }).select().single().retry(false);
         if (result.error && result.error.code === '23505') {
-            const retry = await supabase.from('notebooks').select('*').eq('user_id', id).single();
-            if (retry.error) throw retry.error;
+            const retry = await supabase.from('notebooks').select('*').eq('user_id', id).single().retry(false);
+            if (retry.error) throw { ...retry.error, message: retry.error.message, status: retry.status ?? retry.error.status };
             data = retry.data;
         } else {
-            if (result.error) throw result.error;
+            if (result.error) throw { ...result.error, message: result.error.message, status: result.status ?? result.error.status };
             data = result.data;
         }
     }
@@ -158,11 +160,11 @@ export async function flushNotebook() {
             while (c.dirty && context === c) {
                 report(c, 'Saving...');
                 const sent = copy(c.state);
-                const { data, error } = await supabase.from('notebooks')
+                const { data, error, status } = await supabase.from('notebooks')
                     .update({ ...sent, revision: c.revision + 1 })
-                    .eq('user_id', c.id).eq('revision', c.revision).select('revision');
+                    .eq('user_id', c.id).eq('revision', c.revision).select('revision').retry(false);
                 if (context !== c) return false;
-                if (error) throw error;
+                if (error) throw { ...error, message: error.message, status: status ?? error.status };
                 if (!data?.length) {
                     c.conflict = true;
                     stash(c);
@@ -192,10 +194,10 @@ export async function readCloudChanges({ checkOnly = false } = {}) {
     const revision = c.revision;
     // Check only the revision before downloading notebook contents.
     const current = () => context === c && !c.dirty && !c.running && c.revision === revision;
-    const probe = await supabase.from('notebooks').select('revision').eq('user_id', c.id).single();
+    const probe = await supabase.from('notebooks').select('revision').eq('user_id', c.id).single().retry(false);
     if (!current()) return null;
     if (probe.error) {
-        reportFailure(c, probe.error);
+        reportFailure(c, probe.error, probe.status);
         return null;
     }
     if (!Number.isSafeInteger(probe.data?.revision) || probe.data.revision < revision) {
@@ -208,18 +210,20 @@ export async function readCloudChanges({ checkOnly = false } = {}) {
         report(c, c.localSaved ? 'Saved' : 'Loaded from cloud — local storage unavailable');
         return null;
     }
-    if (checkOnly) {
-        c.phase = 'available';
-        if (context === c) notify('Cloud changes available', getSyncDetails());
+    const defer = () => typeof checkOnly === 'function' ? checkOnly() : checkOnly;
+    const deferred = () => { c.failure = null; c.phase = 'available'; if (context === c) notify('Cloud changes available', getSyncDetails()); };
+    if (defer()) {
+        deferred();
         return null;
     }
-    const { data, error } = await supabase.from('notebooks').select('revision,todos,notes').eq('user_id', c.id).single();
+    const { data, error, status } = await supabase.from('notebooks').select('revision,todos,notes').eq('user_id', c.id).single().retry(false);
     if (!current()) return null;
     if (error) {
-        reportFailure(c, error);
+        reportFailure(c, error, status);
         return null;
     }
     if (!Number.isSafeInteger(data?.revision) || data.revision <= revision) return null;
+    if (defer()) { deferred(); return null; }
     const cloud = { todos: data.todos, notes: data.notes };
     const normalized = normalizeNotebook(cloud);
     c.revision = data.revision;
@@ -235,7 +239,7 @@ export async function inspectConflict() {
     const c = context;
     if (!c || c.running) throw new Error('Дождитесь завершения отправки и попробуйте снова.');
     const fingerprint = stable(c.state);
-    const { data, error } = await supabase.from('notebooks').select('*').eq('user_id', c.id).single();
+    const { data, error } = await supabase.from('notebooks').select('*').eq('user_id', c.id).single().retry(false);
     if (error) throw new Error('Не удалось получить копию из аккаунта. Проверьте соединение и повторите попытку. Записи на устройстве сохранены.');
     if (context !== c || stable(c.state) !== fingerprint) throw new Error('Записи изменились во время проверки. Сравните копии заново.');
     if (!data || !Number.isSafeInteger(data.revision) || data.revision < c.revision) throw new Error('Облачная копия недоступна или устарела. Текущие записи сохранены.');
@@ -248,7 +252,7 @@ export async function resolveConflict(mode) {
     if (!['both', 'cloud'].includes(mode) || !c?.preview || c.running) throw new Error('Сначала сравните копии.');
     const preview = c.preview;
     if (stable(c.state) !== preview.fingerprint) throw new Error('Записи на устройстве изменились. Сравните копии заново.');
-    const { data, error } = await supabase.from('notebooks').select('*').eq('user_id', c.id).single();
+    const { data, error } = await supabase.from('notebooks').select('*').eq('user_id', c.id).single().retry(false);
     if (error) throw new Error('Нет соединения с аккаунтом. Обе копии оставлены без изменений.');
     if (context !== c) return null;
     if (c.running || stable(c.state) !== preview.fingerprint || data?.revision !== preview.revision || stable(normalizeNotebook({ todos: data.todos, notes: data.notes })) !== stable(preview.state)) {

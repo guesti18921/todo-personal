@@ -150,3 +150,19 @@
 .mn-entry-pin input { width: 20px; height: 20px; accent-color: #367f75; }
 .mn-bulk-panel .mn-danger { color: #922b43; border-color: #c38d9e; }
 .mn-bulk-panel .mn-primary.mn-danger { background: #922b43; color: #fff; }
+
+/* Compact status and stable editing controls, using the existing palette. */
+.mn-header { gap: 12px; }
+.mn-status { max-width: min(56%, 240px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; font-weight: 600; border-radius: 8px; }
+.mn-status::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #24695f; vertical-align: middle; }
+.mn-status[data-warning="true"]::before { background: #8a3c4e; }
+.mn-sync-notice { padding: 0 14px; border-color: #ddccd1; background: #f3e8ed; }
+.mn-sync-notice details { margin: 0; }
+.mn-sync-notice summary { cursor: pointer; padding: 12px 0; min-height: 44px; font-weight: 600; overflow-wrap: anywhere; }
+.mn-sync-notice p { line-height: 1.5; }
+.mn-sync-notice .mn-secondary { margin-bottom: 12px; }
+.mn-editor-header { position: sticky; top: 0; z-index: 12; background: #f7f3ee; padding: 10px 0; border-bottom: 1px solid #eadfe2; }
+.mn-message[data-error="true"] { color: #922b43; border-color: #c38d9e; }
+.mn-diagnostic p { font-family: ui-monospace, monospace; font-size: 13px; }
+.mobile-notebook button:disabled { cursor: default; opacity: .6; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
