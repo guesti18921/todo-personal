@@ -257,3 +257,16 @@ test('delivered metadata can be retrieved by ID; unknown tray notifications are 
  records[0].entry.checked=true;await engine.refresh();assert.deepEqual(visible.map(x=>x.id),[987654321]);
  p.getByIds=async()=>{throw Error('metadata unavailable');};await engine.refresh();assert.equal(visible.length,1);
 });
+
+test('12-hour presentation leaves native alarm timestamps unchanged, including noon and midnight', async () => {
+ const m = await modules();
+ for (const [clock, hour, en, ru] of [['15:00', 15, '03:00 PM', '15:00'], ['00:00', 0, '12:00 AM', '00:00'], ['12:00', 12, '12:00 PM', '12:00'], ['23:59', 23, '11:59 PM', '23:59']]) {
+  const e = { id: 'clock', name: 'Clock check', date: '2099-01-01', time: clock, reminder: { mode: 'at' } };
+  const before = JSON.stringify(e), planned = m.notificationPlan([{ entry: e, type: 'task' }], 'a', now)[0];
+  assert.equal(planned.schedule.at.getHours(), hour);
+  assert.equal(planned.extra.wallTime, '2099-01-01T' + clock + ':00');
+  assert.ok(m.reminderLabel(e, now, 'en-GB').replace(/\s/g, ' ').toUpperCase().includes(en), 'English uses AM/PM even in a normally 24-hour locale');
+  assert.ok(m.reminderLabel(e, now, 'ru').includes(ru));
+  assert.equal(JSON.stringify(e), before);
+ }
+});

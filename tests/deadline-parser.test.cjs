@@ -95,3 +95,20 @@ test('invalid, competing and unsupported compound durations never create partial
  const parse = await parser();
  for (const text of ['через 0 минут', 'через -1 час', 'через 1.5 дня', 'in 999999999 days', 'через 1 час 30 минут', 'in 1 hour and 30 minutes', 'через 2 часа или через 3 часа', 'Monday or Friday', 'Завтра в пятницу']) assert.equal(parse(text, now), null, text);
 });
+
+test('AM/PM punctuation, case and spacing preserve afternoon, noon and midnight', async () => {
+ const parse = await parser();
+ for (const suffix of ['pm', 'PM', 'p.m', 'p.m.', 'P.M.', 'p. m.', 'p m']) {
+  assert.equal(parse('i have a doctors appointment at 3 ' + suffix, now)?.time, '15:00', suffix);
+  assert.equal(parse('Tomorrow at 3:45 ' + suffix, now)?.time, '15:45', suffix);
+ }
+ for (const [text, time] of [['Today at 12 a.m.', '00:00'], ['Today at 12 p.m.', '12:00'], ['at 12:05 A.M', '00:05'], ['at 12:05 P.M', '12:05'], ['at 11:59 p.m.', '23:59'], ['at 3pm', '15:00'], ['tomorrow at 03 p.m.', '15:00']]) assert.equal(parse(text, now)?.time, time, text);
+ assert.equal(parse('at 3 p.m.', new Date(2026, 9, 6, 14, 0))?.date, '2026-10-06');
+ assert.equal(parse('at 3 p.m.', new Date(2026, 9, 6, 16, 0))?.date, '2026-10-07');
+ for (const text of ['tomorrow at 0 p.m.', 'tomorrow at 13 p.m.', 'tomorrow at 3:99 p.m.', 'at 3 p.m. or 3 a.m.']) assert.equal(parse(text, now), null, text);
+ assert.equal(parse('3 p.muffin', now), null, 'a word is not a meridiem');
+ for (let h = 0; h < 24; h++) for (const m of [0, 1, 30, 59]) {
+  const hh = h % 12 || 12, mm = String(m).padStart(2, '0');
+  assert.equal(parse(`Today at ${hh}:${mm} ${h >= 12 ? 'p.m.' : 'a.m.'}`, now)?.time, `${String(h).padStart(2, '0')}:${mm}`);
+ }
+});

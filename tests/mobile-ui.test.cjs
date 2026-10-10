@@ -443,7 +443,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.18/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.19/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -843,7 +843,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.18');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.19');
  } finally { dom.window.close(); }
 });
 
@@ -982,5 +982,75 @@ test('a large notebook keeps every entry and long Unicode text through editing a
   d.querySelector('[data-view="all"]').click();
   const restored = JSON.parse(w.localStorage.getItem(cacheKey));
   assert.equal(restored.state.notes.length, 1000); assert.equal(restored.state.notes.find(e => e.id === 'large-999').title, text);
+ } finally { dom.window.close(); }
+});
+
+test('English deadline and custom reminder use explicit AM/PM and persist canonical time across restart', async () => {
+ const f = listFixture(); let dom = boot(f.seed, false, null, ['en-US']);
+ try {
+  await ready(dom); let w = dom.window, d = w.document;
+  const input = (selector, value, event = 'input') => { const el = d.querySelector(selector); assert.ok(el, selector); el.value = value; el.dispatchEvent(new w.Event(event, { bubbles: true })); };
+  const part = (name, p) => `[data-clock="${name}"] [data-clock-part="${p}"]`;
+  d.querySelector('.mn-add').click();
+  assert.equal(d.querySelector('[name="time"]').hidden, true);
+  assert.equal(d.querySelector(part('time', 'hour')).disabled, true, 'no date disables visible picker');
+  input('#mn-text', 'i have a doctors appointment at 3 p.m');
+  assert.match(d.querySelector('.mn-suggestion-title').textContent, /3:00 PM/);
+  assert.equal(d.querySelector('[name="time"]').value, '', 'suggestion still requires confirmation');
+  d.querySelector('[data-accept-deadline]').click();
+  assert.equal(d.querySelector('[name="time"]').value, '15:00');
+  assert.equal(d.querySelector(part('time', 'hour')).value, '3');
+  assert.equal(d.querySelector(part('time', 'period')).value, 'PM');
+  input(part('time', 'hour'), '12'); input(part('time', 'period'), 'AM', 'change');
+  assert.equal(d.querySelector('[name="time"]').value, '00:00');
+  input(part('time', 'period'), 'PM'); assert.equal(d.querySelector('[name="time"]').value, '12:00');
+  input(part('time', 'hour'), '3'); input(part('time', 'minute'), '45');
+  assert.equal(d.querySelector('[name="time"]').value, '15:45');
+  input('[name="date"]', '2099-01-01');
+  input('[name="reminderMode"]', 'custom'); input('[name="reminderDate"]', '2099-01-02');
+  input(part('reminderTime', 'period'), 'PM'); input(part('reminderTime', 'minute'), '15'); input(part('reminderTime', 'hour'), '12');
+  assert.equal(d.querySelector('[name="reminderTime"]').value, '12:15');
+  assert.match(d.querySelector('.mn-reminder-preview').textContent, /12:15\s*PM/);
+  d.querySelector('[data-type="note"]').click();
+  assert.equal(d.querySelector('[name="time"]').value, '15:45', 'changing entry type preserves the clock');
+  assert.equal(d.querySelector(part('time', 'period')).value, 'PM');
+  d.querySelector('[data-save]').click();
+  let disk = JSON.parse(w.localStorage.getItem(cacheKey));
+  const note = disk.state.notes.find(e => e.title === 'i have a doctors appointment at 3 p.m'); assert.ok(note);
+  assert.equal(note.time, '15:45'); assert.equal(note.reminder.time, '12:15');
+  d.querySelector('[data-view="all"]').click();
+  assert.match(d.querySelector(`[data-open="${note.id}"]`).closest('.mn-card').textContent, /3:45 PM/);
+  const seed = Array.from({ length: w.localStorage.length }, (_, i) => { const key = w.localStorage.key(i); return [key, w.localStorage.getItem(key)]; });
+  dom.window.close(); dom = boot(seed, false, null, ['ru-RU']); await ready(dom); w = dom.window; d = w.document;
+  d.querySelector('[data-view="all"]').click(); d.querySelector(`[data-open="${note.id}"]`).click();
+  assert.equal(d.querySelector(part('time', 'period')).value, 'PM', 'explicit app language overrides Russian OS');
+  assert.equal(d.querySelector('[name="reminderTime"]').value, '12:15');
+  d.querySelector('[data-date="none"]').click();
+  assert.equal(d.querySelector('[name="time"]').value, ''); assert.equal(d.querySelector(part('time', 'hour')).value, '');
+  assert.equal(d.querySelector(part('time', 'period')).disabled, true);
+  assert.equal(d.querySelector('[name="reminderTime"]').value, '12:15', 'clearing deadline leaves independent custom reminder intact');
+ } finally { dom.window.close(); }
+});
+
+test('changing interface language preserves existing deadline and reminder times', async () => {
+ const f = listFixture(), dom = boot(f.seed);
+ try {
+  await ready(dom); const w = dom.window, d = w.document;
+  d.querySelector('[data-view="all"]').click(); d.querySelector('[data-open="n"]').click();
+  assert.equal(d.querySelector('[name="time"]').hidden, true);
+  assert.equal(d.querySelector('[name="time"]').value, '12:00');
+  assert.equal(d.querySelector('[data-clock="time"] [data-clock-part="period"]'), null);
+  assert.equal(d.querySelector('[data-clock="time"] [data-clock-part="hour"]').options.length, 25);
+  d.querySelector('[data-back]').click(); d.querySelector('[data-view="settings"]').click();
+  const language = d.querySelector('[data-language]'); language.value = 'en'; language.dispatchEvent(new w.Event('change', { bubbles: true }));
+  d.querySelector('[data-view="all"]').click(); d.querySelector('[data-open="n"]').click();
+  assert.equal(d.querySelector('[data-clock="time"] [data-clock-part="hour"]').value, '12');
+  assert.equal(d.querySelector('[data-clock="time"] [data-clock-part="period"]').value, 'PM');
+  assert.equal(d.querySelector('[data-clock="reminderTime"] [data-clock-part="hour"]').value, '9');
+  assert.equal(d.querySelector('[data-clock="reminderTime"] [data-clock-part="minute"]').value, '30');
+  assert.equal(d.querySelector('[data-clock="reminderTime"] [data-clock-part="period"]').value, 'AM');
+  d.querySelector('[data-save]').click();
+  const note = JSON.parse(w.localStorage.getItem(cacheKey)).state.notes.find(e => e.id === 'n');
+  assert.equal(note.time, '12:00'); assert.equal(note.reminder.time, '09:30');
  } finally { dom.window.close(); }
 });

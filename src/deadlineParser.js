@@ -124,8 +124,8 @@ export function suggestDeadline(value, now = new Date()) {
         if (hour > 23 || minute > 59) { invalid = true; return; }
         times.add(`${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`); evidence.push(raw);
     };
-    remaining = remaining.replace(/(?<![\p{L}\d:])(\d{1,2})(?::(\d{2}))?\s*(am|pm)(?!\p{L})/gu, (raw, h, m, p) => {
-        addTime(+h, +(m || 0), raw, p); return ' '.repeat(raw.length);
+    remaining = remaining.replace(/(?<![\p{L}\d:])(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s*m(?![\p{L}\d])\.?/gu, (raw, h, m, p) => {
+        addTime(+h, +(m || 0), raw, p + 'm'); return ' '.repeat(raw.length);
     });
     remaining = remaining.replace(/(上午|下午|晚上|午前|午後|오전|오후)\s*(\d{1,2})(?::(\d{2})|[点點時时시](?:(\d{1,2})[分분])?)?/gu, (raw, p, h, colon, minute) => {
         addTime(+h, +(colon || minute || 0), raw, p); return ' '.repeat(raw.length);

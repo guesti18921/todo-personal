@@ -2,8 +2,8 @@
 import json, pathlib, sys, zipfile
 from apk_manifest import decode
 apk = pathlib.Path(sys.argv[1])
-version = sys.argv[2] if len(sys.argv) > 2 else '0.4.18'
-code = sys.argv[3] if len(sys.argv) > 3 else '22'
+version = sys.argv[2] if len(sys.argv) > 2 else '0.4.19'
+code = sys.argv[3] if len(sys.argv) > 3 else '23'
 with zipfile.ZipFile(apk) as z:
  assert z.testzip() is None
  manifest = decode(z.read('AndroidManifest.xml'))
@@ -33,7 +33,7 @@ with zipfile.ZipFile(apk) as z:
  assert not any(n.lower().endswith(('.p12', '.jks', '.keystore', '.env')) for n in z.namelist())
  bundle = z.read('assets/public/main.js')
  assert version.encode() in bundle and b'SUPABASE_SERVICE_ROLE_KEY' not in bundle
- if version == '0.4.18': assert b'sourceMappingURL=data:' not in bundle
+ if version == '0.4.19': assert b'sourceMappingURL=data:' not in bundle
  assert b'NetworkPlugin' in b''.join(z.read(n) for n in z.namelist() if n.endswith('.dex'))
 print('APK static audit passed:', version, 'release manifest, backup exclusions, TLS, permissions, exported components and assets.')
 print('Permissions:', ', '.join(sorted(permissions)))

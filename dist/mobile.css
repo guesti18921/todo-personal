@@ -166,3 +166,9 @@
 .mn-diagnostic p { font-family: ui-monospace, monospace; font-size: 13px; }
 .mobile-notebook button:disabled { cursor: default; opacity: .6; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+
+/* Explicit AM/PM picker follows the app language, independent of the OS. */
+.mn-date-fields { grid-template-columns: 1fr; }
+.mn-clock { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1.25fr); align-items: center; gap: 6px; }
+.mn-clock[data-clock-format="24"] { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.mn-clock .mn-input { padding: 10px 6px; }

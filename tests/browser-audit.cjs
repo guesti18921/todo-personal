@@ -27,7 +27,7 @@ const server = http.createServer((req, res) => {
  const browser = await chromium.launch({ headless: true });
  const results = [];
  try {
-  for (const [name, width, height, locale] of [['small', 320, 640, 'ru-RU'], ['phone', 360, 800, 'ru-RU'], ['large', 412, 915, 'ru-RU'], ['landscape', 800, 360, 'ru-RU'], ['desktop', 1280, 800, 'ru-RU'], ['english', 360, 800, 'en-US']]) {
+  for (const [name, width, height, locale, appLanguage] of [['small', 320, 640, 'ru-RU'], ['phone', 360, 800, 'ru-RU'], ['large', 412, 915, 'ru-RU'], ['landscape', 800, 360, 'ru-RU'], ['desktop', 1280, 800, 'ru-RU'], ['english', 360, 800, 'en-US'], ['english-small', 320, 640, 'en-GB'], ['english-wide', 412, 915, 'en-US'], ['english-ru-os', 360, 800, 'ru-RU', 'en'], ['russian-en-os', 360, 800, 'en-US', 'ru']]) {
    const context = await browser.newContext({ viewport: { width, height }, locale, serviceWorkers: 'block' });
    let mode = 'online', cloud = { user_id: id, revision: 0, ...JSON.parse(JSON.stringify(initial)) };
    await context.route('**/*.supabase.co/**', async route => {
@@ -43,7 +43,7 @@ const server = http.createServer((req, res) => {
    await context.addInitScript(({ seed, cacheKey, language }) => {
     if (!localStorage.getItem(cacheKey)) for (const [key, value] of seed) localStorage.setItem(key, value);
     localStorage.setItem('todo-personal:language', JSON.stringify({ language }));
-   }, { seed, cacheKey, language: locale.startsWith('en') ? 'en' : 'ru' });
+   }, { seed, cacheKey, language: appLanguage || (locale.startsWith('en') ? 'en' : 'ru') });
    const page = await context.newPage(), errors = []; page.on('pageerror', e => errors.push(e.message));
    await page.goto(origin); await page.locator('.mn-main h1').waitFor();
    await page.locator('[data-view="all"]').click();
@@ -59,9 +59,55 @@ const server = http.createServer((req, res) => {
    await page.screenshot({ path: path.join(out, name + '-settings.png'), fullPage: true });
    await page.locator('[data-view="all"]').click();
    await page.locator('.mn-add').click();
-   await page.locator('#mn-text').fill('Купить продукты завтра в 18:00');
+   const english = (appLanguage || (locale.startsWith('en') ? 'en' : 'ru')) === 'en';
+   await page.locator('#mn-text').fill(english ? 'Tomorrow I have a doctors appointment at 3 p.m.' : 'Купить продукты завтра в 18:00');
+   if (english) {
+    assert.match(await page.locator('.mn-suggestion-title').innerText(), /3:00 PM/);
+    await page.locator('[data-accept-deadline]').click();
+    assert.equal(await page.locator('[name="time"]').inputValue(), '15:00');
+    assert.equal(await page.locator('[data-clock="time"] [data-clock-part="period"]').inputValue(), 'PM');
+    await page.locator('[data-clock="time"] [data-clock-part="hour"]').selectOption('12');
+    await page.locator('[data-clock="time"] [data-clock-part="period"]').selectOption('AM');
+    assert.equal(await page.locator('[name="time"]').inputValue(), '00:00');
+    await page.locator('[data-clock="time"] [data-clock-part="period"]').selectOption('PM');
+    assert.equal(await page.locator('[name="time"]').inputValue(), '12:00');
+    await page.locator('[data-clock="time"] [data-clock-part="hour"]').selectOption('3');
+    await page.locator('[data-clock="time"] [data-clock-part="minute"]').selectOption('45');
+    await page.locator('[name="reminderMode"]').selectOption('custom');
+    await page.locator('[name="reminderDate"]').fill('2099-01-02');
+    await page.locator('[data-clock="reminderTime"] [data-clock-part="hour"]').selectOption('12');
+    await page.locator('[data-clock="reminderTime"] [data-clock-part="period"]').selectOption('AM');
+    assert.equal(await page.locator('[name="reminderTime"]').inputValue(), '00:00');
+    assert.match(await page.locator('.mn-reminder-preview').innerText(), /12:00\s*AM/);
+    assert.equal(await page.locator('[name="time"]').isVisible(), false);
+   } else {
+    assert.equal(await page.locator('[data-clock-part="period"]').count(), 0);
+    assert.equal(await page.locator('[data-clock="time"] [data-clock-part="hour"] option').count(), 25);
+    await page.locator('[data-accept-deadline]').click();
+    await page.locator('[data-clock="time"] [data-clock-part="hour"]').selectOption('15');
+    assert.equal(await page.locator('[name="time"]').inputValue(), '15:00');
+    assert.equal(await page.locator('[name="time"]').getAttribute('type'), 'time');
+   }
+   const editorAccessibility = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => n.target) })));
+   assert.deepEqual(editorAccessibility, [], 'editor accessibility: ' + name + JSON.stringify(editorAccessibility));
+   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'editor overflow: ' + name);
+   await page.evaluate(() => window.scrollTo(0, 0));
    await page.screenshot({ path: path.join(out, name + '-editor.png'), fullPage: true });
+   if (english) {
+    await page.locator('[data-clock="time"]').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(out, name + '-clock.png') });
+   }
    await page.locator('[data-save]').click();
+   if (english) {
+    const stored = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).state.todos.home.find(e => e.name.startsWith('Tomorrow I have')), cacheKey);
+    assert.equal(stored.time, '15:45'); assert.equal(stored.reminder.time, '00:00');
+    await page.locator('[data-view="all"]').click();
+    assert.match(await page.locator(`[data-open="${stored.id}"]`).innerText(), /appointment/);
+    await page.locator(`[data-open="${stored.id}"]`).click();
+    assert.equal(await page.locator('[data-clock="time"] [data-clock-part="period"]').inputValue(), 'PM');
+    assert.equal(await page.locator('[data-clock="reminderTime"] [data-clock-part="period"]').inputValue(), 'AM');
+    await page.locator('[data-save]').click();
+   }
    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
    assert.equal(overflow, false, 'no horizontal scrolling at ' + width);
    if (name === 'phone') {
