@@ -1054,3 +1054,18 @@ test('changing interface language preserves existing deadline and reminder times
   assert.equal(note.time, '12:00'); assert.equal(note.reminder.time, '09:30');
  } finally { dom.window.close(); }
 });
+
+test('leaving the textarea never replaces the deadline button between pointer down and click', async () => {
+ const dom = boot(listFixture().seed, false, null, ['en-US']);
+ try {
+  await ready(dom); const w = dom.window, d = w.document;
+  d.querySelector('.mn-add').click(); const text = d.querySelector('#mn-text');
+  text.value = 'Tomorrow at 3 p.m.'; text.dispatchEvent(new w.Event('input', { bubbles: true }));
+  const button = d.querySelector('[data-accept-reminder]');
+  text.dispatchEvent(new w.Event('change', { bubbles: true }));
+  assert.equal(d.querySelector('[data-accept-reminder]'), button, 'pointer target stays connected after textarea blur');
+  button.click();
+  assert.equal(d.querySelector('[name="time"]').value, '15:00');
+  assert.equal(d.querySelector('[name="reminderMode"]').value, 'at');
+ } finally { dom.window.close(); }
+});

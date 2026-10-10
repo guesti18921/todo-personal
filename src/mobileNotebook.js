@@ -607,8 +607,13 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, dele
             } catch (_) { event.target.checked = smartDates; say(t('Не удалось сохранить настройку на устройстве.')); }
         } else if (editor) {
             const target = readClockInput(event.target);
-            if (['date', 'time'].includes(target.name)) dismissedDeadline = suggestionKey(parseSuggestion());
-            updateDate(); changed();
+            if (['date', 'time'].includes(target.name)) {
+                dismissedDeadline = suggestionKey(parseSuggestion());
+                updateDate();
+            } else if (['reminderMode', 'reminderDate', 'reminderTime'].includes(target.name)) updateReminder();
+            // Text input already updated the suggestion. Replacing its buttons
+            // on blur would remove the pressed button before its click arrives.
+            changed();
         }
     });
     window.addEventListener('beforeunload', event => {
