@@ -56,6 +56,8 @@ jobs:
           cp -a mobile/dist/. site/mobile-preview/
           cp mobile/dist/reset-password.html mobile/dist/password-reset.js site/
           cp -a mobile/dist/chunks site/
+          cp -a live/docs/legal/. site/
+          cp -a live/docs/legal/. site/mobile-preview/
           rm -f site/mobile-preview/CNAME
       - name: Configure Pages
         uses: actions/configure-pages@v5
