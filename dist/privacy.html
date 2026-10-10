@@ -16,18 +16,18 @@
 </nav>
 <section id="ru" lang="ru">
 <h1>Политика конфиденциальности</h1>
-<p class="meta">TO-DO Personal · редакция от 8 октября 2026 года</p>
+<p class="meta">TO-DO Personal · редакция от 10 октября 2026 года</p>
 <p>Эта политика описывает обработку данных в приложении и веб-версии TO-DO Personal. За обработку данных отвечает разработчик TO-DO Personal. Контакт по вопросам конфиденциальности и данным: <a href="mailto:support@m1strell.com">support@m1strell.com</a>.</p>
 <h2>Какие данные обрабатываются</h2>
 <ul>
 <li>
-<strong>Аккаунт:</strong> адрес электронной почты, идентификатор пользователя, сведения о способе входа и сеансе. При входе через Google сервис авторизации также может получить имя и изображение профиля, разрешённые Google.</li>
+<strong>Аккаунт:</strong> адрес электронной почты, идентификатор пользователя, сведения о способе входа и сеансе, выбранный язык интерфейса. Язык сохраняется в данных аккаунта Supabase для синхронизации настройки между устройствами. При входе через Google сервис авторизации также может получить имя и ссылку на изображение профиля, разрешённые Google.</li>
 <li>
-<strong>Блокнот:</strong> текст задач и заметок, сроки, время, настройки напоминаний, состояние выполнения и служебные даты изменений. Эти данные передаются в Supabase для сохранения и синхронизации.</li>
+<strong>Блокнот:</strong> текст задач и заметок, сроки, время, настройки напоминаний, состояние выполнения и закрепления, идентификаторы записей и служебные даты изменений. Эти данные передаются в Supabase для сохранения и синхронизации.</li>
 <li>
 <strong>На устройстве:</strong> копия блокнота для работы без интернета, черновики, резервные копии при конфликте, настройки языка и напоминаний, данные сеанса входа.</li>
 <li>
-<strong>Технические данные:</strong> сервисы авторизации, отправки писем и размещения сайта могут обрабатывать IP-адрес, сведения о браузере или клиенте, время запросов, ошибки и события входа. Если вы пишете в поддержку, обрабатываются адрес отправителя и содержание обращения.</li>
+<strong>Технические данные:</strong> сервисы авторизации, отправки писем и размещения сайта могут обрабатывать IP-адрес, сведения о браузере или клиенте, время запросов, ошибки и события входа. Инфраструктура Supabase также может определять по IP-адресу примерное местоположение, например страну, регион или город, и включать его в технические журналы для обслуживания и защиты сервиса. Приложение не запрашивает доступ к GPS. Если вы пишете в поддержку, обрабатываются адрес отправителя и содержание обращения.</li>
 </ul>
 <h2>Для чего используются данные</h2>
 <p>Для входа и подтверждения почты, сохранения и синхронизации записей, работы без сети, напоминаний, защиты аккаунтов и ответа на обращения. В приложение не встроены рекламные или аналитические SDK. Разработчик не продаёт пользовательские данные и не использует содержимое записей для рекламы.</p>
@@ -48,10 +48,10 @@
 <h2>Разрешения и защита</h2>
 <p>Для напоминаний приложение запрашивает разрешение на уведомления и, при необходимости, точные будильники. Напоминания создаются на телефоне и могут работать без сети. Их текст может быть виден на экране блокировки; это регулируется настройками Android.</p>
 <p>Сетевые запросы к Supabase передаются по HTTPS. Пароль при входе обрабатывается Supabase Auth, а не хранится в блокноте. Записи не защищены сквозным шифрованием; локальные копии доступны в хранилище приложения. TO-DO Personal не является менеджером паролей: не используйте его для хранения паролей, кодов доступа и платёжных секретов.</p>
-<p>В Android-версии 0.4.12 добавлены правила исключения хранилища приложения из системного резервного копирования и переноса данных. При смене телефона используйте синхронизацию через аккаунт: несинхронизированные записи и черновики могут не перенестись.</p>
+<p>В Android-версии хранилище приложения исключено из системного резервного копирования и переноса данных настройками приложения. При смене телефона используйте синхронизацию через аккаунт: несинхронизированные записи и черновики могут не перенестись.</p>
 <h2 id="retention">Хранение и удаление</h2>
 <p>Аккаунт и облачный блокнот сохраняются, пока вы пользуетесь аккаунтом, до удаления записей или аккаунта. После успешного удаления аккаунта удаляются его данные авторизации и связанные записи из основной базы Supabase. При удалении через приложение также очищаются локальные данные и напоминания этого аккаунта на текущем устройстве.</p>
-<p>Другие устройства могут сохранять ранее загруженные копии без сети. Для их удаления очистите данные приложения или сайта на этих устройствах. Скачанные вами файлы и копии за пределами приложения удаляются вами отдельно. Выход из аккаунта и удаление приложения сами по себе не удаляют облачный аккаунт.</p>
+<p>Другие устройства могут сохранять ранее загруженные копии без сети. Начиная с версии 0.4.15 приложение очищает локальные данные удалённого аккаунта, когда при следующем подключении получает от сервера явное подтверждение удаления аккаунта. До этого можно очистить данные приложения или сайта на соответствующем устройстве вручную. Скачанные вами файлы и копии за пределами приложения удаляются вами отдельно. Выход из аккаунта сам по себе не удаляет облачный аккаунт и сохранённые для работы без сети локальные копии. Удаление приложения также не удаляет облачный аккаунт.</p>
 <p>Служебные журналы безопасности и доставки писем хранятся отдельно от блокнота и могут сохраняться после удаления аккаунта. На текущем тарифе Supabase Free журналы API и базы данных доступны разработчику за последний день; это не означает гарантированного удаления всех внутренних журналов поставщика через сутки. Resend указывает срок хранения писем и журналов доставки 30 дней на стандартных тарифах. Дополнительная запись журналов авторизации в отдельную таблицу базы Supabase отключена. Резервные копии инфраструктуры обслуживаются поставщиками по их правилам; мгновенное удаление из всех инфраструктурных копий не обещается.</p>
 <p>Переписка с поддержкой используется для ответа на обращение, а при удалении — также для проверки владения аккаунтом. После завершения обращения разработчик удаляет переписку из ящика поддержки, включая корзину, в течение 30 дней, если её дальнейшее хранение не требуется по закону. Удаление из ящика не гарантирует немедленного удаления из служебных журналов и резервных копий почтового провайдера, которые обслуживаются по его правилам.</p>
 <h2>Как управлять данными</h2>
@@ -61,18 +61,18 @@
 </section>
 <section id="en" lang="en">
 <h1>Privacy policy</h1>
-<p class="meta">TO-DO Personal · updated 8 October 2026</p>
+<p class="meta">TO-DO Personal · updated 10 October 2026</p>
 <p>This policy covers TO-DO Personal's app and web version. The developer of TO-DO Personal is responsible for this processing. Contact the developer about privacy and your data at <a href="mailto:support@m1strell.com">support@m1strell.com</a>.</p>
 <h2>Data we process</h2>
 <ul>
 <li>
-<strong>Account:</strong> email address, user ID, sign-in method and session information. Google sign-in may also provide a profile name and picture permitted by Google.</li>
+<strong>Account:</strong> email address, user ID, sign-in method and session information, and your selected interface language. The language is stored in Supabase account metadata to synchronize this preference between devices. Google sign-in may also provide a profile name and picture URL permitted by Google.</li>
 <li>
-<strong>Notebook:</strong> task and note text, deadlines, times, reminder settings, completion status and change timestamps. This information is sent to Supabase for storage and synchronization.</li>
+<strong>Notebook:</strong> task and note text, deadlines, times, reminder settings, completion and pinning status, entry identifiers and change timestamps. This information is sent to Supabase for storage and synchronization.</li>
 <li>
 <strong>On your device:</strong> an offline notebook copy, drafts, conflict recovery copies, language and reminder settings, and sign-in session data.</li>
 <li>
-<strong>Technical data:</strong> authentication, email and website providers may process IP addresses, browser or client information, request times, errors and sign-in events. Support processes your sender address and message content.</li>
+<strong>Technical data:</strong> authentication, email and website providers may process IP addresses, browser or client information, request times, errors and sign-in events. Supabase infrastructure may also infer approximate location from an IP address, such as country, region or city, and include it in technical logs for service operation and security. The app does not request GPS access. Support processes your sender address and message content.</li>
 </ul>
 <h2>Purposes</h2>
 <p>Sign-in and email verification, saving and synchronizing entries, offline use, reminders, account security and support. The app includes no advertising or analytics SDKs. The developer does not sell user data or use entry contents for advertising.</p>
@@ -81,9 +81,9 @@
 <a href="https://supabase.com/privacy">Supabase</a> provides authentication and cloud storage; <a href="https://resend.com/legal/privacy-policy">Resend</a> delivers account emails and processes delivery information; <a href="https://policies.google.com/privacy">Google</a> provides optional Google sign-in; <a href="https://timeweb.com/ru/personal-data-apps/">Timeweb</a> receives and sends support emails at support@m1strell.com and processes sender and recipient addresses, message contents and delivery information; notebook contents are not automatically sent to support; <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub Pages</a> hosts the website. Task and note contents are not sent in account emails. Data may be processed outside your country. Providers also apply their own policies. Developer access is limited to support, maintenance, security and applicable legal obligations.</p>
 <h2>Permissions and security</h2>
 <p>The app requests notification permission and, where needed, exact alarm access for reminders. Reminders are local and can work offline. Their text may appear on your lock screen depending on Android settings. Requests to Supabase use HTTPS. Supabase Auth processes sign-in passwords; passwords are not stored in the notebook. Entries are not end-to-end encrypted, and local copies reside in app storage. TO-DO Personal is not a password manager; do not store passwords, access codes or payment secrets in it.</p>
-<p>Android version 0.4.12 adds rules excluding app storage from system backup and device transfer. Use account synchronization when changing phones: unsynchronized entries and drafts may not transfer.</p>
+<p>The Android app is configured to exclude its storage from system backup and device transfer. Use account synchronization when changing phones: unsynchronized entries and drafts may not transfer.</p>
 <h2 id="retention-en">Retention and deletion</h2>
-<p>Accounts and cloud entries remain until you delete the entries or account. Successful account deletion removes authentication data and associated entries from the primary Supabase database. In-app deletion also clears this account's local data and reminders on the current device. Other devices may retain downloaded copies offline; clear their app or website data separately. You must remove downloaded files and external copies yourself. Signing out or uninstalling does not delete your cloud account.</p>
+<p>Accounts and cloud entries remain until you delete the entries or account. Successful account deletion removes authentication data and associated entries from the primary Supabase database. In-app deletion also clears this account's local data and reminders on the current device. Other devices may retain downloaded copies offline. Starting with version 0.4.15, the app clears a deleted account's local data when a subsequent connection receives explicit server confirmation that the account has been deleted. Until then, you can clear the app or website data on that device manually. You must remove downloaded files and external copies yourself. Signing out does not itself delete your cloud account or locally retained offline copies. Uninstalling also does not delete your cloud account.</p>
 <p>Security and email-delivery logs are separate from the notebook and may remain after account deletion. On the current Supabase Free plan, API and database logs are accessible to the developer for the last day; this does not guarantee erasure of all internal provider logs within one day. Resend states that email and delivery log data is retained for 30 days on standard plans. Additional storage of authentication audit events in a separate Supabase database table is disabled. Infrastructure backup retention is managed by providers; immediate erasure from every infrastructure copy is not promised.</p>
 <p>Support emails are used to answer requests and, for account deletion, to verify ownership. The developer removes correspondence from the support mailbox, including Trash, within 30 days after resolution unless legal obligations require further retention. Mailbox deletion does not guarantee immediate erasure from the email provider’s operational logs and infrastructure backups, which follow its own retention rules.</p>
 <h2>Your choices and requests</h2>
