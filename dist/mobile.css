@@ -153,7 +153,8 @@
 
 /* Compact status and stable editing controls, using the existing palette. */
 .mn-header { gap: 12px; }
-.mn-status { max-width: min(56%, 240px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; font-weight: 600; border-radius: 8px; }
+.mn-logo { flex-shrink: 0; }
+.mn-status { flex: 1; min-width: 0; max-width: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; font-weight: 600; border-radius: 8px; }
 .mn-status::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #24695f; vertical-align: middle; }
 .mn-status[data-warning="true"]::before { background: #8a3c4e; }
 .mn-sync-notice { padding: 0 14px; border-color: #ddccd1; background: #f3e8ed; }

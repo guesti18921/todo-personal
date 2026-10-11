@@ -48,8 +48,8 @@ for (const name of ['ReminderClock.java', 'ReminderClockReceiver.java', 'MainAct
 fs.copyFileSync(path.join(root, 'native/android/time_picker_theme.xml'), path.join(root, 'android/app/src/main/res/values/time_picker_theme.xml'));
 const gradlePath = path.join(root, 'android/app/build.gradle');
 const gradle = fs.readFileSync(gradlePath, 'utf8')
-    .replace(/versionCode \d+/, 'versionCode 24')
-    .replace(/versionName "[^"]+"/, 'versionName "0.4.20"');
+    .replace(/versionCode \d+/, 'versionCode 25')
+    .replace(/versionName "[^"]+"/, 'versionName "0.4.21"');
 fs.writeFileSync(gradlePath, gradle);
 const drawable = path.join(root, 'android/app/src/main/res/drawable');
 fs.mkdirSync(drawable, { recursive: true });
