@@ -503,3 +503,19 @@ test('opening the editor while a cloud download is pending defers the replacemen
  editing = false;
  assert.equal((await store.readCloudChanges({ checkOnly: () => editing })).notes[0].text, 'remote text');
 });
+
+test('edits made during an upload are sent afterward and never marked confirmed prematurely', async () => {
+ const f = fixture(), { store } = await f.load();
+ f.accounts.set('a', { ...empty(), revision: 0 }); await store.openNotebook('a');
+ store.savePart('notes', [{ id: 'n', text: 'first edit' }]);
+ const release = f.holdNextUpload(), pending = store.flushNotebook();
+ await Promise.resolve(); await Promise.resolve();
+ store.savePart('notes', [{ id: 'n', text: 'latest edit' }]);
+ assert.equal(store.getSyncDetails().dirty, true);
+ assert.notEqual(store.getSyncDetails().phase, 'synced');
+ release(); assert.equal(await pending, true);
+ assert.equal(f.accounts.get('a').notes[0].text, 'latest edit');
+ assert.equal(f.accounts.get('a').revision, 2);
+ assert.equal(JSON.parse(f.disk.get('todo-personal:local:a')).dirty, false);
+ assert.equal(store.getSyncDetails().phase, 'synced');
+});

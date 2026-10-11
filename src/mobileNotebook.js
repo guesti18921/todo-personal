@@ -222,7 +222,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
             return;
         }
         if (view === 'settings') {
-            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button>${reauthButton()}<button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${timeSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.22</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
+            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button>${reauthButton()}<button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${timeSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.23</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
             return;
         }
         // Android's keyboard changes the viewport. Keep the focused search
@@ -313,11 +313,12 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
     function updateSyncNotice() {
         const info = syncPresentation(syncDetails);
         const status = shell.querySelector('.mn-status');
-        const short = { offline: 'Нет связи с сервером', local: 'На устройстве', pending: 'Ожидает отправки', request: 'Сбой синхронизации', 'account-data': 'Нет облачной копии', permission: 'Нет доступа', auth: 'Нужно войти снова', limited: 'Отправка отложена', available: 'Есть обновления', server: 'Сбой сервера', syncing: 'Отправляем', conflict: 'Две копии' }[syncDetails?.conflict ? 'conflict' : syncDetails?.phase];
-        const label = (short ? t(short) : info.title) + ' ›';
+        const short = { offline: 'Нет связи с сервером', local: 'Сохранено на телефоне', pending: 'Ожидает отправки', request: 'Сбой синхронизации', 'account-data': 'Нет облачной копии', permission: 'Нет доступа', auth: 'Нужно войти снова', limited: 'Отправка отложена', available: 'Есть обновления', server: 'Сбой сервера', syncing: 'Отправляем', conflict: 'Две копии' }[syncDetails?.conflict ? 'conflict' : syncDetails?.phase];
+        const label = (syncDetails && !syncDetails.localSaved ? info.title : short ? t(short) : info.title) + ' ›';
         if (status.textContent !== label) status.textContent = label;
         status.title = info.title;
         status.dataset.warning = String(info.warning);
+        status.dataset.state = info.warning ? 'warning' : syncDetails?.phase === 'synced' && !syncDetails.dirty ? 'confirmed' : syncDetails?.phase === 'syncing' ? 'uploading' : 'local';
 
         syncNotice.hidden = !info.warning || !syncDetails;
         const noticeKey = `${info.title}|${info.explanation}|${Boolean(syncDetails?.conflict)}`;
@@ -500,6 +501,12 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         if (close && value.reminder.mode !== 'none' && !reminderMoment({ ...value, checked: false })) { say(t('Укажите дату и время напоминания или выберите «Не напоминать».')); main.querySelector('[name="reminderMode"]').focus(); return false; }
         const previous = editingId ? find(editingId) : null;
         if (editingId && !previous) { say(t('Запись удалена на другом устройстве. Скопируйте текст перед выходом.')); return false; }
+        // Merely viewing a record must not create an upload or a cloud conflict.
+        // Retry real persistence when the local copy has not been saved safely.
+        if (previous && JSON.stringify(value) === savedEditorFingerprint && getSyncDetails()?.localSaved !== false) {
+            if (close) { editor = false; render(); say(t('Запись сохранена.')); }
+            return true;
+        }
         const before = JSON.parse(JSON.stringify({ todos, notes }));
         const nextId = saveEntry(todos, notes, value, previous);
         const locallySaved = persist();

@@ -731,16 +731,18 @@ async function deleteAccount() {
     } finally { changingAccount = false; todoApp.inert = !ready; }
 }
 
-async function refreshCloud() {
-    if (!ready || polling || changingAccount || document.hidden) return;
-    const checkOnly = () => Boolean(document.activeElement?.matches('input, textarea, [contenteditable="true"]')
+function shouldDeferCloud() {
+    return Boolean(document.activeElement?.matches('input, textarea, [contenteditable="true"]')
         || document.querySelector('.create-new-open, .edit-popup-open, .details-popup-open')
         || mobileUI?.isEditing());
+}
+async function refreshCloud() {
+    if (!ready || polling || changingAccount || document.hidden) return;
     polling = true;
     try {
         if (hasPendingChanges()) await flushNotebook();
         if (!ready || changingAccount || hasPendingChanges()) return;
-        const state = await readCloudChanges({ checkOnly });
+        const state = await readCloudChanges({ checkOnly: shouldDeferCloud });
         if (state && ready) applyState(state);
     } finally { polling = false; }
 }
@@ -791,7 +793,7 @@ mobileUI = createMobileNotebook({
         const id = activeUser;
         await flushNotebook();
         if (id !== activeUser) return;
-        const state = await readCloudChanges();
+        const state = await readCloudChanges({ checkOnly: shouldDeferCloud });
         if (state && ready && id === activeUser) applyState(state);
         mobileUI?.setStatus('', getSyncDetails());
     },

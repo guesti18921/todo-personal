@@ -4,8 +4,9 @@ const path = require('node:path');
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
 const { webcrypto } = require('node:crypto');
-const html = fs.readFileSync(path.join(__dirname, '../dist/index.html'), 'utf8');
-const bundle = fs.readFileSync(path.join(__dirname, '../dist/main.js'), 'utf8');
+const assets = process.env.TODO_ASSET_ROOT || path.join(__dirname, '../dist');
+const html = fs.readFileSync(path.join(assets, 'index.html'), 'utf8');
+const bundle = fs.readFileSync(path.join(assets, 'main.js'), 'utf8');
 const errors = [];
 const virtualConsole = new VirtualConsole();
 virtualConsole.on('jsdomError', error => errors.push(error.message));
@@ -443,7 +444,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.22/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.23/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -843,7 +844,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.22');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.23');
  } finally { dom.window.close(); }
 });
 
@@ -1195,4 +1196,85 @@ test('invalid edit drafts cannot break the notebook and an accepted date-only re
  d.querySelector('.mn-add').click();const text=d.querySelector('#mn-text');text.value='Встреча 15 октября 2099';text.dispatchEvent(new w.Event('input',{bubbles:true}));
  d.querySelector('[data-accept-reminder]').click();assert.equal(d.querySelector('[name="time"]').value,'09:00');assert.equal(d.querySelector('.mn-suggestion').hidden,true);
  }finally{dom.window.close();}
+});
+
+test('manual sync does not replace an entry if its editor opens during the cloud download',async()=>{
+ const f=listFixture();let remoteRevision=0,releaseDownload,downloadStarted=false,holdDownload=true;
+ const session=JSON.parse(f.seed.find(([key])=>key==='sb-ihvwqqvndmwtislvgamd-auth-token')[1]);
+ const fetcher=async(url,options={})=>{
+  const address=String(url?.url||url),parsed=new URL(address);
+  const json=data=>new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
+  if(parsed.pathname.includes('/rest/v1/notebooks')){
+   if(parsed.searchParams.get('select')==='revision')return json({revision:remoteRevision});
+   if(remoteRevision===1){const row={user_id:id,revision:1,...f.state,notes:f.state.notes.map(n=>n.id==='n'?{...n,title:'Remote changed title',text:'Remote changed details'}:n)};if(!holdDownload)return json(row);downloadStarted=true;return new Promise(resolve=>{releaseDownload=()=>{holdDownload=false;resolve(json(row));};});}
+   return json({user_id:id,revision:0,...f.state});
+  }
+  return json(session.user);
+ };
+ const dom=boot(f.seed,false,fetcher);try{await ready(dom);await wait();const w=dom.window,d=w.document;
+ remoteRevision=1;d.querySelector('[data-sync-open]').click();d.querySelector('[data-sync-now]').click();
+ for(let i=0;i<30&&!downloadStarted;i++)await wait();assert.equal(downloadStarted,true);
+ d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();const editor=d.querySelector('#mn-text');
+ releaseDownload();await wait();await wait();
+ assert.equal(d.querySelector('#mn-text'),editor);assert.equal(editor.value,f.state.notes.find(n=>n.id==='n').title);
+ assert.equal(JSON.parse(w.localStorage.getItem(cacheKey)).state.notes.find(n=>n.id==='n').title,f.state.notes.find(n=>n.id==='n').title,'download is deferred until editor is left');
+ assert.match(d.querySelector('.mn-status').textContent,/обновления|изменения/i);
+ assert.equal(d.querySelector('.mn-status').dataset.state,'local');
+ d.querySelector('[data-back]').click();d.querySelector('[data-sync-open]').click();d.querySelector('[data-sync-now]').click();await wait();await wait();
+ assert.equal(JSON.parse(w.localStorage.getItem(cacheKey)).state.notes.find(n=>n.id==='n').title,'Remote changed title');
+ assert.equal(d.querySelector('.mn-status').dataset.state,'confirmed');
+ }finally{dom.window.close();}
+});
+
+test('opening and leaving a saved entry without edits does not create a pending upload',async()=>{
+ const dom=boot(listFixture().seed);try{await ready(dom);const w=dom.window,d=w.document;
+ const before=w.localStorage.getItem(cacheKey);
+ d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();d.querySelector('[data-back]').click();
+ assert.equal(w.localStorage.getItem(cacheKey),before,'viewing a record must not change its revision or saved fields');
+ assert.equal(JSON.parse(w.localStorage.getItem(cacheKey)).dirty,false);
+ }finally{dom.window.close();}
+});
+
+test('two app instances retain offline edits and the cloud version through conflict and restart',async()=>{
+ const f=listFixture(),session=JSON.parse(f.seed.find(([key])=>key==='sb-ihvwqqvndmwtislvgamd-auth-token')[1]);
+ let cloud={user_id:id,revision:0,...JSON.parse(JSON.stringify(f.state))},secondOnline=true;
+ const response=data=>new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
+ const server=async(input,options={})=>{
+  const url=new URL(String(input?.url||input));
+  if(!url.pathname.includes('/rest/v1/notebooks'))return response(session.user);
+  if(options.method==='PATCH'){
+   if(url.searchParams.get('revision')!=='eq.'+cloud.revision)return response([]);
+   cloud={...cloud,...JSON.parse(options.body)};return response([{revision:cloud.revision}]);
+  }
+  return response(url.searchParams.get('select')==='revision'?{revision:cloud.revision}:cloud);
+ };
+ const secondFetch=(...args)=>{if(!secondOnline)throw new TypeError('Network unavailable');return server(...args);};
+ const first=boot(f.seed,false,server);let second=boot(f.seed,false,secondFetch);
+ const until=async predicate=>{for(let i=0;i<40&&!predicate();i++)await wait();assert.ok(predicate());};
+ const change=(dom,title)=>{const w=dom.window,d=w.document;d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();const input=d.querySelector('#mn-text');input.value=title;input.dispatchEvent(new w.Event('input',{bubbles:true}));d.querySelector('[data-back]').click();};
+ try{
+  await ready(first);await ready(second);await wait();
+  assert.equal(first.window.document.querySelector('.mn-status').dataset.state,'local');
+  assert.match(first.window.document.querySelector('.mn-status').textContent,/Сохранено на телефоне/);
+  for(const dom of [first,second]){const d=dom.window.document;d.querySelector('[data-sync-open]').click();d.querySelector('[data-sync-now]').click();}
+  await until(()=>first.window.document.querySelector('.mn-status').dataset.state==='confirmed');
+  secondOnline=false;change(second,'Offline second-device edit');
+  assert.equal(second.window.document.querySelector('.mn-status').dataset.state,'local');
+  change(first,'Online first-device edit');await until(()=>cloud.notes.find(n=>n.id==='n').title==='Online first-device edit');
+  secondOnline=true;second.window.dispatchEvent(new second.window.Event('online'));
+  await until(()=>JSON.parse(second.window.localStorage.getItem(cacheKey)).conflict);
+  assert.equal(cloud.notes.find(n=>n.id==='n').title,'Online first-device edit');
+  assert.equal(JSON.parse(second.window.localStorage.getItem(cacheKey)).state.notes.find(n=>n.id==='n').title,'Offline second-device edit');
+  assert.equal(second.window.document.querySelector('.mn-status').dataset.state,'warning');
+  const storage=second.window.localStorage,snapshot=Array.from({length:storage.length},(_,i)=>{const key=storage.key(i);return[key,storage.getItem(key)];});
+  second.window.close();secondOnline=false;second=boot(snapshot,false,secondFetch);await ready(second);
+  assert.equal(JSON.parse(second.window.localStorage.getItem(cacheKey)).conflict,true);
+  assert.equal(JSON.parse(second.window.localStorage.getItem(cacheKey)).state.notes.find(n=>n.id==='n').title,'Offline second-device edit');
+  secondOnline=true;const d=second.window.document;d.querySelector('[data-sync-open]').click();d.querySelector('[data-compare]').click();
+  await until(()=>Boolean(d.querySelector('[data-resolve="both"]')));
+  assert.match(d.querySelector('.mn-main').textContent,/Online first-device edit/);assert.match(d.querySelector('.mn-main').textContent,/Offline second-device edit/);
+  d.querySelector('[data-resolve="both"]').click();await until(()=>cloud.notes.some(n=>n.title==='Offline second-device edit'));
+  assert.ok(cloud.notes.some(n=>n.title==='Online first-device edit'));
+  await until(()=>d.querySelector('.mn-status').dataset.state==='confirmed');
+ }finally{first.window.close();second.window.close();}
 });

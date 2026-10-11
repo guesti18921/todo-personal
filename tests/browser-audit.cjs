@@ -30,13 +30,19 @@ const server = http.createServer((req, res) => {
  try {
   for (const [name, width, height, locale, appLanguage] of [['small', 320, 640, 'ru-RU'], ['phone', 360, 800, 'ru-RU'], ['large', 412, 915, 'ru-RU'], ['landscape', 800, 360, 'ru-RU'], ['desktop', 1280, 800, 'ru-RU'], ['english', 360, 800, 'en-US'], ['english-small', 320, 640, 'en-GB'], ['english-wide', 412, 915, 'en-US'], ['english-ru-os', 360, 800, 'ru-RU', 'en'], ['russian-en-os', 360, 800, 'en-US', 'ru']]) {
    const context = await browser.newContext({ viewport: { width, height }, locale, serviceWorkers: 'block' });
+   let downloadGate = null, downloadStarted = false;
    let mode = 'online', cloud = { user_id: id, revision: 0, ...JSON.parse(JSON.stringify(initial)) };
    await context.route('**/*.supabase.co/**', async route => {
     if (mode === 'offline') { await route.abort('internetdisconnected'); return; }
     const request = route.request(), url = new URL(request.url());
     if (url.pathname.includes('/rest/v1/notebooks')) {
      if (mode === 'limited' || mode === 'server') { await route.fulfill({ status: mode === 'limited' ? 429 : 503, json: { message: 'Fixture error', code: '' } }); return; }
-     if (request.method() === 'PATCH') { cloud = { ...cloud, ...request.postDataJSON() }; await route.fulfill({ json: [{ revision: cloud.revision }] }); return; }
+     if (request.method() === 'PATCH') {
+      assert.equal(url.searchParams.get('user_id'), 'eq.' + id);
+      if (url.searchParams.get('revision') !== 'eq.' + cloud.revision) { await route.fulfill({ json: [] }); return; }
+      cloud = { ...cloud, ...request.postDataJSON() }; await route.fulfill({ json: [{ revision: cloud.revision }] }); return;
+     }
+     if (downloadGate && url.searchParams.get('select') !== 'revision') { const gate = downloadGate; downloadGate = null; downloadStarted = true; await gate; }
      await route.fulfill({ json: url.searchParams.get('select') === 'revision' ? { revision: cloud.revision } : cloud }); return;
     }
     await route.fulfill({ json: url.pathname.endsWith('/settings') ? { external: { google: false } } : user });
@@ -131,6 +137,29 @@ const server = http.createServer((req, res) => {
     mode = 'offline'; await page.reload(); await page.locator('.mn-main h1').waitFor();
     await page.locator('[data-view="all"]').click(); assert.match(await page.locator('.mn-list').innerText(), /Купить продукты/);
     mode = 'online';
+    await page.locator('[data-sync-open]').first().click(); await page.locator('[data-sync-now]').click();
+    await page.waitForFunction(() => document.querySelector('.mn-status')?.dataset.state === 'confirmed');
+    const oldTitle = cloud.notes.find(n => n.id === 'note').title;
+    cloud = { ...cloud, revision: cloud.revision + 1, notes: cloud.notes.map(n => n.id === 'note' ? { ...n, title: 'Remote download race' } : n) };
+    let release; downloadGate = new Promise(resolve => { release = resolve; });
+    await page.locator('[data-sync-now]').click();
+    for (let i = 0; i < 40 && !downloadStarted; i++) await page.waitForTimeout(50);
+    assert.equal(downloadStarted, true);
+    await page.locator('[data-view="all"]').click(); await page.locator('[data-open="note"]').click();
+    const editor = await page.locator('#mn-text').elementHandle(); release();
+    await page.waitForFunction(() => document.querySelector('.mn-status')?.textContent.includes('Есть обновления'));
+    assert.equal(await editor.evaluate(el => el.isConnected), true);
+    assert.equal(await page.locator('#mn-text').inputValue(), oldTitle);
+    assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).state.notes.find(n => n.id === 'note').title, cacheKey), oldTitle);
+    assert.equal(await page.locator('.mn-status').getAttribute('data-state'), 'local');
+    await page.locator('[data-back]').click();
+    assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).dirty, cacheKey), false);
+    await page.locator('[data-sync-open]').first().click(); await page.locator('[data-sync-now]').click();
+    await page.waitForFunction(() => document.querySelector('.mn-status')?.dataset.state === 'confirmed');
+    assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).state.notes.find(n => n.id === 'note').title, cacheKey), 'Remote download race');
+    cloud = { ...cloud, revision: cloud.revision + 1, notes: cloud.notes.map(n => n.id === 'note' ? { ...n, title: oldTitle } : n) };
+    await page.locator('[data-sync-now]').click();
+    await page.waitForFunction(() => document.querySelector('.mn-status')?.dataset.state === 'confirmed');
    }
    // Reproduce the real keyboard lifecycle: Android resizes the viewport
    // after focus. Losing this DOM node immediately dismisses its keyboard.
