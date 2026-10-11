@@ -1,0 +1,174 @@
+name: Build Android signed APK and AAB
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-local-first-2026-10-06]
+    paths: ['.github/workflows/android-release-0.4.20.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Get reviewed mobile source
+        uses: actions/checkout@v4
+        with:
+          # Reviewed snapshot. Update explicitly for each new app version.
+          ref: a618ff9122244a0c922efc1af3537a675ec3f514
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install dependencies
+        run: npm ci
+      - name: Test storage and signing guards
+        run: npm test
+      - name: Build interface
+        run: npm run build
+      - name: Test mobile flows
+        run: npm run test:ui
+      - name: Install Chromium for visual and accessibility checks
+        run: npx playwright install --with-deps chromium --only-shell
+      - name: Audit layouts, accessibility and real browser sync
+        run: npm run test:browser
+      - name: Keep browser audit screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-browser-audit
+          path: audit-output/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Prepare Android project
+        run: npm run android:prepare
+      - name: Build unsigned release APK and AAB without signing secrets
+        working-directory: android
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
+      - name: Audit release APK manifest and packaged files
+        run: python3 scripts/audit-apk.py android/app/build/outputs/apk/release/app-release-unsigned.apk
+      - name: Transfer unsigned releases to isolated signing job
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-release-intermediate
+          path: |
+            android/app/build/outputs/apk/release/app-release-unsigned.apk
+            android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 1
+
+  sign:
+    needs: build
+    if: ${{ needs.build.result == 'success' }}
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # No repository checkout, npm, Gradle or app execution in this job.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Download releases as data
+        uses: actions/download-artifact@v4
+        with:
+          name: unsigned-release-intermediate
+          path: unsigned
+      - name: Sign releases and verify the permanent certificate
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const { execFileSync } = require('node:child_process');
+          const key = path.join(process.env.RUNNER_TEMP, 'todo-personal-release.p12');
+          let stage = 'checking repository secrets';
+          try {
+            if (!process.env.ANDROID_KEYSTORE_BASE64 || !process.env.ANDROID_KEYSTORE_PASSWORD) throw Error('Missing secrets');
+            const encoded = process.env.ANDROID_KEYSTORE_BASE64.replace(/\s/g, '');
+            if (!encoded || encoded.length > 48000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4) throw Error('Invalid key');
+            const bytes = Buffer.from(encoded, 'base64');
+            if (bytes.toString('base64') !== encoded) throw Error('Invalid key');
+            fs.writeFileSync(key, bytes, { mode: 0o600 });
+            fs.chmodSync(key, 0o600);
+            stage = 'opening the key and checking its password';
+            const options = { stdio: ['ignore', 'pipe', 'pipe'] };
+            const certificate = execFileSync('keytool', ['-exportcert', '-keystore', key, '-storetype', 'PKCS12', '-alias', 'todo-personal', '-storepass:env', 'ANDROID_KEYSTORE_PASSWORD'], options);
+            const expected = crypto.createHash('sha256').update(certificate).digest('hex');
+            if (expected !== '29171284f14c47ce93ce8658fcc2eba94aed25db0a3b954283a3c2183855fe6b') throw Error('Permanent certificate changed');
+            stage = 'finding Android signing tools';
+            const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
+            const folder = path.join(sdk, 'build-tools');
+            // Keep the CLI output format tied to the version tested with a real APK.
+            const version = '37.0.0';
+            const signer = path.join(folder, version, 'apksigner');
+            if (!fs.existsSync(signer)) throw Error('Reviewed apksigner version unavailable');
+            fs.mkdirSync('signed', { recursive: true });
+            const apk = 'signed/todo-personal.apk';
+            stage = 'signing the APK';
+            execFileSync(signer, ['sign', '--ks', key, '--ks-key-alias', 'todo-personal', '--ks-pass', 'env:ANDROID_KEYSTORE_PASSWORD', '--key-pass', 'env:ANDROID_KEYSTORE_PASSWORD', '--out', apk, 'unsigned/apk/release/app-release-unsigned.apk'], options);
+            stage = 'verifying the APK signature';
+            const output = execFileSync(signer, ['verify', '--verbose', '--print-certs', apk], { ...options, encoding: 'utf8' });
+            stage = 'comparing the public certificate';
+            const signers = Array.from(output.matchAll(/^(?:Signer(?: #\d+| \(minSdkVersion=[^\r\n]+\))?|V3\.[01] Signer(?: \(minSdkVersion=[^\r\n]+\))?):? certificate SHA-256 digest: ([0-9a-f]{64})[ \t]*$/gim), m => m[1].toLowerCase());
+            if (!signers.length || signers.some(fingerprint => fingerprint !== expected)) {
+              console.error('Public expected certificate SHA-256: ' + expected);
+              console.error('Recognized APK certificate fingerprints: ' + JSON.stringify(signers));
+              const publicDigests = Array.from(output.matchAll(/certificate SHA-256 digest: ([0-9a-f:]+)/gi), m => m[1].toLowerCase());
+              console.error('Public APK certificate digest fields: ' + JSON.stringify(publicDigests));
+              console.error('Android build-tools version: ' + version);
+              throw Error('Certificate mismatch');
+            }
+            stage = 'signing the AAB';
+            const aab = 'signed/todo-personal.aab';
+            execFileSync('jarsigner', ['-keystore', key, '-storetype', 'PKCS12', '-storepass:env', 'ANDROID_KEYSTORE_PASSWORD', '-keypass:env', 'ANDROID_KEYSTORE_PASSWORD', '-sigalg', 'SHA256withRSA', '-digestalg', 'SHA-256', '-signedjar', aab, 'unsigned/bundle/release/app-release.aab', 'todo-personal'], options);
+            stage = 'verifying every AAB entry and its certificate';
+            fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'VerifyBundle.java'), "import java.io.*; import java.util.*; import java.util.jar.*; import java.security.*; import java.security.cert.Certificate;\nclass VerifyBundle {\n  public static void main(String[] args) throws Exception {\n    int count = 0;\n    try (JarFile jar = new JarFile(args[0], true)) {\n      var entries = jar.entries();\n      while (entries.hasMoreElements()) {\n        var entry = entries.nextElement();\n        if (entry.isDirectory()) continue;\n        try (var in = jar.getInputStream(entry)) { in.transferTo(OutputStream.nullOutputStream()); }\n        if (entry.getName().toUpperCase(Locale.ROOT).startsWith(\"META-INF/\")) continue;\n        var signers = entry.getCodeSigners();\n        if (signers == null || signers.length != 1) throw new SecurityException(\"Unsigned entry or unexpected signers\");\n        Certificate cert = signers[0].getSignerCertPath().getCertificates().get(0);\n        String digest = HexFormat.of().formatHex(MessageDigest.getInstance(\"SHA-256\").digest(cert.getEncoded()));\n        if (!digest.equals(args[1])) throw new SecurityException(\"Bundle certificate mismatch\");\n        count++;\n      }\n      if (count == 0 || jar.getEntry(\"BundleConfig.pb\") == null || jar.getEntry(\"base/manifest/AndroidManifest.xml\") == null)\n        throw new SecurityException(\"Invalid bundle structure\");\n    }\n    System.out.println(\"AAB signatures verified for \" + count + \" entries.\");\n  }\n}");
+            const bundleCheck = execFileSync('java', [path.join(process.env.RUNNER_TEMP, 'VerifyBundle.java'), aab, expected], { ...options, encoding: 'utf8' });
+            console.log(bundleCheck.trim());
+            fs.writeFileSync('signed/certificate-sha256.txt', expected + '\n');
+            console.log('APK signature verified. Public certificate SHA-256: ' + expected);
+          } catch (error) {
+            fs.rmSync('signed', { recursive: true, force: true });
+            console.error('Signing failed at: ' + stage + '. No release files will be published.');
+            if (Number.isInteger(error.status)) console.error('Tool exit code: ' + error.status);
+            if (stage.includes('key') || stage.includes('secrets')) console.error('Check both repository secrets, PKCS12 format and alias todo-personal.');
+            process.exitCode = 1;
+          } finally {
+            fs.rmSync(key, { force: true });
+          }
+          NODE
+      - name: Upload verified signed APK and AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: todo-personal-android-signed
+          path: |
+            signed/todo-personal.apk
+            signed/todo-personal.aab
+            signed/certificate-sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove private signing file after interruption
+        if: always()
+        run: rm -f "$RUNNER_TEMP/todo-personal-release.p12"
