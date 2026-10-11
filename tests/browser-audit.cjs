@@ -4,6 +4,7 @@ const path = require('node:path');
 const http = require('node:http');
 const assert = require('node:assert/strict');
 const out = path.resolve('audit-output'); fs.mkdirSync(out, { recursive: true });
+const assets = path.resolve(process.env.TODO_ASSET_ROOT || 'dist');
 const id = '11111111-1111-4111-8111-111111111111';
 const authKey = 'sb-ihvwqqvndmwtislvgamd-auth-token';
 const cacheKey = 'todo-personal:local:' + id;
@@ -16,8 +17,8 @@ const seed = [[authKey, JSON.stringify({ access_token: jwt, refresh_token: 'test
 const types = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff': 'font/woff', '.woff2': 'font/woff2' };
 const server = http.createServer((req, res) => {
  const url = new URL(req.url, 'http://localhost');
- const file = path.resolve('dist', '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
- if (!file.startsWith(path.resolve('dist') + path.sep)) { res.writeHead(403).end(); return; }
+ const file = path.resolve(assets, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
+ if (!file.startsWith(assets + path.sep)) { res.writeHead(403).end(); return; }
  try { res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream'); res.end(fs.readFileSync(file)); }
  catch { res.writeHead(404).end(); }
 });
@@ -131,7 +132,48 @@ const server = http.createServer((req, res) => {
     await page.locator('[data-view="all"]').click(); assert.match(await page.locator('.mn-list').innerText(), /Купить продукты/);
     mode = 'online';
    }
-   assert.deepEqual(errors, []); results.push({ name, width, height, overflow, javascriptErrors: errors }); await context.close();
+   // Reproduce the real keyboard lifecycle: Android resizes the viewport
+   // after focus. Losing this DOM node immediately dismisses its keyboard.
+   await page.locator('[data-view="settings"]').click();
+   await page.locator('[data-reauthenticate]').click();
+   await page.locator('#mn-reauth-password').fill('test-only-password');
+   const password = await page.locator('#mn-reauth-password').elementHandle();
+   await page.setViewportSize({ width, height: Math.max(220, height - 220) });
+   await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+   assert.equal(await password.evaluate(el => el.isConnected && document.activeElement === el && el.value === 'test-only-password'), true, 'password focus survives keyboard resize: '+name);
+   await page.screenshot({ path: path.join(out, name+'-reauth-keyboard.png') });
+   await page.setViewportSize({ width, height });
+   await page.locator('[data-cancel-reauth]').click();
+   await page.locator('[data-view="all"]').click();
+   await page.locator('[data-open="note"]').click();
+   await page.locator('#mn-text').fill(''); await page.locator('#mn-details').fill('');
+   await page.locator('[data-back]').click();
+   assert.equal(await page.locator('#mn-text').count(), 0, 'empty draft can be left: '+name);
+   assert.match(await page.locator('.mn-draft-panel').innerText(), /Идеи для проекта/);
+   await page.reload(); await page.locator('[data-continue-draft="note"]').waitFor();
+   await page.locator('[data-continue-draft="note"]').click();
+   assert.equal(await page.locator('#mn-text').inputValue(), '');
+   await page.locator('[data-restore-saved]').click();
+   assert.equal(await page.locator('#mn-text').inputValue(), 'Идеи для проекта');
+   await page.locator('[data-back]').click();
+   await page.locator('.mn-add').click();
+   for (const phrase of ['Встреча 10/12', '15 октрября купить машину', 'Встреча завтра в 6 00']) {
+    await page.locator('#mn-text').fill(phrase);
+    assert.equal(await page.locator('.mn-suggestion').isVisible(), true, phrase+' at '+name);
+    assert.equal(await page.locator('[name="date"]').inputValue(), '', 'unconfirmed suggestion does not change deadline');
+   }
+   await page.locator('#mn-text').fill('Встреча 10/12');
+   await page.locator('[data-accept-deadline][data-choice-index="1"]').click();
+   assert.equal(await page.locator('.mn-suggestion').isVisible(), false);
+   const confirmed = await page.locator('[name="date"]').inputValue();
+   await page.locator('[data-save]').click(); await page.reload(); await page.locator('.mn-main h1').waitFor();
+   await page.locator('[data-view="all"]').click();
+   await page.locator('.mn-open').filter({hasText:'Встреча 10/12'}).click();
+   assert.equal(await page.locator('[name="date"]').inputValue(), confirmed, 'chosen deadline survives restart');
+   await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+   const savedAccessibility = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(v=>v.id));
+   assert.deepEqual(savedAccessibility, []);
+   assert.deepEqual(errors, []); results.push({ name, width, height, overflow, javascriptErrors: errors, keyboardFocus: true, emptyDraftRecovery: true, dateParsing: true }); await context.close();
   }
   const login = await browser.newContext({ viewport: { width: 320, height: 640 }, serviceWorkers: 'block', locale: 'ru-RU' });
   await login.route('**/*.supabase.co/**', route => route.fulfill({ json: { external: { google: true } } }));

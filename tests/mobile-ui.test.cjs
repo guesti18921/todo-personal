@@ -443,7 +443,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.21/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.22/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -843,7 +843,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.21');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.22');
  } finally { dom.window.close(); }
 });
 
@@ -1136,5 +1136,63 @@ test('reauthentication succeeds with pending edits even while ordinary logout re
  d.querySelector('[data-reauthenticate]').click();d.querySelector('#mn-reauth-password').value='test-password';d.querySelector('[data-reauth-form]').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
  for(let i=0;i<40&&d.querySelector('[data-reauth-form]');i++)await wait();assert.equal(d.querySelector('[data-reauth-form]'),null);
  const saved=JSON.parse(w.localStorage.getItem(cacheKey));assert.equal(saved.state.notes.find(e=>e.id==='n').text,'Не потерять при входе');assert.equal(saved.dirty,false);
+ }finally{dom.window.close();}
+});
+
+test('reauthentication keeps its focused password field mounted across keyboard resize and focus events', async()=>{
+ const dom=boot(listFixture().seed);try{await ready(dom);const w=dom.window,d=w.document;
+ d.querySelector('[data-view="settings"]').click();d.querySelector('[data-reauthenticate]').click();
+ const password=d.querySelector('#mn-reauth-password');password.focus();password.value='typed-password';password.setSelectionRange(3,3);
+ for(let i=0;i<3;i++){w.dispatchEvent(new w.Event('resize'));w.dispatchEvent(new w.Event('focus'));await wait();}
+ assert.equal(d.querySelector('#mn-reauth-password'),password);assert.equal(d.activeElement,password);assert.equal(password.selectionStart,3);assert.equal(password.value,'typed-password');
+ d.querySelector('[data-cancel-reauth]').click();assert.equal(d.querySelector('[data-reauth-form]'),null);
+ }finally{dom.window.close();}
+});
+
+test('fully cleared existing entry draft is identified, can be left with Back and explicitly restored',async()=>{
+ const f=listFixture();let dom=boot(f.seed);try{await ready(dom);let w=dom.window,d=w.document;
+ d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();
+ const original=JSON.parse(w.localStorage.getItem(cacheKey)).state.notes.find(e=>e.id==='n');
+ for(const selector of ['#mn-text','#mn-details']) {const el=d.querySelector(selector);el.value='';el.dispatchEvent(new w.Event('input',{bubbles:true}));}
+ const key='todo-personal:entry-edit-draft:'+id+':n';
+ d.querySelector('[data-back]').click();assert.equal(d.querySelector('#mn-text'),null,'Back leaves an empty draft');
+ assert.match(d.querySelector('.mn-draft-panel').textContent,new RegExp(original.title));
+ const seed=Array.from({length:w.localStorage.length},(_,i)=>{const k=w.localStorage.key(i);return [k,w.localStorage.getItem(k)];});dom.window.close();dom=boot(seed);await ready(dom);w=dom.window;d=w.document;
+ d.querySelector('[data-continue-draft="n"]').click();assert.equal(d.querySelector('#mn-text').value,'');assert.equal(d.querySelector('#mn-details').value,'');
+ assert.ok(d.querySelector('[data-restore-saved]'));
+ d.querySelector('[data-back]').click();assert.equal(d.querySelector('#mn-text'),null);assert.ok(w.localStorage.getItem(key));
+ d.querySelector('[data-continue-draft="n"]').click();d.querySelector('[data-restore-saved]').click();
+ assert.equal(d.querySelector('#mn-text').value,original.title);assert.equal(d.querySelector('#mn-details').value,original.text);assert.equal(w.localStorage.getItem(key),null);
+ }finally{dom.window.close();}
+});
+
+test('selecting the second ambiguous deadline hides the suggestion without changing the selected date',async()=>{
+ const dom=boot(listFixture().seed);try{await ready(dom);const w=dom.window,d=w.document;
+ d.querySelector('.mn-add').click();const el=d.querySelector('#mn-text');el.value='встреча 10/12';el.dispatchEvent(new w.Event('input',{bubbles:true}));
+ assert.equal(d.querySelectorAll('[data-accept-deadline][data-choice-index]').length,2);
+ d.querySelector('[data-accept-deadline][data-choice-index="1"]').click();const selected=d.querySelector('[name="date"]').value;
+ assert.equal(d.querySelector('.mn-suggestion').hidden,true);w.dispatchEvent(new w.Event('resize'));assert.equal(d.querySelector('[name="date"]').value,selected);
+ }finally{dom.window.close();}
+});
+
+test('failed editor creation does not leave an invisible record in memory and preserves a recoverable draft',async()=>{
+ const dom=boot(listFixture().seed);try{await ready(dom);const w=dom.window,d=w.document;
+ const before=w.localStorage.getItem(cacheKey),set=w.Storage.prototype.setItem;
+ d.querySelector('[data-view="all"]').click();d.querySelector('.mn-add').click();
+ const text=d.querySelector('#mn-text');text.value='New record blocked by full storage';text.dispatchEvent(new w.Event('input',{bubbles:true}));
+ w.Storage.prototype.setItem=function(key,value){if(key===cacheKey)throw Error('Full');return set.call(this,key,value);};
+ d.querySelector('[data-save]').click();assert.equal(w.localStorage.getItem(cacheKey),before);assert.ok(d.querySelector('#mn-text'));
+ d.querySelector('[data-back]').click();assert.equal(d.querySelector('#mn-text'),null);assert.ok(w.localStorage.getItem(draftKey));
+ assert.ok(!d.querySelector('.mn-list').textContent.includes('New record blocked'));
+ w.Storage.prototype.setItem=set;d.querySelector('[data-continue-draft]').click();d.querySelector('[data-save]').click();
+ assert.equal(JSON.parse(w.localStorage.getItem(cacheKey)).state.todos.home.filter(e=>e.name==='New record blocked by full storage').length,1);
+ }finally{dom.window.close();}
+});
+
+test('invalid edit drafts cannot break the notebook and an accepted date-only reminder dismisses its suggestion',async()=>{
+ const dom=boot([...listFixture().seed,['todo-personal:entry-edit-draft:'+id+':n',JSON.stringify({type:'note',text:{bad:true},details:42})]]);
+ try{await ready(dom);const w=dom.window,d=w.document;d.querySelector('[data-view="all"]').click();assert.equal(d.querySelector('[data-continue-draft="n"]'),null);
+ d.querySelector('.mn-add').click();const text=d.querySelector('#mn-text');text.value='Встреча 15 октября 2099';text.dispatchEvent(new w.Event('input',{bubbles:true}));
+ d.querySelector('[data-accept-reminder]').click();assert.equal(d.querySelector('[name="time"]').value,'09:00');assert.equal(d.querySelector('.mn-suggestion').hidden,true);
  }finally{dom.window.close();}
 });

@@ -125,7 +125,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
     function readDraft(id = null) {
         try {
             const value = JSON.parse(localStorage.getItem(draftKey(id)));
-            return value && (id || String(value.text || '').trim() || String(value.details || '').trim()) ? value : null;
+            return value && typeof value.text === 'string' && typeof value.details === 'string' && ['task', 'note'].includes(value.type) && (id || value.text.trim() || value.details.trim()) ? value : null;
         } catch (_) { return null; }
     }
     function renderDraft() {
@@ -139,7 +139,10 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
                 if (key?.startsWith(prefix) && find(key.slice(prefix.length))) { id = key.slice(prefix.length); draft = readDraft(id); if (draft) break; }
             }
         }
-        slot.innerHTML = draft ? ui`<aside class="mn-draft-panel" aria-label="Несохранённая запись"><h2>Продолжить черновик</h2><p dir="auto">${escape(Array.from(String(draft.text || draft.details || t('Запись'))).slice(0, 100).join(''))}</p><p>Текст сохранён на этом устройстве. Завершите запись, чтобы добавить её в блокнот.</p><div><button type="button" class="mn-primary" data-continue-draft="${escape(id || '')}">Продолжить</button><button type="button" class="mn-secondary" data-discard-draft="${escape(id || '')}">Удалить черновик</button></div></aside>` : '';
+        const saved = id && find(id);
+        const savedTitle = saved && (saved.type === 'task' ? saved.entry.name : saved.entry.title || saved.entry.text);
+        const preview = text => escape(Array.from(String(text)).slice(0, 100).join(''));
+        slot.innerHTML = draft ? ui`<aside class="mn-draft-panel" aria-label="Несохранённая запись"><h2>${id ? t('Незавершённые изменения записи') : t('Продолжить черновик')}</h2>${saved ? `<p dir="auto">${preview(savedTitle)}</p>` : ''}<p dir="auto">${preview(draft.text.trim() || draft.details.trim() || t('Текст в черновике очищен. Сохранённая запись остаётся в блокноте.'))}</p><p>${id ? t('Изменения сохранены на этом устройстве. Можно продолжить правки или удалить черновик и оставить сохранённую запись.') : t('Текст сохранён на этом устройстве. Завершите запись, чтобы добавить её в блокнот.')}</p><div><button type="button" class="mn-primary" data-continue-draft="${escape(id || '')}">Продолжить</button><button type="button" class="mn-secondary" data-discard-draft="${escape(id || '')}">${id ? t('Отменить незавершённые правки') : t('Удалить черновик')}</button></div></aside>` : '';
     }
     function card({ entry, type: kind, project }) {
         const text = kind === 'task' ? entry.name : entry.title || entry.text;
@@ -206,13 +209,20 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         if (view === 'delete-account') { renderDeletion(); return; }
         if (view === 'reauthenticate') {
             add.hidden = true; nav.hidden = true;
-            const currentPassword = reauthBusy ? '' : main.querySelector('#mn-reauth-password')?.value || '';
-            main.innerHTML = ui`<button type="button" class="mn-back" data-cancel-reauth ${reauthBusy ? 'disabled' : ''}>← Назад</button><h1>Войти заново</h1><p>Локальные изменения сохранятся. После входа отправим их в этот же аккаунт.</p><p>${escape(getAccount() || '')}</p><form data-reauth-form><label for="mn-reauth-password">Пароль</label><input class="mn-input" id="mn-reauth-password" type="password" autocomplete="current-password" required ${reauthBusy ? 'disabled' : ''}><button type="submit" class="mn-primary" ${reauthBusy ? 'disabled' : ''}>${reauthBusy ? t('Проверяем…') : t('Войти')}</button><p role="alert">${escape(reauthError)}</p></form>`;
-            main.querySelector('#mn-reauth-password').value = currentPassword;
+            // Keyboard resize must not replace the focused input. Update only
+            // the state of the existing form until this screen is left.
+            if (!main.querySelector('[data-reauth-form]')) main.innerHTML = ui`<button type="button" class="mn-back" data-cancel-reauth>← Назад</button><h1>Войти заново</h1><p>Локальные изменения сохранятся. После входа отправим их в этот же аккаунт.</p><p>${escape(getAccount() || '')}</p><form data-reauth-form><label for="mn-reauth-password">Пароль</label><input class="mn-input" id="mn-reauth-password" type="password" autocomplete="current-password" required><button type="submit" class="mn-primary">Войти</button><p role="alert"></p></form>`;
+            const password = main.querySelector('#mn-reauth-password');
+            password.disabled = reauthBusy;
+            if (reauthBusy) password.value = '';
+            main.querySelector('[data-cancel-reauth]').disabled = reauthBusy;
+            const submit = main.querySelector('[data-reauth-form] button');
+            submit.disabled = reauthBusy; submit.textContent = reauthBusy ? t('Проверяем…') : t('Войти');
+            main.querySelector('[data-reauth-form] [role="alert"]').textContent = reauthError;
             return;
         }
         if (view === 'settings') {
-            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button>${reauthButton()}<button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${timeSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.21</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
+            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button>${reauthButton()}<button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${timeSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.22</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
             return;
         }
         // Android's keyboard changes the viewport. Keep the focused search
@@ -370,6 +380,11 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         nav.hidden = true; add.hidden = true;
         main.innerHTML = ui`<div class="mn-editor-header"><button type="button" class="mn-back" data-back>← Назад</button><button type="button" class="mn-primary" data-save>Сохранить</button></div><h1>${previous ? t('Запись') : t('Новая запись')}</h1>${draft ? t('<p class="mn-draft-restored">Черновик восстановлен. Нажмите «Сохранить», когда закончите.</p>') : ''}<div class="mn-types">${[['task', t('Задача')], ['note', t('Заметка')]].map(([value, label]) => `<button type="button" data-type="${value}" aria-pressed="${type === value}">${label}</button>`).join('')}</div><p class="mn-type-help">${type === 'task' ? t('Можно отметить выполненной.') : t('Для мыслей и информации.')}</p><label for="mn-text">Что записать?</label><textarea class="mn-input mn-text" id="mn-text" name="text" dir="auto" placeholder="Запишите мысль или задачу">${escape(text)}</textarea><aside class="mn-suggestion" aria-label="Предложенный срок" aria-live="polite" hidden></aside><details class="mn-language-examples"><summary>Как указать срок словами</summary><p>Можно написать день недели или срок через число минут, часов, дней или недель. Проверьте предложенную дату перед применением.</p><ul>${[[t('Русский'), 'в пятницу в 18:00; через 2 часа'], ['English', 'Friday at 6 pm; in 2 hours'], ['Deutsch', 'Freitag um 18:00; in 2 Stunden'], ['Italiano', 'venerdì alle 18:00; tra 2 ore'], ['Español', 'viernes a las 18:00; en 2 horas'], ['Français', 'vendredi à 18:00; dans 2 heures'], ['Português', 'sexta-feira às 18:00; daqui a 2 horas'], ['中文', '星期五18:00; 2小时后'], ['日本語', '金曜日18:00; 2時間後'], ['한국어', '금요일 18:00; 2시간 후']].map(([language, sample]) => `<li><strong>${language}:</strong> ${sample}</li>`).join('')}</ul><p>«Следующая пятница» означает пятницу следующей недели. «Через 2 часа» отсчитывается от ввода фразы. Текст записи не сокращается и не переводится.</p></details><details ${details ? 'open' : ''}><summary>Подробности</summary><label for="mn-details">Дополнительный текст</label><textarea class="mn-input" id="mn-details" name="details" dir="auto">${escape(details)}</textarea></details><label class="mn-entry-pin"><input type="checkbox" name="pinned" ${(entry?.pinned ?? draft?.pinned) ? 'checked' : ''}>Закрепить сверху</label><label for="mn-date">Срок · необязательно</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-date" name="date" value="${escape(entry?.date || draft?.date || '')}">${timeInput('time', entry?.time || draft?.time || '', t('Время срока'), getLanguage())}</div><div class="mn-filters"><button type="button" data-date="today">Сегодня</button><button type="button" data-date="tomorrow">Завтра</button><button type="button" data-date="none">Без срока</button></div><p class="mn-deadline-help"></p><label class="mn-pin"><input type="checkbox" name="today" ${(entry ? (entry.today ?? (previous?.project === 'today')) : draft?.today) ? 'checked' : ''}>Также показать в «Сегодня» без срока</label><section class="mn-reminder-form"><h2>Напоминание</h2><label for="mn-reminder-mode">Когда напомнить?</label><select class="mn-input" id="mn-reminder-mode" name="reminderMode">${REMINDER_OPTIONS.map(([value, label]) => `<option value="${value}" ${reminder.mode === value ? 'selected' : ''}>${t(label)}</option>`).join('')}</select><div class="mn-reminder-custom" hidden><label for="mn-reminder-date">Дата напоминания</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-reminder-date" name="reminderDate" value="${escape(reminder.date)}">${timeInput('reminderTime', reminder.time, t('Время напоминания'), getLanguage())}</div></div><p class="mn-reminder-preview" aria-live="polite"></p><p class="mn-reminder-device"></p><button type="button" class="mn-secondary" data-enable-reminders>Включить напоминания на этом устройстве</button></section>${previous?.type === 'task' ? `<button type="button" class="mn-secondary" data-complete="${escape(id)}">${entry.checked ? t('Вернуть в активные') : t('Выполнить задачу')}</button>` : ''}${previous ? ui`<button type="button" class="mn-delete" data-delete="${escape(id)}">Удалить запись</button>` : ''}`;
         updateDate();
+        const draftNotice = main.querySelector('.mn-draft-restored');
+        if (draftNotice && previous) {
+            draftNotice.textContent = t('Незавершённые изменения восстановлены. Сохранённая запись остаётся в блокноте.');
+            const restore = document.createElement('button'); restore.type = 'button'; restore.className = 'mn-secondary'; restore.dataset.restoreSaved = ''; restore.textContent = t('Вернуть сохранённую запись'); draftNotice.after(restore);
+        }
         savedEditorFingerprint = draft ? null : JSON.stringify(fields());
         if (!id && !draft) main.querySelector('[name="text"]').focus();
     }
@@ -415,7 +430,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         helper.textContent = value.reminder.mode === 'none' ? t('Для этой записи напоминание не придёт.') : !at
             ? t('Укажите дату и время напоминания.') : at <= new Date()
             ? t('Это время уже прошло — напоминание не сработает. Выберите будущее время.')
-            : t(reminderLabel(value, new Date(), getLanguage())) + (value.reminder.mode !== 'custom' && !value.time ? t(' · у срока нет времени, используем 09:00.') : '');
+            : t(reminderLabel(value, new Date(), getLanguage(), clockHourCycle())) + (value.reminder.mode !== 'custom' && !value.time ? t(' · у срока нет времени, используем 09:00.') : '');
         const active = value.reminder.mode !== 'none';
         const device = main.querySelector('.mn-reminder-device');
         device.textContent = deviceReminderHelp();
@@ -463,7 +478,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         if (!area) return;
         suggestion = smartDates ? parseSuggestion() : null;
         const current = fields();
-        const alreadySet = suggestion && current.date === suggestion.date && current.time === suggestion.time;
+        const alreadySet = suggestion?.alternatives.some(choice => current.date === choice.date && current.time === choice.time);
         area.hidden = !suggestion || alreadySet || suggestionKey(suggestion) === dismissedDeadline;
         if (area.hidden) { area.replaceChildren(); return; }
         if (suggestion.alternatives?.length > 1) {
@@ -485,9 +500,16 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         if (close && value.reminder.mode !== 'none' && !reminderMoment({ ...value, checked: false })) { say(t('Укажите дату и время напоминания или выберите «Не напоминать».')); main.querySelector('[name="reminderMode"]').focus(); return false; }
         const previous = editingId ? find(editingId) : null;
         if (editingId && !previous) { say(t('Запись удалена на другом устройстве. Скопируйте текст перед выходом.')); return false; }
-        editingId = saveEntry(todos, notes, value, previous);
+        const before = JSON.parse(JSON.stringify({ todos, notes }));
+        const nextId = saveEntry(todos, notes, value, previous);
         const locallySaved = persist();
-        if (locallySaved === false) { say(t('Не удалось сохранить запись на устройстве. Не закрывайте приложение.')); return false; }
+        if (locallySaved === false) {
+            Object.keys(todos).forEach(key => delete todos[key]); Object.assign(todos, before.todos);
+            notes.splice(0, notes.length, ...before.notes);
+            persist();
+            say(t('Не удалось сохранить запись на устройстве. Не закрывайте приложение.')); return false;
+        }
+        editingId = nextId;
         savedEditorFingerprint = JSON.stringify(value); draftSafe = true;
         if (!creating || close) { try { localStorage.removeItem(draftKey(creating ? null : editingId)); } catch (_) { /* The safe draft remains recoverable. */ } }
         if (close) {
@@ -496,7 +518,10 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         return true;
     }
     function back() {
-        if (editingId) { if (!commit(false)) return; }
+        if (editingId) {
+            if (!fields().text.trim()) { stashDraft(); if (!draftSafe) return; }
+            else if (!commit(false)) return;
+        }
         else { stashDraft(); if (!draftSafe) return; }
         editor = false; render();
     }
@@ -505,6 +530,12 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         const button = event.target.closest('button'); if (!button || button.disabled || deletionBusy || reauthBusy) return;
         if (button.hasAttribute('data-clock-open')) { Promise.resolve(pickTime(button.closest('[data-clock]'))).catch(() => say(t('Не удалось открыть выбор времени. Попробуйте снова.'))); return; }
         if (button.hasAttribute('data-continue-draft')) open(button.dataset.continueDraft || null);
+        else if (button.hasAttribute('data-restore-saved')) {
+            const id = editingId;
+            try { localStorage.removeItem(draftKey(id)); }
+            catch (_) { say(t('Не удалось удалить черновик. Он сохранён на устройстве.')); return; }
+            open(id);
+        }
         else if (button.hasAttribute('data-discard-draft')) {
             const owner = account, key = draftKey(button.dataset.discardDraft || null);
             try {
@@ -577,7 +608,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
             const withReminder = button.hasAttribute('data-accept-reminder');
             main.querySelector('[name="time"]').value = choice.time || (withReminder ? '09:00' : '');
             if (withReminder) main.querySelector('[name="reminderMode"]').value = 'at';
-            dismissedDeadline = '';
+            dismissedDeadline = suggestionKey(suggestion);
             updateDate(); changed();
             if (withReminder) {
                 say(t('Срок и напоминание выбраны. Сохраните запись.'));
@@ -697,7 +728,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
             return false;
         },
         isEditing: () => editor || selecting || Boolean(undo) || ['delete-account', 'reauthenticate'].includes(view),
-        setAccount(id) { if (account !== id) { clearTimeout(undoTimer); deletionBusy = false; deletionError = ''; account = id; clearSelection(); dueFilter = 'all'; reminderQueue = []; syncDetails = null; syncBusy = false; syncPreview = null; syncError = ''; updateSyncNotice(); readPreferences(); dismissedDeadline = ''; suggestion = null; deadlineAnchor = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
+        setAccount(id) { if (account !== id) { clearTimeout(undoTimer); deletionBusy = false; deletionError = ''; reauthBusy = false; reauthError = ''; savedEditorFingerprint = null; account = id; clearSelection(); dueFilter = 'all'; reminderQueue = []; syncDetails = null; syncBusy = false; syncPreview = null; syncError = ''; updateSyncNotice(); readPreferences(); dismissedDeadline = ''; suggestion = null; deadlineAnchor = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
         setOfflineReady(value) {
             offlineReady = value;
             if (!editor && view === 'settings') refreshSettingsStatus();

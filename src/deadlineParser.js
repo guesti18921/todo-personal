@@ -23,6 +23,28 @@ const durationUnits = [
 ];
 const formatDate = date => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 const escaped = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const monthNames = [
+    ['январь', 'января', 'янв', 'january', 'jan'],
+    ['февраль', 'февраля', 'фев', 'february', 'feb'],
+    ['март', 'марта', 'mar', 'march'],
+    ['апрель', 'апреля', 'апр', 'april', 'apr'],
+    ['май', 'мая', 'may'],
+    ['июнь', 'июня', 'june', 'jun'],
+    ['июль', 'июля', 'july', 'jul'],
+    ['август', 'августа', 'авг', 'august', 'aug'],
+    ['сентябрь', 'сентября', 'сен', 'сент', 'september', 'sep', 'sept'],
+    ['октябрь', 'октября', 'октрября', 'окт', 'october', 'oct'],
+    ['ноябрь', 'ноября', 'ноя', 'november', 'nov'],
+    ['декабрь', 'декабря', 'дек', 'december', 'dec']
+];
+const monthMap = new Map(monthNames.flatMap((names, i) => names.map(name => [name, i + 1])));
+const monthPattern = [...monthMap.keys()].sort((a, b) => b.length - a.length).map(escaped).join('|');
+function normalizeDeadlineText(value) {
+    return String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ')
+        // Require a time preposition for space/dot notation; ordinary numbers
+        // and dotted calendar dates must not turn into clock times.
+        .replace(/(?<!\p{L})(в|at|um|alle|a las|à|às)\s+(\d{1,2})(?:\.| )(\d{2})(?![\d./])/gu, '$1 $2:$3');
+}
 function calendarDate(year, month, day) {
     if (year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) return null;
     const date = new Date(year, month - 1, day, 12);
@@ -30,9 +52,7 @@ function calendarDate(year, month, day) {
 }
 
 export function suggestDeadline(value, now = new Date(), { dateOrder = 'dmy' } = {}) {
-    const text = String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ')
-        // A time preposition distinguishes 18.00 from a day/month date.
-        .replace(/(?<!\p{L})(в|at|um|alle|a las|à|às)\s+(\d{1,2})\.(\d{2})(?![\d.])/gu, '$1 $2:$3');
+    const text = normalizeDeadlineText(value);
     if (!text.trim() || Number.isNaN(now.getTime())) return null;
     const dates = new Set(), times = new Set(), evidence = [];
     let invalid = false, roundedToMinute = false, calendarInterpretation = '', onlyNearestWeekday = true;
@@ -112,9 +132,15 @@ export function suggestDeadline(value, now = new Date(), { dateOrder = 'dmy' } =
         else addDate(+y, +m, +d, raw);
         return ' '.repeat(raw.length);
     });
-    remaining = remaining.replace(/(?<![\p{L}\d./])(\d{2})\.(\d{2})(?![\d./])/gu, (raw, d, m) => {
-        addDate(now.getFullYear(), +m, +d, raw, false); return ' '.repeat(raw.length);
+    remaining = remaining.replace(/(?<![\p{L}\d./])(\d{1,2})([./])(\d{1,2})(?![\d./])/gu, (raw, d, sep, m) => {
+        const year = now.getFullYear();
+        if (sep === '/' && ((!calendarDate(year, +m, +d) && calendarDate(year, +d, +m)) || (dateOrder === 'mdy' && +d <= 12 && +m <= 12))) addDate(year, +d, +m, raw, false);
+        else addDate(year, +m, +d, raw, false);
+        return ' '.repeat(raw.length);
     });
+    const namedDate = (raw, d, name, y) => { addDate(y ? +y : now.getFullYear(), monthMap.get(name), +d, raw, Boolean(y)); return ' '.repeat(raw.length); };
+    remaining = remaining.replace(new RegExp(`(?<![\\p{L}\\p{N}])(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthPattern})(?!\\p{L})\\.?(?:\\s*,?\\s*(\\d{4})(?!\\d))?`, 'gu'), namedDate);
+    remaining = remaining.replace(new RegExp(`(?<![\\p{L}\\p{N}])(${monthPattern})(?!\\p{L})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?!\\d)(?:\\s*,?\\s*(\\d{4})(?!\\d))?`, 'gu'), (raw, name, d, y) => namedDate(raw, d, name, y));
     remaining = remaining.replace(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})[日号號]/gu, (raw, y, m, d) => {
         addDate(y ? +y : now.getFullYear(), +m, +d, raw, Boolean(y)); return ' '.repeat(raw.length);
     });
@@ -139,7 +165,10 @@ export function suggestDeadline(value, now = new Date(), { dateOrder = 'dmy' } =
         addTime(+h, +m, raw); return ' '.repeat(raw.length);
     });
     // Bare hours need a time preposition, not just any number in a note.
-    remaining = remaining.replace(/(?<!\p{L})(?:в|at|um|alle|a las|à|às)\s+(\d{1,2})(?:\s*(?:час(?:а|ов)?|uhr|h))?(?![\p{L}\d:.])/gu, (raw, h) => {
+    remaining = remaining.replace(/(?<!\p{L})(?:в|at|um|alle|a las|à|às)\s+(\d{1,2})(?:\s*(?:час(?:а|ов)?|uhr|h))?(?![\p{L}\d:.])/gu, (raw, h, offset, source) => {
+        // An unfinished/invalid spaced minute must not silently become :00.
+        const tail = source.slice(offset + raw.length);
+        if (/^\s+\d/.test(tail)) { invalid = true; return ' '.repeat(raw.length); }
         addTime(+h, 0, raw); return ' '.repeat(raw.length);
     });
     remaining.replace(/(?<!\d)(\d{1,2})[点點時时시](?:(\d{1,2})[分분])?/gu, (raw, h, m) => {
@@ -165,9 +194,9 @@ export function suggestDeadline(value, now = new Date(), { dateOrder = 'dmy' } =
 // Return explicit alternatives; neither UI language nor clock preference
 // resolves ambiguous calendar order or a bare morning/evening hour.
 export function suggestDeadlineChoices(value, now = new Date()) {
-    const text = String(value || '').normalize('NFKC');
+    const text = normalizeDeadlineText(value);
     const bare = /(?<!\p{L})(в|at)\s+(\d{1,2})(?![\p{L}\d:.])(?!(?:\s+(?:утра|дня|вечера|ночи|[ap]\.?\s*m)))/giu;
-    const matches = [...text.matchAll(bare)].filter(m => +m[2] >= 1 && +m[2] <= 12);
+    const matches = [...text.matchAll(bare)].filter(m => +m[2] >= 1 && +m[2] <= 12 && !/^\s+\d/.test(text.slice(m.index + m[0].length)));
     // Several separate time expressions remain unsupported rather than guessed.
     const texts = matches.length === 1 ? ['AM', 'PM'].map(period => text.slice(0, matches[0].index) + matches[0][1] + ' ' + matches[0][2] + ' ' + period + text.slice(matches[0].index + matches[0][0].length)) : [text];
     const unique = new Map();
