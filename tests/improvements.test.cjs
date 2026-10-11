@@ -1,5 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-async function load(file,context={Date,Intl,Map,Set,String,Number,Boolean,JSON}){const m=new vm.SourceTextModule(fs.readFileSync(file,'utf8'),{context:vm.createContext(context)});await m.link(()=>{});await m.evaluate();return m.namespace;}
+async function load(file,context={Date,Intl,Map,Set,String,Number,Boolean,JSON,URL,URLSearchParams}){const ctx=vm.createContext(context);async function read(name){const m=new vm.SourceTextModule(fs.readFileSync(name,'utf8'),{context:ctx});await m.link(spec=>read(require('node:path').resolve(require('node:path').dirname(name),spec)));return m;}const m=await read(file);await m.evaluate();return m.namespace;}
+
 test('ambiguous dates/hours produce distinct valid options while explicit times remain unambiguous',async()=>{
  const {suggestDeadlineChoices:p}=await load('src/deadlineParser.js');const now=new Date(2026,9,11,10);
  assert.deepEqual(Array.from(p('10/12/2026 at 3pm',now),x=>x.date).sort(),['2026-10-12','2026-12-10']);
@@ -28,4 +29,22 @@ test('short dates, named months and spaced clock expressions are recognized with
  assert.equal(p('29 февраля 2028',now)[0]?.date,'2028-02-29');
  assert.equal(p('15 октября 2027',now)[0]?.date,'2027-10-15');
  assert.equal(p('10/12/27',now).length,0,'two-digit years must not become a partial date');
+});
+
+test('reauth methods follow Google, email and linked identities',async()=>{
+ const {reauthenticationMethods:m}=await load('src/reauthentication.js');
+ assert.equal(m({app_metadata:{providers:['google']}}).password,false);assert.equal(m({app_metadata:{providers:['google']}}).google,true);
+ assert.equal(m({app_metadata:{providers:['email','google']}}).password,true);assert.equal(m({app_metadata:{providers:['email','google']}}).google,true);
+ assert.equal(m({identities:[{provider:'google'}]}).google,true);assert.equal(m(null).password,true);
+});
+test('Google reauthentication verifies owner before installing session, including late account switch',async()=>{
+ const {renewAccountFromLink:renew}=await load('src/reauthentication.js');let installed=0,current='a';
+ const auth=id=>({setSession:async()=>({data:{session:{user:{id},access_token:'access',refresh_token:'refresh'}}}),getUser:async()=>({data:{user:{id}}})});
+ const active={setSession:async()=>{installed++;return {data:{session:{user:{id:'a'}}}};}};
+ const args={url:'todopersonal://auth-callback#access_token=access&refresh_token=refresh',activeAuth:active,owner:'a',currentOwner:()=>current};
+ await assert.rejects(renew({...args,temporaryAuth:auth('b')}),/account_mismatch/);assert.equal(installed,0);
+ const late=auth('a');late.getUser=async()=>{current='b';return {data:{user:{id:'a'}}};};await assert.rejects(renew({...args,temporaryAuth:late}),/account_mismatch/);assert.equal(installed,0);
+ current='a';await renew({...args,temporaryAuth:auth('a')});assert.equal(installed,1);
+ await assert.rejects(renew({...args,url:'todopersonal://auth-callback#type=recovery&access_token=a&refresh_token=b',temporaryAuth:auth('a')}),/invalid_callback/);assert.equal(installed,1);
+ const denied=auth('a');denied.getUser=async()=>({error:new Error('offline')});await assert.rejects(renew({...args,temporaryAuth:denied}),/offline/);assert.equal(installed,1);
 });

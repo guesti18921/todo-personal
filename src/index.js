@@ -1,5 +1,5 @@
 import { refreshDeviceTimeFormat, showClockPicker } from './timePicker.js';
-import { renewAccountSession } from './reauthentication.js';
+import { renewAccountSession, renewAccountFromLink, reauthenticationMethods } from './reauthentication.js';
 import { t, getLanguage, setLanguage, createLanguagePreferences } from './i18n.js';
 import { openNotebook, closeNotebook, saveNotebook, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, getSyncDetails, getRecoveryCopy, inspectConflict, resolveConflict } from './notebookStore.js';
 import { supabase, SUPABASE_URL, SUPABASE_PUBLIC_KEY } from './supabaseClient.js';
@@ -8,7 +8,7 @@ import { createReminderEngine } from './reminderEngine.js';
 import { listEntries, createMobileNotebook } from './mobileNotebook.js';
 import { isNativeApp, setupNativeApp, openAuthBrowser, resetDeletedAccountData } from './nativeApp.js';
 import { readCachedAccount } from './localAccount.js';
-import { AUTH_REDIRECT_URL, createAuthLinkHandler } from './authDeepLink.js';
+import { AUTH_REDIRECT_URL, createAuthLinkHandler, parseAuthLink } from './authDeepLink.js';
 import { syncFailurePhase } from './syncFailure.js';
 import { boundedFetch } from './networkFetch.js';
 import { authErrorMessage, createGoogleLogin, googleProviderEnabled } from './googleAuth.js';
@@ -282,6 +282,9 @@ const logout = document.querySelector('#logout-btn');
 let registering = false;
 let activeUser = null;
 let activeUserEmail = '';
+let activeAuthMethods = (() => { try { return reauthenticationMethods(JSON.parse(localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token') || 'null')?.user); } catch (_) { return reauthenticationMethods(null); } })();
+let googleReauthPending = null;
+let googleReauthRunning = false;
 
 // A separate non-persistent client prevents a cancelled verification request
 // from silently changing the active account when its network response arrives.
@@ -572,6 +575,7 @@ supabase.auth.onAuthStateChange((_event, session) => {
     languagePreferences.bindUser(session?.user);
     if (id) setTimeout(() => languagePreferences.sync(), 0);
     activeUserEmail = session?.user?.email || '';
+    if (session?.user) activeAuthMethods = reauthenticationMethods(session.user);
     if (id === activeUser) return;
     activeUser = id;
     mobileUI?.setAccount(id);
@@ -784,6 +788,30 @@ mobileUI = createMobileNotebook({
         await flushNotebook();
         mobileUI?.setStatus('', getSyncDetails());
     },
+    getReauthenticationMethods: () => activeAuthMethods,
+    async recoverPassword() {
+        const owner = activeUser, email = activeUserEmail;
+        if (!owner || !email || changingAccount) throw new Error(t('Не удалось войти. Проверьте пароль и соединение.'));
+        const { error } = await confirmationAuth.auth.resetPasswordForEmail(email, { redirectTo: PASSWORD_RESET_URL });
+        if (error) throw new Error(t(authErrorMessage(error)));
+        if (owner !== activeUser) throw new Error(t('Войдите в тот же аккаунт. Локальные записи не перенесены.'));
+    },
+    async reauthenticateGoogle() {
+        const owner = activeUser;
+        if (!owner || changingAccount || googleReauthRunning) throw new Error(t('Не удалось войти. Проверьте пароль и соединение.'));
+        const temporary = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:reauth-google' }, global: { fetch: boundedFetch } });
+        const pending = { owner, temporary, startedAt: Date.now() }; googleReauthPending = pending;
+        try {
+            const login = createGoogleLogin({ auth: temporary.auth, native: isNativeApp(), serverUrl: SUPABASE_URL,
+                redirectTo: isNativeApp() ? AUTH_REDIRECT_URL : location.origin + location.pathname + '?reauth=google',
+                open: async url => {
+                    if (owner !== activeUser) throw new Error('account_mismatch');
+                    if (!isNativeApp()) sessionStorage.setItem('todo-personal:reauth-google', JSON.stringify({ owner, startedAt: pending.startedAt }));
+                    await openAuthBrowser(url);
+                }, onStatus() {} });
+            if (!await login.start()) throw new Error(t('Не удалось войти. Проверьте соединение и попробуйте снова.'));
+        } catch (error) { if (googleReauthPending === pending) googleReauthPending = null; throw error; }
+    },
     deleteAccount,
     configureReminders: value => reminderEngine.configure(value),
     enableExactReminders: () => reminderEngine.enableExact(),
@@ -840,13 +868,40 @@ if (!activeUser) {
     }
 }
 window.addEventListener('resize', () => mobileUI.render());
-const handleAuthLink = createAuthLinkHandler({ auth: supabase.auth, onStatus(result) {
+const handleRegularAuthLink = createAuthLinkHandler({ auth: supabase.auth, onStatus(result) {
     if (result === 'pending') authMessage.textContent = t('Завершаем вход…');
     if (result === 'error') {
         authConfirmBack.click();
         authMessage.textContent = t('Не удалось завершить вход. Проверьте соединение и попробуйте снова. Если подтверждаете почту, откройте ссылку из письма ещё раз.');
     }
 } });
+async function handleAuthLink(url) {
+    if (!parseAuthLink(url)) return false;
+    if (!activeUser) return handleRegularAuthLink(url);
+    if (googleReauthRunning) return false;
+    const pending = googleReauthPending;
+    // Even after an Android process restart, never install another user's session over an open notebook.
+    const owner = pending?.owner || activeUser;
+    if (pending && Date.now() - pending.startedAt > 15 * 60 * 1000) { googleReauthPending = null; mobileUI.completeReauthentication(t('Вход истёк. Нажмите «Продолжить с Google» ещё раз.')); return false; }
+    const temporary = pending?.temporary || createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:reauth-google' }, global: { fetch: boundedFetch } });
+    googleReauthRunning = true;
+    try {
+        await renewAccountFromLink({ url, temporaryAuth: temporary.auth, activeAuth: supabase.auth, owner, currentOwner: () => activeUser });
+        await flushNotebook(); mobileUI.completeReauthentication(); return true;
+    } catch (error) {
+        mobileUI.completeReauthentication(t(error.message === 'account_mismatch' ? 'Войдите в тот же аккаунт. Локальные записи не перенесены.' : 'Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.')); return false;
+    } finally { googleReauthRunning = false; googleReauthPending = null; }
+}
+if (!isNativeApp() && new URLSearchParams(location.search).get('reauth') === 'google') {
+    const callback = AUTH_REDIRECT_URL + location.hash;
+    history.replaceState(null, '', location.pathname);
+    // Cached notebook startup finishes asynchronously; do not let the SDK consume OAuth tokens itself.
+    setTimeout(async () => {
+        let pending; try { pending = JSON.parse(sessionStorage.getItem('todo-personal:reauth-google')); sessionStorage.removeItem('todo-personal:reauth-google'); } catch (_) {}
+        if (!pending || pending.owner !== activeUser || Date.now() - pending.startedAt > 15 * 60 * 1000) { mobileUI.showMessage(t('Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.')); return; }
+        await handleAuthLink(callback);
+    }, 0);
+}
 setupNativeApp({ ui: mobileUI, onAuthLink: handleAuthLink, onResume: async () => {
     await refreshDeviceTimeFormat();
     await checkAccount();

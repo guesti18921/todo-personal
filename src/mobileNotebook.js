@@ -63,7 +63,7 @@ const syncPresentation = details => { const info = rawSyncPresentation(details);
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
-export function createMobileNotebook({ root, todos, notes, persist, logout, reauthenticate, pickTime = () => false, deleteAccount, getAccount, configureReminders, enableExactReminders, refreshReminders, getSyncDetails = () => null, syncNow, inspectConflict, resolveConflict, exportNotebook, canExportNotebook = true, changeLanguage = () => false }) {
+export function createMobileNotebook({ root, todos, notes, persist, logout, reauthenticate, reauthenticateGoogle, recoverPassword, getReauthenticationMethods = () => ({ password: true, google: false }), pickTime = () => false, deleteAccount, getAccount, configureReminders, enableExactReminders, refreshReminders, getSyncDetails = () => null, syncNow, inspectConflict, resolveConflict, exportNotebook, canExportNotebook = true, changeLanguage = () => false }) {
     const shell = document.createElement('section');
     shell.className = 'mobile-notebook';
     shell.setAttribute('aria-label', t('Мобильный блокнот'));
@@ -86,7 +86,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
     let smartDates = true, dismissedDeadline = '', suggestion = null, deadlineAnchor = null;
     let syncDetails = null, syncBusy = false, syncPreview = null, syncError = '', offlineReady = false;
     let deletionBusy = false, deletionError = '';
-    let reauthBusy = false, reauthError = '', savedEditorFingerprint = null;
+    let reauthBusy = false, reauthError = '', reauthMessage = '', savedEditorFingerprint = null;
     const reauthButton = () => `<button type="button" class="mn-secondary" data-reauthenticate>${t('Войти заново')}</button>`;
     let reminderState = { native: false, enabled: false, permission: 'unknown', exact: false, scheduled: 0, error: '' }, reminderQueue = [], reminderBusy = false;
     const suggestionKey = value => value ? `${value.date}|${value.time}` : '';
@@ -211,18 +211,21 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
             add.hidden = true; nav.hidden = true;
             // Keyboard resize must not replace the focused input. Update only
             // the state of the existing form until this screen is left.
-            if (!main.querySelector('[data-reauth-form]')) main.innerHTML = ui`<button type="button" class="mn-back" data-cancel-reauth>← Назад</button><h1>Войти заново</h1><p>Локальные изменения сохранятся. После входа отправим их в этот же аккаунт.</p><p>${escape(getAccount() || '')}</p><form data-reauth-form><label for="mn-reauth-password">Пароль</label><input class="mn-input" id="mn-reauth-password" type="password" autocomplete="current-password" required><button type="submit" class="mn-primary">Войти</button><p role="alert"></p></form>`;
+            const methods = getReauthenticationMethods();
+            if (!main.querySelector('[data-reauth-screen]')) main.innerHTML = ui`<section data-reauth-screen><button type="button" class="mn-back" data-cancel-reauth>← Назад</button><h1>Войти заново</h1><p>Локальные изменения сохранятся. После входа отправим их в этот же аккаунт.</p><p>${escape(getAccount() || '')}</p>${methods.google ? t('<button type="button" class="mn-primary" data-reauth-google>Продолжить с Google</button><p>Выберите тот же аккаунт Google, который использовали для входа.</p>') : ''}${methods.password ? t('<form data-reauth-form><label for="mn-reauth-password">Пароль</label><input class="mn-input" id="mn-reauth-password" type="password" autocomplete="current-password" required><button type="submit" class="mn-primary">Войти</button><p role="alert"></p></form><button type="button" class="mn-secondary" data-reauth-recovery>Забыли пароль?</button>') : ''}<p data-reauth-message role="status"></p><p data-reauth-error role="alert"></p></section>`;
             const password = main.querySelector('#mn-reauth-password');
-            password.disabled = reauthBusy;
-            if (reauthBusy) password.value = '';
-            main.querySelector('[data-cancel-reauth]').disabled = reauthBusy;
+            if (password) { password.disabled = reauthBusy; if (reauthBusy) password.value = ''; }
+            main.querySelectorAll('[data-reauth-screen] button').forEach(button => { button.disabled = reauthBusy; });
             const submit = main.querySelector('[data-reauth-form] button');
-            submit.disabled = reauthBusy; submit.textContent = reauthBusy ? t('Проверяем…') : t('Войти');
-            main.querySelector('[data-reauth-form] [role="alert"]').textContent = reauthError;
+            if (submit) submit.textContent = reauthBusy ? t('Проверяем…') : t('Войти');
+            const formError = main.querySelector('[data-reauth-form] [role="alert"]');
+            if (formError) formError.textContent = reauthError;
+            main.querySelector('[data-reauth-error]').textContent = formError ? '' : reauthError;
+            main.querySelector('[data-reauth-message]').textContent = reauthMessage;
             return;
         }
         if (view === 'settings') {
-            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button>${reauthButton()}<button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${timeSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.23</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
+            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button>${reauthButton()}<button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${timeSettings()}${reminderSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.24</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
             return;
         }
         // Android's keyboard changes the viewport. Keep the focused search
@@ -647,10 +650,19 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         else if (button.hasAttribute('data-delete-account')) { deletionError = ''; view = 'delete-account'; render(); }
         else if (button.hasAttribute('data-cancel-account-deletion')) { view = 'settings'; deletionError = ''; render(); }
         else if (button.hasAttribute('data-confirm-account-deletion')) { confirmAccountDeletion(); }
-        else if (button.hasAttribute('data-reauthenticate')) { if (editor) { back(); if (editor) return; } reauthError = ''; view = 'reauthenticate'; render(); }
+        else if (button.hasAttribute('data-reauthenticate')) { if (editor) { back(); if (editor) return; } reauthError = ''; reauthMessage = ''; view = 'reauthenticate'; render(); }
+        else if (button.hasAttribute('data-reauth-google')) runReauthenticationAction(reauthenticateGoogle, t('Завершите вход в окне Google. Если закрыли его, можно попробовать снова.'));
+        else if (button.hasAttribute('data-reauth-recovery')) runReauthenticationAction(recoverPassword, t('Письмо для сброса пароля отправлено на почту этого аккаунта. Задайте новый пароль по ссылке, затем вернитесь и войдите.'));
         else if (button.hasAttribute('data-cancel-reauth') && !reauthBusy) { view = 'settings'; reauthError = ''; render(); }
         else if (button.hasAttribute('data-logout')) { logout(); }
     });
+    async function runReauthenticationAction(action, success) {
+        if (!action || reauthBusy) return;
+        const owner = account; reauthBusy = true; reauthError = ''; reauthMessage = ''; render();
+        try { await action(); if (owner === account && view === 'reauthenticate') reauthMessage = success; }
+        catch (error) { if (owner === account) reauthError = error.message || t('Не удалось войти. Проверьте пароль и соединение.'); }
+        finally { if (owner === account) { reauthBusy = false; render(); } }
+    }
     shell.addEventListener('submit', async event => {
         if (!event.target.matches('[data-reauth-form]')) return;
         event.preventDefault(); if (reauthBusy || !reauthenticate) return;
@@ -735,6 +747,11 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
             return false;
         },
         isEditing: () => editor || selecting || Boolean(undo) || ['delete-account', 'reauthenticate'].includes(view),
+        completeReauthentication(error = '') {
+            reauthBusy = false; reauthError = error; reauthMessage = '';
+            if (!error && view === 'reauthenticate') view = 'settings';
+            render(); if (!error) say(t('Вход обновлён. Локальные изменения сохранены.')); else if (view !== 'reauthenticate') say(error);
+        },
         setAccount(id) { if (account !== id) { clearTimeout(undoTimer); deletionBusy = false; deletionError = ''; reauthBusy = false; reauthError = ''; savedEditorFingerprint = null; account = id; clearSelection(); dueFilter = 'all'; reminderQueue = []; syncDetails = null; syncBusy = false; syncPreview = null; syncError = ''; updateSyncNotice(); readPreferences(); dismissedDeadline = ''; suggestion = null; deadlineAnchor = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
         setOfflineReady(value) {
             offlineReady = value;

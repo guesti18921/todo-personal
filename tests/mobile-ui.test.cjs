@@ -444,7 +444,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.23/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.24/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -844,7 +844,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.23');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.24');
  } finally { dom.window.close(); }
 });
 
@@ -1277,4 +1277,30 @@ test('two app instances retain offline edits and the cloud version through confl
   assert.ok(cloud.notes.some(n=>n.title==='Online first-device edit'));
   await until(()=>d.querySelector('.mn-status').dataset.state==='confirmed');
  }finally{first.window.close();second.window.close();}
+});
+
+test('Google-only reauthentication shows Google without demanding an uncreated password',async()=>{
+ const f=listFixture();const session=JSON.parse(f.seed[0][1]);session.user.app_metadata={provider:'google',providers:['google']};session.user.identities=[{provider:'google'}];f.seed[0][1]=JSON.stringify(session);
+ const dom=boot(f.seed);try{await ready(dom);const d=dom.window.document;d.querySelector('[data-view="settings"]').click();d.querySelector('[data-reauthenticate]').click();assert.ok(d.querySelector('[data-reauth-google]'));assert.equal(d.querySelector('#mn-reauth-password'),null);assert.equal(d.querySelector('[data-reauth-recovery]'),null);d.querySelector('[data-cancel-reauth]').click();assert.equal(d.querySelector('[data-reauth-screen]'),null);assert.equal(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes[0].text,'original text');}finally{dom.window.close();}
+});
+test('password recovery in an open notebook uses current email and preserves pending edits on success and failure',async()=>{
+ const f=listFixture();let fail=false,requests=[];
+ const fetcher=async(url,opts={})=>{const address=String(url?.url||url);if(address.includes('/auth/v1/recover')){requests.push(JSON.parse(opts.body));return new Response(JSON.stringify(fail?{message:'offline'}:{}),{status:fail?503:200,headers:{'Content-Type':'application/json'}});}throw new TypeError('offline');};
+ const dom=boot(f.seed,false,fetcher);try{await ready(dom);const d=dom.window.document,w=dom.window;d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();const el=d.querySelector('#mn-details');el.value='Preserve pending edits';el.dispatchEvent(new w.Event('input',{bubbles:true}));d.querySelector('[data-save]').click();const before=w.localStorage.getItem(cacheKey);d.querySelector('[data-view="settings"]').click();d.querySelector('[data-reauthenticate]').click();d.querySelector('[data-reauth-recovery]').click();await wait();await wait();assert.equal(requests[0].email,'test@example.com');assert.match(d.querySelector('[data-reauth-message]').textContent,/Письмо/);assert.equal(w.localStorage.getItem(cacheKey),before);fail=true;d.querySelector('[data-reauth-recovery]').click();await wait();await wait();assert.match(d.querySelector('[data-reauth-form] [role="alert"]').textContent,/Не удалось/);assert.equal(w.localStorage.getItem(cacheKey),before);assert.ok(d.querySelector('#mn-reauth-password'));}finally{dom.window.close();}
+});
+
+test('Google OAuth return rejects a different user before replacing cached account or pending records',async()=>{
+ for(const returnedOwner of ['22222222-2222-4222-8222-222222222222',id]){
+ const f=listFixture();f.seed[1][1]=JSON.stringify({...JSON.parse(f.seed[1][1]),dirty:true});const session=JSON.parse(f.seed[0][1]);
+ const callbackUser={...session.user,id:returnedOwner,app_metadata:{providers:['google']}};
+ const callbackJwt=Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:returnedOwner,exp:Math.floor(Date.now()/1000)+86400})).toString('base64url')+'.test';
+ const dom=new JSDOM(html,{url:'https://test.local/?reauth=google#access_token='+callbackJwt+'&refresh_token=returned-refresh',runScripts:'outside-only',virtualConsole});const w=dom.window;Object.defineProperty(w.navigator,'languages',{value:['ru-RU']});Object.defineProperty(w,'crypto',{value:webcrypto});
+ Object.assign(w,{TextEncoder,TextDecoder,Request,Response,Headers,fetch:async(url,opts={})=>{const address=String(url?.url||url);if(address.includes('/auth/v1/user'))return new Response(JSON.stringify(String(opts.headers?.Authorization||opts.headers?.authorization||'').includes(callbackJwt)?callbackUser:session.user),{status:200,headers:{'Content-Type':'application/json'}});if(address.includes('/rest/v1/notebooks')&&opts.method==='PATCH')return new Response(JSON.stringify([{revision:JSON.parse(opts.body).revision}]),{status:200,headers:{'Content-Type':'application/json'}});throw new TypeError('offline');}});
+ for(const [key,value]of f.seed)w.localStorage.setItem(key,value);w.sessionStorage.setItem('todo-personal:reauth-google',JSON.stringify({owner:id,startedAt:Date.now()}));
+ try{w.eval(bundle);await ready(dom);await wait();await wait();assert.equal(JSON.parse(w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token')).user.id,id);assert.equal(JSON.parse(w.localStorage.getItem(cacheKey)).state.notes[0].text,'original text');assert.equal(w.location.hash,'');if(returnedOwner!==id){assert.match(w.document.querySelector('.mn-message').textContent,/тот же аккаунт/);assert.equal(JSON.parse(w.localStorage.getItem(cacheKey)).dirty,true);}else{assert.equal(JSON.parse(w.localStorage.getItem(cacheKey)).dirty,false);}}finally{w.close();}
+ }
+});
+
+test('linked email and Google account offers both reauthentication methods in English',async()=>{
+ const f=listFixture(),session=JSON.parse(f.seed[0][1]);session.user.app_metadata={providers:['google','email']};f.seed[0][1]=JSON.stringify(session);const dom=boot(f.seed,false,null,['en-US']);try{await ready(dom);const d=dom.window.document;d.querySelector('[data-view="settings"]').click();d.querySelector('[data-reauthenticate]').click();assert.equal(d.querySelector('[data-reauth-google]').textContent,'Continue with Google');assert.equal(d.querySelector('[data-reauth-recovery]').textContent,'Forgot password?');assert.ok(d.querySelector('#mn-reauth-password'));}finally{dom.window.close();}
 });

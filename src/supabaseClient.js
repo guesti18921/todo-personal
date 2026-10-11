@@ -10,5 +10,5 @@ recoverDeletedAccounts(localStorage);
 export const supabase = createClient(
   SUPABASE_URL,
   SUPABASE_PUBLIC_KEY,
-  { auth: { storageKey: AUTH_STORAGE_KEY }, global: { fetch: boundedFetch } }
+  { auth: { storageKey: AUTH_STORAGE_KEY, detectSessionInUrl: new URLSearchParams(location.search).get('reauth') !== 'google' }, global: { fetch: boundedFetch } }
 );

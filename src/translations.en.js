@@ -273,7 +273,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.23": "TO-DO Personal · version 0.4.23",
+  "TO-DO Personal · версия 0.4.24": "TO-DO Personal · version 0.4.24",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",
@@ -412,4 +412,8 @@ export default {
   "Отменить незавершённые правки": "Discard unfinished edits",
   "Незавершённые изменения восстановлены. Сохранённая запись остаётся в блокноте.": "Unfinished edits restored. The saved entry remains in your notebook.",
   "Вернуть сохранённую запись": "Restore the saved entry",
+  "Выберите тот же аккаунт Google, который использовали для входа.": "Choose the same Google account you originally used to sign in.",
+  "Письмо для сброса пароля отправлено на почту этого аккаунта. Задайте новый пароль по ссылке, затем вернитесь и войдите.": "A password reset email was sent to this account. Set a new password using the link, then return and sign in.",
+  "Вход истёк. Нажмите «Продолжить с Google» ещё раз.": "Sign-in expired. Tap Continue with Google again.",
+  "Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.": "Could not finish signing in. Local entries are preserved. Try again.",
 };
