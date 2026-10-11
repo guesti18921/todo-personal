@@ -172,3 +172,17 @@
 .mn-clock { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1.25fr); align-items: center; gap: 6px; }
 .mn-clock[data-clock-format="24"] { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
 .mn-clock .mn-input { padding: 10px 6px; }
+
+.mn-clock { display: block; }
+.mn-clock-button { width: 100%; min-height: 48px; text-align: left; cursor: pointer; }
+.mn-clock-controls { display: flex; align-items: center; gap: 8px; }
+.mn-clock-controls[hidden] { display: none; }
+.mn-clock-controls select { min-width: 0; flex: 1; }
+.mn-time-dialog { color: #501f3a; background: #fffdfb; border: 1px solid #ddccd1; border-radius: 14px; padding: 20px; width: min(360px, calc(100vw - 32px)); box-sizing: border-box; }
+.mn-time-dialog::backdrop { background: #30142266; }
+.mn-time-dialog .mn-suggestion-actions { margin-top: 20px; justify-content: flex-end; }
+.mn-date-choice { padding: 12px 0; border-top: 1px solid #b4d6ce; }
+.mn-date-choice .mn-suggestion-actions { margin-top: 8px; }
+[data-reauth-form] > button { margin-top: 16px; }
+
+.mn-time-dialog { position: fixed; inset: 0; margin: auto; box-shadow: 0 12px 40px #30142233; }

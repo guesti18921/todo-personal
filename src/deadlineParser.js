@@ -29,7 +29,7 @@ function calendarDate(year, month, day) {
     return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
 }
 
-export function suggestDeadline(value, now = new Date()) {
+export function suggestDeadline(value, now = new Date(), { dateOrder = 'dmy' } = {}) {
     const text = String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ')
         // A time preposition distinguishes 18.00 from a day/month date.
         .replace(/(?<!\p{L})(в|at|um|alle|a las|à|às)\s+(\d{1,2})\.(\d{2})(?![\d.])/gu, '$1 $2:$3');
@@ -108,7 +108,9 @@ export function suggestDeadline(value, now = new Date()) {
         addDate(+y, +m, +d, raw); return ' '.repeat(raw.length);
     });
     remaining = remaining.replace(/(?<![\p{L}\d./])(\d{1,2})([./])(\d{1,2})\2(\d{4})(?![\d./])/gu, (raw, d, sep, m, y) => {
-        addDate(+y, +m, +d, raw); return ' '.repeat(raw.length);
+        if (sep === '/' && ((!calendarDate(+y, +m, +d) && calendarDate(+y, +d, +m)) || (dateOrder === 'mdy' && +d <= 12 && +m <= 12))) addDate(+y, +d, +m, raw);
+        else addDate(+y, +m, +d, raw);
+        return ' '.repeat(raw.length);
     });
     remaining = remaining.replace(/(?<![\p{L}\d./])(\d{2})\.(\d{2})(?![\d./])/gu, (raw, d, m) => {
         addDate(now.getFullYear(), +m, +d, raw, false); return ' '.repeat(raw.length);
@@ -158,4 +160,20 @@ export function suggestDeadline(value, now = new Date()) {
     }
     const past = date < formatDate(now) || (date === formatDate(now) && time && time < `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
     return { date, time, inferredDate, past: Boolean(past), evidence: [...new Set(evidence)], interpretation: calendarInterpretation, roundedToMinute };
+}
+
+// Return explicit alternatives; neither UI language nor clock preference
+// resolves ambiguous calendar order or a bare morning/evening hour.
+export function suggestDeadlineChoices(value, now = new Date()) {
+    const text = String(value || '').normalize('NFKC');
+    const bare = /(?<!\p{L})(в|at)\s+(\d{1,2})(?![\p{L}\d:.])(?!(?:\s+(?:утра|дня|вечера|ночи|[ap]\.?\s*m)))/giu;
+    const matches = [...text.matchAll(bare)].filter(m => +m[2] >= 1 && +m[2] <= 12);
+    // Several separate time expressions remain unsupported rather than guessed.
+    const texts = matches.length === 1 ? ['AM', 'PM'].map(period => text.slice(0, matches[0].index) + matches[0][1] + ' ' + matches[0][2] + ' ' + period + text.slice(matches[0].index + matches[0][0].length)) : [text];
+    const unique = new Map();
+    for (const phrase of texts) for (const dateOrder of ['dmy', 'mdy']) {
+        const result = suggestDeadline(phrase, now, { dateOrder });
+        if (result) unique.set(result.date + '|' + result.time, result);
+    }
+    return [...unique.values()].slice(0, 4);
 }

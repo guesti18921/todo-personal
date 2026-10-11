@@ -24,7 +24,7 @@ const server = http.createServer((req, res) => {
 (async () => {
  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
  const origin = `http://127.0.0.1:${server.address().port}`;
- const browser = await chromium.launch({ headless: true });
+ const browser = await chromium.launch({ headless: true, ...(process.env.TODO_CHROMIUM_PATH ? { executablePath: process.env.TODO_CHROMIUM_PATH, args: ['--no-sandbox', '--disable-gpu'] } : {}) });
  const results = [];
  try {
   for (const [name, width, height, locale, appLanguage] of [['small', 320, 640, 'ru-RU'], ['phone', 360, 800, 'ru-RU'], ['large', 412, 915, 'ru-RU'], ['landscape', 800, 360, 'ru-RU'], ['desktop', 1280, 800, 'ru-RU'], ['english', 360, 800, 'en-US'], ['english-small', 320, 640, 'en-GB'], ['english-wide', 412, 915, 'en-US'], ['english-ru-os', 360, 800, 'ru-RU', 'en'], ['russian-en-os', 360, 800, 'en-US', 'ru']]) {
@@ -57,37 +57,41 @@ const server = http.createServer((req, res) => {
    await page.waitForTimeout(200);
    assert.equal(await page.locator('.mn-setting details').first().getAttribute('open') !== null, true, 'expanded settings survive sync');
    await page.screenshot({ path: path.join(out, name + '-settings.png'), fullPage: true });
+   const english = (appLanguage || (locale.startsWith('en') ? 'en' : 'ru')) === 'en';
+   await page.locator('[data-time-format]').selectOption(english ? '12' : '24');
    await page.locator('[data-view="all"]').click();
    await page.locator('.mn-add').click();
-   const english = (appLanguage || (locale.startsWith('en') ? 'en' : 'ru')) === 'en';
    await page.locator('#mn-text').fill(english ? 'Tomorrow I have a doctors appointment at 3 p.m.' : 'Купить продукты завтра в 18:00');
-   if (english) {
-    assert.match(await page.locator('.mn-suggestion-title').innerText(), /3:00 PM/);
-    await page.locator('[data-accept-deadline]').click();
-    assert.equal(await page.locator('[name="time"]').inputValue(), '15:00');
-    assert.equal(await page.locator('[data-clock="time"] [data-clock-part="period"]').inputValue(), 'PM');
-    await page.locator('[data-clock="time"] [data-clock-part="hour"]').selectOption('12');
-    await page.locator('[data-clock="time"] [data-clock-part="period"]').selectOption('AM');
-    assert.equal(await page.locator('[name="time"]').inputValue(), '00:00');
-    await page.locator('[data-clock="time"] [data-clock-part="period"]').selectOption('PM');
-    assert.equal(await page.locator('[name="time"]').inputValue(), '12:00');
-    await page.locator('[data-clock="time"] [data-clock-part="hour"]').selectOption('3');
-    await page.locator('[data-clock="time"] [data-clock-part="minute"]').selectOption('45');
+   assert.match(await page.locator('.mn-suggestion-title').innerText(), english ? /3:00 PM/ : /18:00/);
+   await page.locator('[data-accept-deadline]').click();
+   const choose = async (name, hour, minute, period) => {
+    await page.locator(`[data-clock="${name}"] [data-clock-open]`).click();
+    const dialog=page.locator('.mn-time-dialog');
+    await dialog.locator('[data-clock-part="hour"]').selectOption(hour);
+    await dialog.locator('[data-clock-part="minute"]').selectOption(minute);
+    if(period)await dialog.locator('[data-clock-part="period"]').selectOption(period);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth+1),false,'picker overflow: '+name);
+    await page.screenshot({path:path.join(out,`${name}-picker-${width}.png`)});
+    await dialog.locator('.mn-primary').click();
+   };
+   if(english){
+    await choose('time','12','0','AM');assert.equal(await page.locator('[name="time"]').inputValue(),'00:00');
+    await choose('time','12','0','PM');assert.equal(await page.locator('[name="time"]').inputValue(),'12:00');
+    await choose('time','3','45','PM');
     await page.locator('[name="reminderMode"]').selectOption('custom');
     await page.locator('[name="reminderDate"]').fill('2099-01-02');
-    await page.locator('[data-clock="reminderTime"] [data-clock-part="hour"]').selectOption('12');
-    await page.locator('[data-clock="reminderTime"] [data-clock-part="period"]').selectOption('AM');
-    assert.equal(await page.locator('[name="reminderTime"]').inputValue(), '00:00');
-    assert.match(await page.locator('.mn-reminder-preview').innerText(), /12:00\s*AM/);
-    assert.equal(await page.locator('[name="time"]').isVisible(), false);
-   } else {
-    assert.equal(await page.locator('[data-clock-part="period"]').count(), 0);
-    assert.equal(await page.locator('[data-clock="time"] [data-clock-part="hour"] option').count(), 25);
-    await page.locator('[data-accept-deadline]').click();
-    await page.locator('[data-clock="time"] [data-clock-part="hour"]').selectOption('15');
-    assert.equal(await page.locator('[name="time"]').inputValue(), '15:00');
-    assert.equal(await page.locator('[name="time"]').getAttribute('type'), 'time');
+    await choose('reminderTime','12','0','AM');
+    assert.equal(await page.locator('[name="reminderTime"]').inputValue(),'00:00');
+    assert.match(await page.locator('.mn-reminder-preview').innerText(),/12:00\s*AM/);
+   }else{
+    await choose('time','15','0');assert.equal(await page.locator('[name="time"]').inputValue(),'15:00');
    }
+   // Cancelling must leave the canonical deadline unchanged.
+   const before=await page.locator('[name="time"]').inputValue();
+   await page.locator('[data-clock="time"] [data-clock-open]').click();
+   await page.locator('.mn-time-dialog [data-clock-part="hour"]').selectOption('1');
+   await page.locator('.mn-time-dialog .mn-secondary').click();
+   assert.equal(await page.locator('[name="time"]').inputValue(),before);
    const editorAccessibility = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => n.target) })));
    assert.deepEqual(editorAccessibility, [], 'editor accessibility: ' + name + JSON.stringify(editorAccessibility));
    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'editor overflow: ' + name);

@@ -1,3 +1,5 @@
+import { refreshDeviceTimeFormat, showClockPicker } from './timePicker.js';
+import { renewAccountSession } from './reauthentication.js';
 import { t, getLanguage, setLanguage, createLanguagePreferences } from './i18n.js';
 import { openNotebook, closeNotebook, saveNotebook, onSaveStatus, flushNotebook, hasPendingChanges, isLocallySaved, readCloudChanges, getDraft, getSyncDetails, getRecoveryCopy, inspectConflict, resolveConflict } from './notebookStore.js';
 import { supabase, SUPABASE_URL, SUPABASE_PUBLIC_KEY } from './supabaseClient.js';
@@ -758,7 +760,7 @@ reminderEngine = createReminderEngine({
     onStatus: value => mobileUI?.setReminderStatus(value)
 });
 mobileUI = createMobileNotebook({
-    root: todoApp, todos, notes, changeLanguage,
+    root: todoApp, todos, notes, changeLanguage, pickTime: showClockPicker,
     persist() {
         const saved = saveNotebook({ todos, notes });
         // The legacy desktop DOM is hidden; render only the active notebook.
@@ -768,6 +770,18 @@ mobileUI = createMobileNotebook({
         return saved;
     },
     logout: signOutAccount,
+    async reauthenticate(password) {
+        const owner = activeUser, email = activeUserEmail;
+        if (!owner || !email || changingAccount) throw new Error(t('Не удалось войти. Проверьте пароль и соединение.'));
+        const temporary = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch: boundedFetch } });
+        try {
+            await renewAccountSession({ temporaryAuth: temporary.auth, activeAuth: supabase.auth, owner, currentOwner: () => activeUser, email, password });
+        } catch (error) {
+            throw new Error(error.message === 'account_mismatch' ? t('Войдите в тот же аккаунт. Локальные записи не перенесены.') : t(authErrorMessage(error)));
+        }
+        await flushNotebook();
+        mobileUI?.setStatus('', getSyncDetails());
+    },
     deleteAccount,
     configureReminders: value => reminderEngine.configure(value),
     enableExactReminders: () => reminderEngine.enableExact(),
@@ -799,6 +813,7 @@ mobileUI = createMobileNotebook({
     },
     getAccount: () => activeUserEmail
 });
+refreshDeviceTimeFormat().then(() => mobileUI.render());
 mobileUI.setAccount(activeUser);
 reminderEngine.setAccount(activeUser);
 reminderEngine.start().catch(() => mobileUI.setReminderStatus({ native: isNativeApp(), enabled: false, scheduled: 0, error: t('Не удалось подключить уведомления Android. Попробуйте открыть приложение снова.') }));
@@ -831,6 +846,7 @@ const handleAuthLink = createAuthLinkHandler({ auth: supabase.auth, onStatus(res
     }
 } });
 setupNativeApp({ ui: mobileUI, onAuthLink: handleAuthLink, onResume: async () => {
+    await refreshDeviceTimeFormat();
     await checkAccount();
     await flushNotebook();
     reminderEngine.refresh();

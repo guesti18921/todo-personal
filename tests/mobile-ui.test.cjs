@@ -443,7 +443,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.19/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.20/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -843,7 +843,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.19');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.20');
  } finally { dom.window.close(); }
 });
 
@@ -1021,9 +1021,9 @@ test('English deadline and custom reminder use explicit AM/PM and persist canoni
   d.querySelector('[data-view="all"]').click();
   assert.match(d.querySelector(`[data-open="${note.id}"]`).closest('.mn-card').textContent, /3:45 PM/);
   const seed = Array.from({ length: w.localStorage.length }, (_, i) => { const key = w.localStorage.key(i); return [key, w.localStorage.getItem(key)]; });
-  dom.window.close(); dom = boot(seed, false, null, ['ru-RU']); await ready(dom); w = dom.window; d = w.document;
+  dom.window.close(); dom = boot([...seed, ['todo-personal:time-format', '12']], false, null, ['ru-RU']); await ready(dom); w = dom.window; d = w.document;
   d.querySelector('[data-view="all"]').click(); d.querySelector(`[data-open="${note.id}"]`).click();
-  assert.equal(d.querySelector(part('time', 'period')).value, 'PM', 'explicit app language overrides Russian OS');
+  assert.equal(d.querySelector(part('time', 'period')).value, 'PM', 'explicit 12-hour preference overrides Russian OS');
   assert.equal(d.querySelector('[name="reminderTime"]').value, '12:15');
   d.querySelector('[data-date="none"]').click();
   assert.equal(d.querySelector('[name="time"]').value, ''); assert.equal(d.querySelector(part('time', 'hour')).value, '');
@@ -1043,6 +1043,7 @@ test('changing interface language preserves existing deadline and reminder times
   assert.equal(d.querySelector('[data-clock="time"] [data-clock-part="hour"]').options.length, 25);
   d.querySelector('[data-back]').click(); d.querySelector('[data-view="settings"]').click();
   const language = d.querySelector('[data-language]'); language.value = 'en'; language.dispatchEvent(new w.Event('change', { bubbles: true }));
+  const format = d.querySelector('[data-time-format]'); format.value = '12'; format.dispatchEvent(new w.Event('change', { bubbles: true }));
   d.querySelector('[data-view="all"]').click(); d.querySelector('[data-open="n"]').click();
   assert.equal(d.querySelector('[data-clock="time"] [data-clock-part="hour"]').value, '12');
   assert.equal(d.querySelector('[data-clock="time"] [data-clock-part="period"]').value, 'PM');
@@ -1068,4 +1069,72 @@ test('leaving the textarea never replaces the deadline button between pointer do
   assert.equal(d.querySelector('[name="time"]').value, '15:00');
   assert.equal(d.querySelector('[name="reminderMode"]').value, 'at');
  } finally { dom.window.close(); }
+});
+
+test('existing entry edits with an empty heading recover after restart without overwriting the saved entry', async () => {
+ const f = listFixture(); let dom = boot(f.seed);
+ try {
+  await ready(dom); let w = dom.window, d = w.document;
+  d.querySelector('[data-view="all"]').click(); d.querySelector('[data-open="n"]').click();
+  const input = (selector, value) => { const el = d.querySelector(selector); el.value = value; el.dispatchEvent(new w.Event('input', { bubbles: true })); };
+  input('#mn-text', ''); input('#mn-details', 'Новые подробности не должны исчезнуть');
+  const key = 'todo-personal:entry-edit-draft:'+id+':n';
+  assert.equal(JSON.parse(w.localStorage.getItem(key)).details, 'Новые подробности не должны исчезнуть');
+  const seed = Array.from({length:w.localStorage.length},(_,i)=>{const k=w.localStorage.key(i);return [k,w.localStorage.getItem(k)];});
+  dom.window.close(); dom=boot(seed); await ready(dom); w=dom.window; d=w.document;
+  d.querySelector('[data-continue-draft="n"]').click();
+  assert.equal(d.querySelector('#mn-text').value, '');
+  assert.equal(d.querySelector('#mn-details').value, 'Новые подробности не должны исчезнуть');
+  const title=d.querySelector('#mn-text'); title.value='Восстановлено'; title.dispatchEvent(new w.Event('input',{bubbles:true}));
+  d.querySelector('[data-save]').click();
+  const note=JSON.parse(w.localStorage.getItem(cacheKey)).state.notes.find(e=>e.id==='n');
+  assert.equal(note.title,'Восстановлено'); assert.equal(note.text,'Новые подробности не должны исчезнуть'); assert.equal(w.localStorage.getItem(key),null);
+ } finally { dom.window.close(); }
+});
+
+test('clock preference overrides device and language without changing deadlines or reminders', async () => {
+ const f=listFixture(), dom=boot([...f.seed,['todo-personal:time-format','24']],false,null,['en-US']);
+ try { await ready(dom);const d=dom.window.document,w=dom.window;
+  d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();
+  assert.equal(d.querySelector('[data-clock-part="period"]'),null);
+  d.querySelector('[data-back]').click();d.querySelector('[data-view="settings"]').click();
+  const format=d.querySelector('[data-time-format]');format.value='12';format.dispatchEvent(new w.Event('change',{bubbles:true}));
+  const lang=d.querySelector('[data-language]');lang.value='ru';lang.dispatchEvent(new w.Event('change',{bubbles:true}));
+  d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();
+  assert.equal(d.querySelector('[data-clock="time"] [data-clock-part="period"]').value,'PM');
+  assert.equal(d.querySelector('[name="time"]').value,'12:00'); assert.equal(d.querySelector('[name="reminderTime"]').value,'09:30');
+  d.querySelector('[data-save]').click();const n=JSON.parse(w.localStorage.getItem(cacheKey)).state.notes.find(e=>e.id==='n');
+  assert.equal(n.time,'12:00');assert.equal(n.reminder.time,'09:30');
+ }finally{dom.window.close();}
+});
+
+test('ambiguous slash date offers both explicit dates and applies only the chosen one',async()=>{
+ const f=listFixture(),dom=boot(f.seed);try{await ready(dom);const d=dom.window.document,w=dom.window;
+ d.querySelector('.mn-add').click();const el=d.querySelector('#mn-text');el.value='Doctor 10/12/2099 at 3pm';el.dispatchEvent(new w.Event('input',{bubbles:true}));
+ assert.equal(d.querySelectorAll('[data-choice-index][data-accept-deadline]').length,2);
+ assert.equal(d.querySelector('[name="date"]').value,'');
+ d.querySelector('[data-accept-deadline][data-choice-index="1"]').click();assert.equal(d.querySelector('[name="date"]').value,'2099-10-12');assert.equal(d.querySelector('[name="time"]').value,'15:00');
+ }finally{dom.window.close();}
+});
+
+test('reauthentication succeeds with pending edits even while ordinary logout remains blocked',async()=>{
+ const f=listFixture();let authorized=false;
+ const session=JSON.parse(f.seed.find(([key])=>key==='sb-ihvwqqvndmwtislvgamd-auth-token')[1]);
+ const fetcher=async(url,options={})=>{
+  const address=String(url?.url||url);
+  if(address.includes('/auth/v1/token')){authorized=true;return new Response(JSON.stringify({...session,user:session.user}),{status:200,headers:{'Content-Type':'application/json'}});}
+  if(address.includes('/auth/v1/user'))return new Response(JSON.stringify(session.user),{status:200,headers:{'Content-Type':'application/json'}});
+  if(address.includes('/rest/v1/notebooks')){
+   if(!authorized)return new Response(JSON.stringify({message:'expired',code:'PGRST303'}),{status:401,headers:{'Content-Type':'application/json'}});
+   if(options.method==='PATCH')return new Response(JSON.stringify([{revision:JSON.parse(options.body).revision}]),{status:200,headers:{'Content-Type':'application/json'}});
+   return new Response(JSON.stringify({user_id:id,revision:0,...f.state}),{status:200,headers:{'Content-Type':'application/json'}});
+  }throw new TypeError('offline');
+ };
+ const dom=boot(f.seed,false,fetcher);try{await ready(dom);const d=dom.window.document,w=dom.window;
+ d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();const el=d.querySelector('#mn-details');el.value='Не потерять при входе';el.dispatchEvent(new w.Event('input',{bubbles:true}));d.querySelector('[data-save]').click();await wait();
+ d.querySelector('[data-view="settings"]').click();d.querySelector('[data-logout]').click();await wait();assert.equal(d.querySelector('#todo-app').hidden,false);
+ d.querySelector('[data-reauthenticate]').click();d.querySelector('#mn-reauth-password').value='test-password';d.querySelector('[data-reauth-form]').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+ for(let i=0;i<40&&d.querySelector('[data-reauth-form]');i++)await wait();assert.equal(d.querySelector('[data-reauth-form]'),null);
+ const saved=JSON.parse(w.localStorage.getItem(cacheKey));assert.equal(saved.state.notes.find(e=>e.id==='n').text,'Не потерять при входе');assert.equal(saved.dirty,false);
+ }finally{dom.window.close();}
 });

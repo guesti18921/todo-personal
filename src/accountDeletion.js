@@ -30,7 +30,7 @@ export function clearDeletedAccount(storage, owner) {
     try {
         const names = Array.from({ length: storage.length }, (_, i) => storage.key(i));
         for (const name of names) {
-            if (exact.has(name) || name?.startsWith(`todo-personal:recovery:${owner}:`) || name?.startsWith(`todo-personal:reminder-seen:${owner}:`)) {
+            if (exact.has(name) || name?.startsWith(`todo-personal:entry-edit-draft:${owner}:`) || name?.startsWith(`todo-personal:recovery:${owner}:`) || name?.startsWith(`todo-personal:reminder-seen:${owner}:`)) {
                 try { storage.removeItem(name); } catch (_) { complete = false; }
             }
         }

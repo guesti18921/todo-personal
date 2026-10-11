@@ -73,8 +73,8 @@ test('clock presentation round-trips every minute without changing stored HH:mm'
  const { formatClock } = mod.namespace;
  for (let h = 0; h < 24; h++) for (let m = 0; m < 60; m++) {
   const value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  assert.equal(formatClock(value, 'ru'), value);
-  assert.equal(formatClock(value, 'en'), `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`);
+  assert.equal(formatClock(value, 'ru', '24'), value);
+  assert.equal(formatClock(value, 'en', '12'), `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`);
  }
  for (const invalid of ['', '24:00', '12:60', '<script>', null]) assert.equal(formatClock(invalid, 'en'), '');
 });

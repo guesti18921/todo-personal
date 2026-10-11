@@ -1,24 +1,46 @@
 // Storage and scheduling always use HH:mm. Only the presentation changes.
-export function formatClock(value, language) {
+const TIME_FORMAT_KEY = 'todo-personal:time-format';
+let deviceFormat = null;
+export function getTimePreference() {
+    try { const value = localStorage.getItem(TIME_FORMAT_KEY); return ['12', '24'].includes(value) ? value : 'device'; }
+    catch (_) { return 'device'; }
+}
+export function setTimePreference(value) {
+    if (!['device', '12', '24'].includes(value)) return false;
+    try { localStorage.setItem(TIME_FORMAT_KEY, value); return true; } catch (_) { return false; }
+}
+export function setDeviceTimeFormat(value) { deviceFormat = value === '12' ? '12' : '24'; }
+export function getTimeFormat(language) {
+    const chosen = getTimePreference();
+    if (chosen !== 'device') return chosen;
+    if (deviceFormat) return deviceFormat;
+    const locale = typeof navigator !== 'undefined' ? (navigator.languages?.[0] || navigator.language) : language;
+    return new Intl.DateTimeFormat(locale || undefined, { hour: 'numeric' }).resolvedOptions().hour12 ? '12' : '24';
+}
+export const clockHourCycle = () => getTimeFormat() === '12' ? 'h12' : 'h23';
+export function formatClock(value, language, format = getTimeFormat(language)) {
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value || '')) return '';
-    if (language !== 'en') return value;
+    if (format !== '12') return value;
     const hour = Number(value.slice(0, 2));
     return `${hour % 12 || 12}:${value.slice(3)} ${hour >= 12 ? 'PM' : 'AM'}`;
 }
 
 export function timeInput(name, value, label, language) {
     const clock = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value || '') ? value : '';
-    const english = language === 'en';
+    const english = getTimeFormat(language) === '12';
     const options = (count, offset, pad) => Array.from({ length: count }, (_, i) => {
         const n = String(i + offset), text = pad ? n.padStart(2, '0') : n;
         return `<option value="${n}">${text}</option>`;
     }).join('');
     return `<div class="mn-clock" data-clock="${name}" data-clock-format="${english ? '12' : '24'}" role="group" aria-label="${label}">
         <input type="time" name="${name}" value="${clock}" hidden>
-        <select class="mn-input" data-clock-part="hour" aria-label="${label}: ${english ? 'hour' : 'часы'}"><option value="">—</option>${options(english ? 12 : 24, english ? 1 : 0, !english)}</select>
+        <button type="button" class="mn-input mn-clock-button" data-clock-open>${formatClock(clock, language) || (language === 'en' ? 'Choose time' : 'Выбрать время')}</button>
+        <div class="mn-clock-controls" hidden>
+        <select class="mn-input" data-clock-part="hour" aria-label="${label}: ${language === 'en' ? 'hour' : 'часы'}"><option value="">—</option>${options(english ? 12 : 24, english ? 1 : 0, !english)}</select>
         <span aria-hidden="true">:</span>
-        <select class="mn-input" data-clock-part="minute" aria-label="${label}: ${english ? 'minute' : 'минуты'}">${options(60, 0, true)}</select>
-        ${english ? `<select class="mn-input" data-clock-part="period" aria-label="${label}: AM or PM"><option value="AM">AM</option><option value="PM">PM</option></select>` : ''}
+        <select class="mn-input" data-clock-part="minute" aria-label="${label}: ${language === 'en' ? 'minute' : 'минуты'}">${options(60, 0, true)}</select>
+        ${english ? `<select class="mn-input" data-clock-part="period" aria-label="${label}: ${language === 'en' ? 'AM or PM' : 'AM или PM'}"><option value="AM">AM</option><option value="PM">PM</option></select>` : ''}
+        </div>
     </div>`;
 }
 
@@ -34,6 +56,8 @@ export function syncClockInputs(root) {
             group.dataset.value = canonical.value;
         }
         group.querySelectorAll('select').forEach(select => { select.disabled = canonical.disabled; });
+        const button = group.querySelector('[data-clock-open]');
+        if (button) { button.disabled = canonical.disabled; button.textContent = formatClock(canonical.value, null, group.dataset.clockFormat) || (typeof document !== 'undefined' && document.documentElement.lang === 'en' ? 'Choose time' : 'Выбрать время'); }
     });
 }
 
