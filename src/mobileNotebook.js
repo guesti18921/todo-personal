@@ -63,7 +63,7 @@ const syncPresentation = details => { const info = rawSyncPresentation(details);
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
-export function createMobileNotebook({ root, todos, notes, persist, logout, reauthenticate, reauthenticateGoogle, recoverPassword, getReauthenticationMethods = () => ({ password: true, google: false }), pickTime = () => false, deleteAccount, getAccount, configureReminders, enableExactReminders, refreshReminders, getSyncDetails = () => null, syncNow, inspectConflict, resolveConflict, exportNotebook, canExportNotebook = true, changeLanguage = () => false }) {
+export function createMobileNotebook({ root, todos, notes, persist, logout, reauthenticate, reauthenticateGoogle, recoverPassword, resetPassword, getReauthenticationMethods = () => ({ password: true, google: false }), pickTime = () => false, deleteAccount, getAccount, configureReminders, enableExactReminders, refreshReminders, getSyncDetails = () => null, syncNow, inspectConflict, resolveConflict, exportNotebook, canExportNotebook = true, changeLanguage = () => false }) {
     const shell = document.createElement('section');
     shell.className = 'mobile-notebook';
     shell.setAttribute('aria-label', t('Мобильный блокнот'));
@@ -207,6 +207,13 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         nav.querySelectorAll('button').forEach(button => { if (button.dataset.view === view) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
         if (view === 'sync') { renderSync(); return; }
         if (view === 'delete-account') { renderDeletion(); return; }
+        if (view === 'reset-password') {
+            add.hidden = true; nav.hidden = true;
+            if (!main.querySelector('[data-native-reset-form]')) main.innerHTML = ui`<section><button type="button" class="mn-back" data-cancel-reauth>← Назад</button><h1>Новый пароль</h1><p>${escape(getAccount() || '')}</p><form data-native-reset-form><label for="mn-new-password">Новый пароль — минимум 8 символов</label><input class="mn-input" id="mn-new-password" type="password" autocomplete="new-password" minlength="8" required><label for="mn-repeat-password">Повторите пароль</label><input class="mn-input" id="mn-repeat-password" type="password" autocomplete="new-password" minlength="8" required><button class="mn-primary" type="submit">Сохранить пароль</button><p role="alert"></p></form></section>`;
+            main.querySelectorAll('input, button').forEach(el => { el.disabled = reauthBusy; });
+            main.querySelector('[role="alert"]').textContent = reauthError;
+            return;
+        }
         if (view === 'reauthenticate') {
             add.hidden = true; nav.hidden = true;
             // Keyboard resize must not replace the focused input. Update only
@@ -664,6 +671,15 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         finally { if (owner === account) { reauthBusy = false; render(); } }
     }
     shell.addEventListener('submit', async event => {
+        if (event.target.matches('[data-native-reset-form]')) {
+            event.preventDefault(); if (reauthBusy || !resetPassword) return;
+            const owner = account, password = main.querySelector('#mn-new-password').value, repeat = main.querySelector('#mn-repeat-password').value;
+            reauthBusy = true; reauthError = ''; render();
+            try { await resetPassword(password, repeat); if (account === owner) { view = 'reauthenticate'; reauthMessage = t('Пароль изменён. Войдите с новым паролем. Локальные записи сохранены.'); } }
+            catch (error) { if (owner === account) reauthError = error.message; }
+            finally { if (owner === account) { reauthBusy = false; render(); } }
+            return;
+        }
         if (!event.target.matches('[data-reauth-form]')) return;
         event.preventDefault(); if (reauthBusy || !reauthenticate) return;
         let password = main.querySelector('#mn-reauth-password').value;
@@ -739,14 +755,15 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         saveDraft: stashDraft,
         back() {
             if (deletionBusy) return true;
-            if (view === 'reauthenticate') { if (!reauthBusy) { view = 'settings'; render(); } return true; }
+            if (['reauthenticate', 'reset-password'].includes(view)) { if (!reauthBusy) { view = 'settings'; render(); } return true; }
             if (view === 'delete-account') { view = 'settings'; deletionError = ''; render(); return true; }
             if (editor) { back(); return true; }
             if (selecting) { clearSelection(); render(); return true; }
             if (view !== 'today' || query) { view = 'today'; query = ''; filter = 'all'; undo = null; say(''); render(); return true; }
             return false;
         },
-        isEditing: () => editor || selecting || Boolean(undo) || ['delete-account', 'reauthenticate'].includes(view),
+        isEditing: () => editor || selecting || Boolean(undo) || ['delete-account', 'reauthenticate', 'reset-password'].includes(view),
+        openPasswordRecovery() { reauthBusy = false; reauthError = ''; reauthMessage = ''; view = 'reset-password'; render(); },
         completeReauthentication(error = '') {
             reauthBusy = false; reauthError = error; reauthMessage = '';
             if (!error && view === 'reauthenticate') view = 'settings';

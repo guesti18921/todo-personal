@@ -15,7 +15,7 @@ import { authErrorMessage, createGoogleLogin, googleProviderEnabled } from './go
 import { createClient } from '@supabase/supabase-js';
 import { createEmailConfirmation, EMAIL_CONFIRMATION_URL } from './emailConfirmation.js';
 import { requestAccountDeletion, clearDeletedAccount, isAccountDeleted } from './accountDeletion.js';
-import { PASSWORD_RESET_URL } from './passwordRecovery.js';
+import { PASSWORD_RESET_URL, readRecoveryTokens, createPasswordRecovery } from './passwordRecovery.js';
 import { createAccountGuard } from './accountGuard.js';
 let mobileUI = null;
 let reminderEngine = null;
@@ -285,6 +285,7 @@ let activeUserEmail = '';
 let activeAuthMethods = (() => { try { return reauthenticationMethods(JSON.parse(localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token') || 'null')?.user); } catch (_) { return reauthenticationMethods(null); } })();
 let googleReauthPending = null;
 let googleReauthRunning = false;
+let nativePasswordRecovery = null;
 
 // A separate non-persistent client prevents a cancelled verification request
 // from silently changing the active account when its network response arrives.
@@ -788,11 +789,20 @@ mobileUI = createMobileNotebook({
         await flushNotebook();
         mobileUI?.setStatus('', getSyncDetails());
     },
+    async resetPassword(password, repeat) {
+        const recovery = nativePasswordRecovery;
+        if (!recovery || recovery.owner !== activeUser) throw new Error(t('Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.'));
+        if (!await recovery.controller.save(password, repeat)) {
+            const messages = { short: 'Новый пароль — минимум 8 символов', mismatch: 'Пароли не совпадают.', same: 'Новый пароль должен отличаться от старого.' };
+            throw new Error(t(messages[recovery.status] || 'Не удалось изменить пароль. Проверьте соединение и повторите попытку.'));
+        }
+        nativePasswordRecovery = null;
+    },
     getReauthenticationMethods: () => activeAuthMethods,
     async recoverPassword() {
         const owner = activeUser, email = activeUserEmail;
         if (!owner || !email || changingAccount) throw new Error(t('Не удалось войти. Проверьте пароль и соединение.'));
-        const { error } = await confirmationAuth.auth.resetPasswordForEmail(email, { redirectTo: PASSWORD_RESET_URL });
+        const { error } = await confirmationAuth.auth.resetPasswordForEmail(email, { redirectTo: isNativeApp() ? AUTH_REDIRECT_URL : PASSWORD_RESET_URL });
         if (error) throw new Error(t(authErrorMessage(error)));
         if (owner !== activeUser) throw new Error(t('Войдите в тот же аккаунт. Локальные записи не перенесены.'));
     },
@@ -876,6 +886,27 @@ const handleRegularAuthLink = createAuthLinkHandler({ auth: supabase.auth, onSta
     }
 } });
 async function handleAuthLink(url) {
+    let recoveryTokens = null;
+    try { const address = new URL(url); if (address.protocol === 'todopersonal:' && address.hostname === 'auth-callback' && !address.username && !address.password && !address.port && ['', '/'].includes(address.pathname)) recoveryTokens = readRecoveryTokens(address.hash); } catch (_) {}
+    if (recoveryTokens && activeUser) {
+        if (googleReauthRunning) return false;
+        const owner = activeUser;
+        const temporary = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:native-recovery' }, global: { fetch: boundedFetch } });
+        googleReauthRunning = true;
+        try {
+            const result = await temporary.auth.setSession(recoveryTokens);
+            if (result.error) throw result.error;
+            const verified = await temporary.auth.getUser();
+            if (verified.error) throw verified.error;
+            if (activeUser !== owner || result.data?.session?.user?.id !== owner || verified.data?.user?.id !== owner) throw new Error('account_mismatch');
+            const recovery = { owner, status: '' };
+            recovery.controller = createPasswordRecovery({ auth: temporary.auth, onStatus: value => { recovery.status = value; } });
+            if (!await recovery.controller.open(recoveryTokens) || activeUser !== owner) throw new Error('invalid_recovery');
+            nativePasswordRecovery = recovery; mobileUI.openPasswordRecovery(); return true;
+        } catch (error) { mobileUI.completeReauthentication(t(error.message === 'account_mismatch' ? 'Войдите в тот же аккаунт. Локальные записи не перенесены.' : 'Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.')); return false; }
+        finally { googleReauthRunning = false; }
+    }
+
     if (!parseAuthLink(url)) return false;
     if (!activeUser) return handleRegularAuthLink(url);
     if (googleReauthRunning) return false;

@@ -416,4 +416,8 @@ export default {
   "Письмо для сброса пароля отправлено на почту этого аккаунта. Задайте новый пароль по ссылке, затем вернитесь и войдите.": "A password reset email was sent to this account. Set a new password using the link, then return and sign in.",
   "Вход истёк. Нажмите «Продолжить с Google» ещё раз.": "Sign-in expired. Tap Continue with Google again.",
   "Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.": "Could not finish signing in. Local entries are preserved. Try again.",
+  "Пароль изменён. Войдите с новым паролем. Локальные записи сохранены.": "Password changed. Sign in with your new password. Local entries are preserved.",
+  "Пароли не совпадают.": "Passwords do not match.",
+  "Новый пароль должен отличаться от старого.": "Your new password must differ from the old one.",
+  "Не удалось изменить пароль. Проверьте соединение и повторите попытку.": "Could not change the password. Check your connection and try again.",
 };
