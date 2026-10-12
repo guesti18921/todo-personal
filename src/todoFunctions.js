@@ -1,4 +1,5 @@
 import { savePart } from './notebookStore.js';
+import { createEntryId } from './localNotebook.js';
 import {format} from "date-fns"
 import { el } from "date-fns/locale";
 import Colcade from 'colcade'
@@ -63,10 +64,9 @@ export const domManipulator = (function () {
             const toDoDate = document.createElement('div');
             toDoDate.classList.add('todo__date');
             // convert date string into a date the form of "Jan 12th"
-            const dateObject = new Date(todo.date);
-            const dateMonth = format(dateObject, 'MMM');
-            const dateDay = format(dateObject, 'do');
-            const dateFormated = `${dateMonth} ${dateDay}`;
+            const dateObject = todo.date ? new Date(todo.date + 'T12:00:00') : null;
+            const dateFormated = dateObject && !Number.isNaN(dateObject.getTime())
+                ? format(dateObject, 'MMM do') : 'No due date';
             toDoDate.textContent = dateFormated;
 
             // create a edit icon for the to-do item
@@ -153,10 +153,9 @@ export const domManipulator = (function () {
                 const toDoDate = document.createElement('div');
                 toDoDate.classList.add('todo__date');
                 // convert date string into a date the form of "Jan 12th"
-                const dateObject = new Date(todo.date);
-                const dateMonth = format(dateObject, 'MMM');
-                const dateDay = format(dateObject, 'do');
-                const dateFormated = `${dateMonth} ${dateDay}`;
+                const dateObject = todo.date ? new Date(todo.date + 'T12:00:00') : null;
+                const dateFormated = dateObject && !Number.isNaN(dateObject.getTime())
+                    ? format(dateObject, 'MMM do') : 'No due date';
                 toDoDate.textContent = dateFormated;
 
                 // create a edit icon for the to-do item
@@ -254,10 +253,9 @@ export const domManipulator = (function () {
         dateTitle.classList.add('details-popup__catagory');
         const dateContent = document.createElement('span');
         // display human readable date
-        const day = format(new Date(todos[i].date), 'do');
-        const month = format(new Date(todos[i].date), 'MMMM');
-        const year = format(new Date(todos[i].date), 'yyyy');
-        const formatedDate = `${month} ${day}, ${year}`;
+        const dueDate = todos[i].date ? new Date(todos[i].date + 'T12:00:00') : null;
+        const formatedDate = dueDate && !Number.isNaN(dueDate.getTime())
+            ? format(dueDate, 'MMMM do, yyyy') : 'No due date';
         dateContent.textContent = formatedDate;
         date.appendChild(dateTitle);
         date.appendChild(dateContent);
@@ -482,8 +480,7 @@ export const domManipulator = (function () {
         const index = toDo.dataset.index;
 
         toDoObject[project][index].checked = !toDoObject[project][index].checked;
-        console.log(toDoObject[project]);
-    
+
         // save todos to local storage
         savePart("todos", toDoObject);
 
@@ -555,13 +552,6 @@ export const domManipulator = (function () {
             toDosManager.changeCurrentProject(e.target.textContent);
         }
 
-        console.log("you are in folder", toDosManager.getCurrentProject());
-
-    
-
-
-
-        
         // render all to-dos from all projects if on the home page. otherwise
         // only render the relevent to-do items
         if (toDosManager.getCurrentProject() === 'home') {
@@ -604,11 +594,6 @@ export const domManipulator = (function () {
                 toDosManager.changeCurrentProject(e.target.childNodes[0].textContent);
             }
 
-            console.log("you are in folder", toDosManager.getCurrentProject());
-
-
-
-            
             // render all to-dos from all projects if on the home page. otherwise
             // only render the relevent to-do items
             if (toDosManager.getCurrentProject() === 'home') {
@@ -799,9 +784,6 @@ export const domManipulator = (function () {
             renderAllToDos(todos, display);
             // update nave link to show home active
             document.querySelector('.nav').children.item(0).classList.add('nav__selected');
-            console.log(document.querySelector('.nav').children.item(0));
-
-            
 
         })
     }
@@ -884,6 +866,7 @@ export const toDosManager = (function () {
     // To-do factory function
     function createToDo(name, priority, date, details, project, checked=false) {
         return {
+            id: createEntryId(),
             name,
             priority,
             date,
@@ -960,7 +943,7 @@ export const toDosManager = (function () {
         // only render the relevent to-do items
         if (getCurrentProject() === 'home') {
             domManipulator.renderAllToDos(toDoList, display);
-            console.log(toDoList);
+
         } else {
             domManipulator.renderToDos(toDoList, display);
         }
@@ -1037,7 +1020,6 @@ export const toDosManager = (function () {
             
             // sets the current folder variable to nav item that was clicked
             toDosManager.changeCurrentProject(newProject);
-            console.log("you are in folder", toDosManager.getCurrentProject());
 
             // render all to-dos from all projects if on the home page. otherwise
             // only render the relevent to-do items
@@ -1063,11 +1045,11 @@ export const toDosManager = (function () {
             // render all to-dos from all projects if on the home page. otherwise
             // only render the relevent to-do items
             if (newProject.toLowerCase() === 'home') {
-                console.log(`${newProject} already exists. changing folder to ${newProject}`);
+
                 changeCurrentProject(newProject);
                 domManipulator.renderAllToDos(todos, display);
             } else {
-                console.log(`${newProject} already exists. changing folder to ${newProject}`);
+
                 changeCurrentProject(newProject);
                 domManipulator.renderToDos(todos, display);
             }
@@ -1125,7 +1107,7 @@ export const toDosManager = (function () {
 
                 // update nave link to show home active
                 document.querySelector('.nav').children.item(0).classList.add('nav__selected');
-                console.log(document.querySelector('.nav').children.item(0));
+
             }
         }
         
@@ -1242,6 +1224,7 @@ export const notesManager = (function () {
 
     function createNote(title, text) {
         return {
+            id: createEntryId(),
             title,
             text
         }
@@ -1283,7 +1266,7 @@ export const notesManager = (function () {
 
     // delete selected note and refresh the notes
     function deleteNote(e, notes) {
-        console.log(notes);
+
         const i = e.target.parentElement.dataset.index;
         notes.splice(i, 1);
         arrangeNotes(notes);

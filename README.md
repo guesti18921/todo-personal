@@ -1,20 +1,36 @@
-# // TO-DO: Productivity App
+# TO-DO Personal
 
-Keep track of tasks with custom project folders and notes.
+Блокнот для задач и заметок. Актуальная версия приложения: **0.4.28**.
 
-- Save to-do items to one of the default folders (Home, Today, Week) or create a custom folder.
-- View to-do details, make an edit, delete and check off items.
-- Three priority levels to assign a to-do item.
-- Number of remaining unchecked items displayed by project name, total unchecked items displayed by Home title.
-- Pinterest style notes section. Dynamically add, remove or edit notes.
-- Fully responsive.
-- Data saved to local storage.
+**[Открыть веб-версию](https://todo.m1strell.com/)** — работает в браузере на компьютере и телефоне.
 
-Feature ideas to implement.
+- Вход по email и через Google, восстановление пароля.
+- Задачи, заметки, списки, закрепление и поиск.
+- Локальное сохранение и черновики; синхронизация между устройствами одного аккаунта.
+- Обработка конфликтов и восстановление сохранённых копий.
+- Русский и английский интерфейс.
+- Android-приложение на Capacitor. Напоминания Android требуют разрешения на уведомления; веб-версия не обещает доставку напоминаний при закрытом браузере.
 
-- Sort by date / priority.
-- Create logins and allow shared projects / notes between users.
+## Разработка
 
-[Live App](https://bscottnz.github.io/todo/)
+Требуется Node.js 24.
 
-![alt text](https://raw.githubusercontent.com/bscottnz/todo/master/todo.png "App Preview")
+```sh
+npm ci
+npm test
+npm run build
+npm run test:ui
+npx playwright install chromium
+npm run test:browser
+```
+
+Исходники актуальной версии находятся в основной ветке `main`. GitHub Pages собирает эту же ветку и публикует `dist/` на основном адресе сайта. Android-релизы используют отдельную проверенную сборку и постоянный сертификат подписи.
+
+## Документы
+
+- [Конфиденциальность](https://todo.m1strell.com/privacy.html)
+- [Поддержка](https://todo.m1strell.com/support.html)
+- [Удаление аккаунта](https://todo.m1strell.com/delete-account.html)
+- [Изменения и проверки 0.4.28](docs/release-0.4.28.md)
+
+История исходного проекта сохранена в Git; старое демо не является актуальной версией TO-DO Personal.
