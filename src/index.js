@@ -902,7 +902,7 @@ async function handleAuthLink(url) {
             const recovery = { owner, status: '' };
             recovery.controller = createPasswordRecovery({ auth: temporary.auth, onStatus: value => { recovery.status = value; } });
             if (!await recovery.controller.open(recoveryTokens) || activeUser !== owner) throw new Error('invalid_recovery');
-            nativePasswordRecovery = recovery; mobileUI.openPasswordRecovery(); return true;
+            nativePasswordRecovery = recovery; return mobileUI.openPasswordRecovery();
         } catch (error) { mobileUI.completeReauthentication(t(error.message === 'account_mismatch' ? 'Войдите в тот же аккаунт. Локальные записи не перенесены.' : 'Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.')); return false; }
         finally { googleReauthRunning = false; }
     }

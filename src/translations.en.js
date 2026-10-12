@@ -273,7 +273,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.24": "TO-DO Personal · version 0.4.24",
+  "TO-DO Personal · версия 0.4.25": "TO-DO Personal · version 0.4.25",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",
@@ -420,4 +420,8 @@ export default {
   "Пароли не совпадают.": "Passwords do not match.",
   "Новый пароль должен отличаться от старого.": "Your new password must differ from the old one.",
   "Не удалось изменить пароль. Проверьте соединение и повторите попытку.": "Could not change the password. Check your connection and try again.",
+  "Новый пароль": "New password",
+  "Новый пароль — минимум 8 символов": "New password — at least 8 characters",
+  "Повторите пароль": "Repeat password",
+  "Сохранить пароль": "Save password",
 };

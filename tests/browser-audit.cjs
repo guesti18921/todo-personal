@@ -30,7 +30,7 @@ const server = http.createServer((req, res) => {
  try {
   for (const [name, width, height, locale, appLanguage] of [['small', 320, 640, 'ru-RU'], ['phone', 360, 800, 'ru-RU'], ['large', 412, 915, 'ru-RU'], ['landscape', 800, 360, 'ru-RU'], ['desktop', 1280, 800, 'ru-RU'], ['english', 360, 800, 'en-US'], ['english-small', 320, 640, 'en-GB'], ['english-wide', 412, 915, 'en-US'], ['english-ru-os', 360, 800, 'ru-RU', 'en'], ['russian-en-os', 360, 800, 'en-US', 'ru']]) {
    const context = await browser.newContext({ viewport: { width, height }, locale, serviceWorkers: 'block' });
-   let downloadGate = null, downloadStarted = false;
+   let downloadGate = null, downloadStarted = false, authGate = null;
    let mode = 'online', cloud = { user_id: id, revision: 0, ...JSON.parse(JSON.stringify(initial)) };
    await context.route('**/*.supabase.co/**', async route => {
     if (mode === 'offline') { await route.abort('internetdisconnected'); return; }
@@ -45,6 +45,7 @@ const server = http.createServer((req, res) => {
      if (downloadGate && url.searchParams.get('select') !== 'revision') { const gate = downloadGate; downloadGate = null; downloadStarted = true; await gate; }
      await route.fulfill({ json: url.searchParams.get('select') === 'revision' ? { revision: cloud.revision } : cloud }); return;
     }
+    if (authGate && url.pathname.endsWith('/user')) await authGate;
     await route.fulfill({ json: url.pathname.endsWith('/settings') ? { external: { google: false } } : user });
    });
    await context.addInitScript(({ seed, cacheKey, language }) => {
@@ -54,6 +55,7 @@ const server = http.createServer((req, res) => {
    const page = await context.newPage(), errors = []; page.on('pageerror', e => errors.push(e.message));
    await page.goto(origin); await page.locator('.mn-main h1').waitFor();
    await page.locator('[data-view="all"]').click();
+   assert.equal(await page.locator('.mn-status').evaluate(el => el.scrollWidth <= el.clientWidth && getComputedStyle(el).textOverflow !== 'ellipsis'), true, 'saving status must remain fully readable at ' + width);
    await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
    const accessibility = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(v => ({ id: v.id, impact: v.impact, nodes: v.nodes.map(n => n.target) })));
    assert.deepEqual(accessibility, [], 'accessibility failures at ' + width + ': ' + JSON.stringify(accessibility));
@@ -202,6 +204,24 @@ const server = http.createServer((req, res) => {
    await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
    const savedAccessibility = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(v=>v.id));
    assert.deepEqual(savedAccessibility, []);
+   if (['small', 'english-small'].includes(name)) {
+    mode = 'online'; let releaseAuth; authGate = new Promise(resolve => { releaseAuth = resolve; });
+    await page.evaluate(owner => sessionStorage.setItem('todo-personal:reauth-google', JSON.stringify({owner,startedAt:Date.now()})), id);
+    await page.goto(origin + '/?reauth=google#type=recovery&access_token=' + jwt + '&refresh_token=test-recovery');
+    await page.locator('.mn-main h1').waitFor(); await page.locator('[data-view="all"]').click(); await page.locator('[data-open="note"]').click();
+    await page.locator('#mn-text').fill(''); await page.locator('#mn-details').fill('Preserve this draft during recovery');
+    releaseAuth(); await page.locator('[data-native-reset-form]').waitFor();
+    assert.equal(await page.evaluate(owner => JSON.parse(localStorage.getItem('todo-personal:entry-edit-draft:'+owner+':note')).details, id), 'Preserve this draft during recovery');
+    assert.equal(await page.locator('.mn-main h1').textContent(), name==='english-small' ? 'New password' : 'Новый пароль');
+    await page.locator('#mn-new-password').fill('test-password'); const resetInput=await page.locator('#mn-new-password').elementHandle();
+    await page.setViewportSize({width,height:Math.max(220,height-220)}); await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
+    assert.equal(await resetInput.evaluate(el=>el.isConnected && document.activeElement===el && el.value==='test-password'),true);
+    await page.setViewportSize({width,height}); await page.screenshot({path:path.join(out,name+'-password-recovery.png'),fullPage:true});
+    await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
+    assert.deepEqual(await page.evaluate(async()=>(await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}})).violations.map(v=>v.id)),[]);
+    await page.locator('[data-cancel-reauth]').click(); await page.locator('[data-view="all"]').click(); await page.locator('[data-open="note"]').click();
+    assert.equal(await page.locator('#mn-details').inputValue(),'Preserve this draft during recovery');
+   }
    assert.deepEqual(errors, []); results.push({ name, width, height, overflow, javascriptErrors: errors, keyboardFocus: true, emptyDraftRecovery: true, dateParsing: true }); await context.close();
   }
   const login = await browser.newContext({ viewport: { width: 320, height: 640 }, serviceWorkers: 'block', locale: 'ru-RU' });
