@@ -286,7 +286,7 @@ let activeAuthMethods = (() => { try { return reauthenticationMethods(JSON.parse
 let googleReauthPending = null;
 let googleReauthRunning = false;
 let nativePasswordRecovery = null;
-let nativeRecoveryGeneration = 0;
+let authOperationGeneration = 0;
 
 // A separate non-persistent client prevents a cancelled verification request
 // from silently changing the active account when its network response arrives.
@@ -579,6 +579,9 @@ supabase.auth.onAuthStateChange((_event, session) => {
     activeUserEmail = session?.user?.email || '';
     if (session?.user) activeAuthMethods = reauthenticationMethods(session.user);
     if (id === activeUser) return;
+    authOperationGeneration++;
+    nativePasswordRecovery = null;
+    googleReauthPending = null;
     activeUser = id;
     mobileUI?.setAccount(id);
     const ticket = ++generation;
@@ -781,9 +784,13 @@ mobileUI = createMobileNotebook({
     async reauthenticate(password) {
         const owner = activeUser, email = activeUserEmail;
         if (!owner || !email || changingAccount) throw new Error(t('Не удалось войти. Проверьте пароль и соединение.'));
+        const operation = ++authOperationGeneration;
+        nativePasswordRecovery = null;
+        googleReauthPending = null;
+        const currentOwner = () => operation === authOperationGeneration ? activeUser : null;
         const temporary = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch: boundedFetch } });
         try {
-            await renewAccountSession({ temporaryAuth: temporary.auth, activeAuth: supabase.auth, owner, currentOwner: () => activeUser, email, password });
+            await renewAccountSession({ temporaryAuth: temporary.auth, activeAuth: supabase.auth, owner, currentOwner, email, password });
         } catch (error) {
             throw new Error(error.message === 'account_mismatch' ? t('Войдите в тот же аккаунт. Локальные записи не перенесены.') : t(authErrorMessage(error)));
         }
@@ -795,7 +802,7 @@ mobileUI = createMobileNotebook({
         if (!recovery || recovery.owner !== activeUser || recovery.saving) throw new Error(t('Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.'));
         // Invalidate callbacks that started verification before this save.
         // The generation stays advanced after completion or failure as well.
-        nativeRecoveryGeneration++;
+        authOperationGeneration++;
         recovery.saving = true;
         try {
             if (!await recovery.controller.save(password, repeat)) {
@@ -818,6 +825,8 @@ mobileUI = createMobileNotebook({
     async reauthenticateGoogle() {
         const owner = activeUser;
         if (!owner || changingAccount || googleReauthRunning) throw new Error(t('Не удалось войти. Проверьте пароль и соединение.'));
+        authOperationGeneration++;
+        nativePasswordRecovery = null;
         const temporary = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:reauth-google' }, global: { fetch: boundedFetch } });
         const pending = { owner, temporary, startedAt: Date.now() }; googleReauthPending = pending;
         try {
@@ -903,25 +912,28 @@ async function handleAuthLink(url) {
     if (recoveryTokens && activeUser) {
         if (googleReauthRunning) return false;
         const owner = activeUser;
-        const generation = nativeRecoveryGeneration;
+        const generation = authOperationGeneration;
         const temporary = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:native-recovery' }, global: { fetch: boundedFetch } });
         googleReauthRunning = true;
         try {
             const result = await temporary.auth.setSession(recoveryTokens);
-            if (generation !== nativeRecoveryGeneration || activeUser !== owner) return false;
+            if (generation !== authOperationGeneration || activeUser !== owner) return false;
             if (result.error) throw result.error;
             const verified = await temporary.auth.getUser();
-            if (generation !== nativeRecoveryGeneration || activeUser !== owner) return false;
+            if (generation !== authOperationGeneration || activeUser !== owner) return false;
             if (verified.error) throw verified.error;
             if (activeUser !== owner || result.data?.session?.user?.id !== owner || verified.data?.user?.id !== owner) throw new Error('account_mismatch');
             const recovery = { owner, status: '' };
             recovery.controller = createPasswordRecovery({ auth: temporary.auth, onStatus: value => { recovery.status = value; } });
             const opened = await recovery.controller.open(recoveryTokens);
-            if (generation !== nativeRecoveryGeneration || activeUser !== owner) return false;
+            if (generation !== authOperationGeneration || activeUser !== owner) return false;
             if (!opened) throw new Error('invalid_recovery');
+            // Choosing recovery supersedes earlier sign-in attempts.
+            authOperationGeneration++;
+            googleReauthPending = null;
             nativePasswordRecovery = recovery; return mobileUI.openPasswordRecovery();
         } catch (error) {
-            if (generation !== nativeRecoveryGeneration || activeUser !== owner) return false;
+            if (generation !== authOperationGeneration || activeUser !== owner) return false;
             mobileUI.completeReauthentication(t(error.message === 'account_mismatch' ? 'Войдите в тот же аккаунт. Локальные записи не перенесены.' : 'Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.')); return false;
         }
         finally { googleReauthRunning = false; }
@@ -929,7 +941,10 @@ async function handleAuthLink(url) {
 
     if (!parseAuthLink(url)) return false;
     if (!activeUser) return handleRegularAuthLink(url);
+    // Keep recovery isolated until the user explicitly starts another sign-in.
+    if (nativePasswordRecovery?.owner === activeUser) return false;
     if (googleReauthRunning) return false;
+    const operation = authOperationGeneration;
     const pending = googleReauthPending;
     // Even after an Android process restart, never install another user's session over an open notebook.
     const owner = pending?.owner || activeUser;
@@ -937,9 +952,13 @@ async function handleAuthLink(url) {
     const temporary = pending?.temporary || createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:reauth-google' }, global: { fetch: boundedFetch } });
     googleReauthRunning = true;
     try {
-        await renewAccountFromLink({ url, temporaryAuth: temporary.auth, activeAuth: supabase.auth, owner, currentOwner: () => activeUser });
-        await flushNotebook(); mobileUI.completeReauthentication(); return true;
+        await renewAccountFromLink({ url, temporaryAuth: temporary.auth, activeAuth: supabase.auth, owner, currentOwner: () => operation === authOperationGeneration ? activeUser : null });
+        if (operation !== authOperationGeneration || activeUser !== owner) return false;
+        await flushNotebook();
+        if (operation !== authOperationGeneration || activeUser !== owner) return false;
+        mobileUI.completeReauthentication(); return true;
     } catch (error) {
+        if (operation !== authOperationGeneration || activeUser !== owner) return false;
         mobileUI.completeReauthentication(t(error.message === 'account_mismatch' ? 'Войдите в тот же аккаунт. Локальные записи не перенесены.' : 'Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.')); return false;
     } finally { googleReauthRunning = false; googleReauthPending = null; }
 }

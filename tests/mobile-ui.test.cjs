@@ -444,7 +444,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.27/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.28/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -844,7 +844,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.27');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.28');
  } finally { dom.window.close(); }
 });
 
@@ -1415,3 +1415,136 @@ for (const { phase, verificationFails, finishSaveFirst, saveFails = false } of l
  }finally{verifyRelease();release();await wait();const state=JSON.parse(w.localStorage.getItem(cacheKey)).state;assert.equal(state.notes[0].text,'original text');assert.equal(JSON.parse(w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token')).user.id,id);console.log('Duplicate-callback audit: requests='+requestCount+', notebook and owner preserved');w.close();}
 });
 
+
+const signInRecoveryCases = [false,true].flatMap(verificationFails => [false,true].map(finishSaveFirst => ({phase:1,verificationFails,finishSaveFirst})));
+
+for (const { phase, verificationFails, finishSaveFirst, saveFails = false } of signInRecoveryCases) test(`late sign-in callback phase ${phase}, error ${verificationFails}, save finished ${finishSaveFirst}, save error ${saveFails} cannot reset the password operation`,async()=>{
+ const f=listFixture(),session=JSON.parse(f.seed[0][1]);let release,verifyRelease,holdVerify=false,verificationCalls=0,started=false,requestCount=0;const gate=new Promise(r=>release=r),verifyGate=new Promise(r=>verifyRelease=r),listeners={};
+ const dom=new JSDOM(html,{url:'https://test.local/',runScripts:'outside-only',virtualConsole});const w=dom.window;Object.defineProperty(w.navigator,'languages',{value:['ru-RU']});Object.defineProperty(w,'crypto',{value:webcrypto});w.androidBridge={postMessage(){}};
+ const definitions={App:{getLaunchUrl:'promise',minimizeApp:'promise',addListener:'callback',removeListener:'promise'},TimePicker:{deviceFormat:'promise'},Network:{addListener:'callback',removeListener:'promise'},Browser:{open:'promise'},LocalNotifications:{addListener:'callback',removeListener:'promise',cancelAll:'promise',checkPermissions:'promise'}};
+ w.Capacitor={PluginHeaders:Object.entries(definitions).map(([name,methods])=>({name,methods:Object.entries(methods).map(([name,rtype])=>({name,rtype}))})),nativeCallback:(plugin,method,opts,cb)=>{listeners[plugin+':'+opts.eventName]=cb;return 'callback-'+Object.keys(listeners).length;},nativePromise:async(plugin,method)=>method==='deviceFormat'?{is24Hour:true}:method==='checkPermissions'?{display:'prompt'}:{}};
+ Object.assign(w,{TextEncoder,TextDecoder,Request,Response,Headers,fetch:async(url,opts={})=>{const address=String(url?.url||url);if(address.includes('/auth/v1/user')){if(opts.method!=='PUT'&&holdVerify){verificationCalls++;if(verificationCalls===phase){await verifyGate;if(verificationFails)return new Response(JSON.stringify({error_code:'bad_jwt',msg:'invalid token'}),{status:401,headers:{'Content-Type':'application/json'}});}}if(opts.method==='PUT'&&JSON.parse(opts.body).password){started=true;requestCount++;await gate;if(saveFails&&requestCount===1)return new Response(JSON.stringify({error_code:'same_password',msg:'private'}),{status:422,headers:{'Content-Type':'application/json'}});}return new Response(JSON.stringify(session.user),{status:200,headers:{'Content-Type':'application/json'}});}if(address.includes('/auth/v1/logout'))return new Response(null,{status:204});throw new TypeError('offline');}});
+ for(const [key,value]of f.seed)w.localStorage.setItem(key,value);const link='todopersonal://auth-callback#type=recovery&access_token='+session.access_token+'&refresh_token=recovery-only';
+ try{w.eval(bundle);await ready(dom);await wait();assert.ok(listeners['App:appUrlOpen']);listeners['App:appUrlOpen']({url:link});await wait();await wait();const d=w.document;assert.ok(d.querySelector('[data-native-reset-form]'));d.querySelector('#mn-new-password').value='new-test-password';d.querySelector('#mn-repeat-password').value='new-test-password';const passwordField=d.querySelector('#mn-new-password');holdVerify=true;listeners['App:appUrlOpen']({url:link.replace('type=recovery&','')});await wait();assert.ok(verificationCalls<=phase,'superseded sign-in must be ignored or held before any session installation');d.querySelector('[data-native-reset-form]').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await wait();assert.equal(started,true);assert.equal(d.querySelector('[data-native-reset-form] button').disabled,true);if(finishSaveFirst){release();await wait();await wait();if(saveFails){assert.equal(d.querySelector('[data-native-reset-form] button').disabled,false);assert.match(d.querySelector('[role="alert"]').textContent,/отличаться/);}else assert.ok(d.querySelector('[data-reauth-form]'));}verifyRelease();await wait();await wait();if(saveFails){assert.match(d.querySelector('[role="alert"]').textContent,/отличаться/);assert.equal(d.querySelector('[data-native-reset-form] button').disabled,false);d.querySelector('[data-native-reset-form]').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await wait();await wait();assert.ok(d.querySelector('[data-reauth-form]'));}else if(finishSaveFirst){assert.equal(d.querySelector('[data-native-reset-form]'),null);assert.match(d.querySelector('[data-reauth-message]').textContent,/Пароль изменён/);}else{assert.equal(d.querySelector('#mn-new-password'),passwordField);assert.equal(d.querySelector('[data-native-reset-form] button').disabled,true,'late sign-in result must leave password saving disabled');d.querySelector('[data-native-reset-form]').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await wait();}assert.equal(requestCount,1,'application lock must still prevent a second request');console.log('Second submit attempted: only '+requestCount+' password request reached the server');
+ }finally{verifyRelease();release();await wait();try{const state=JSON.parse(w.localStorage.getItem(cacheKey)).state;assert.equal(state.notes[0].text,'original text');assert.equal(JSON.parse(w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token')).user.id,id);assert.equal(JSON.parse(w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token')).refresh_token,session.refresh_token,'superseded sign-in must not install its session');console.log('Duplicate-callback audit: requests='+requestCount+', notebook and owner preserved');}finally{w.close();}}
+});
+
+
+function orphanDraftSeed(kind = 'note') {
+ const f = listFixture(), removed = 'removed-entry', key = `todo-personal:entry-edit-draft:${id}:${removed}`;
+ const draft = { editingId: removed, type: kind, text: '', details: 'Незавершённый текст 日本語 😀', date: '2099-01-02', time: '13:05', pinned: true, reminder: { mode: 'custom', date: '2099-01-01', time: '11:00' } };
+ return { ...f, removed, key, draft, seed: [...f.seed, [key, JSON.stringify(draft)]] };
+}
+for (const language of ['ru', 'en']) for (const kind of ['note', 'task']) test(`an edited ${kind} draft remains recoverable after its cloud record is deleted and the app restarts in ${language}`, async () => {
+ const f = orphanDraftSeed(kind), dom = boot(f.seed, false, null, [language+'-US']), w = dom.window, d = w.document;
+ try {
+  await ready(dom);
+  const resume = d.querySelector(`[data-continue-draft="${f.removed}"]`);
+  assert.ok(resume, 'deleting the saved record must not hide its unfinished draft');
+  assert.match(d.querySelector('.mn-draft-panel').textContent,language==='en'?/original entry was deleted/:/Исходная запись удалена/);
+  resume.click();
+  assert.equal(d.querySelector('#mn-text').value, '');
+  assert.equal(d.querySelector('#mn-details').value, f.draft.details);
+  assert.equal(d.querySelector('[name="date"]').value, f.draft.date);
+  assert.equal(d.querySelector('[name="reminderTime"]').value, f.draft.reminder.time);
+  const title = d.querySelector('#mn-text'); title.value = 'Восстановленная запись'; title.dispatchEvent(new w.Event('input', { bubbles: true }));
+  d.querySelector('[data-save]').click();
+  const state = JSON.parse(w.localStorage.getItem(cacheKey)).state;
+  const recovered = kind === 'note' ? state.notes.find(n => n.title === title.value) : state.todos.home.find(n => n.name === title.value);
+  assert.ok(recovered); assert.notEqual(recovered.id, f.removed);
+  assert.equal(kind === 'note' ? recovered.text : recovered.details, f.draft.details);
+  assert.equal(recovered.date, f.draft.date); assert.equal(recovered.reminder.time, f.draft.reminder.time);
+  assert.equal(w.localStorage.getItem(f.key), null);
+  assert.equal(w.localStorage.getItem(draftKey), null);
+  assert.equal(state.notes.find(n => n.id === 'n').text, 'original text');
+ } finally { w.close(); }
+});
+test('failed save and Back preserve an orphaned edit draft', async () => {
+ const f = orphanDraftSeed(), dom = boot(f.seed), w = dom.window, d = w.document;
+ try {
+  await ready(dom); assert.ok(d.querySelector(`[data-continue-draft="${f.removed}"]`));
+  d.querySelector(`[data-continue-draft="${f.removed}"]`).click();
+  const proto = Object.getPrototypeOf(w.localStorage), original = proto.setItem;
+  proto.setItem = function(key, value) { if (key === cacheKey || key === draftKey || key === f.key) throw Error('Quota exceeded'); return original.call(this, key, value); };
+  try {
+   const title=d.querySelector('#mn-text'); title.value='Recover later'; title.dispatchEvent(new w.Event('input',{bubbles:true}));
+   d.querySelector('[data-save]').click(); assert.ok(d.querySelector('#mn-text'));
+   d.querySelector('[data-back]').click(); assert.ok(d.querySelector('#mn-text'));
+   assert.ok(w.localStorage.getItem(f.key)); assert.equal(JSON.parse(w.localStorage.getItem(cacheKey)).state.notes.length,1);
+  } finally { proto.setItem=original; }
+ } finally { w.close(); }
+});
+test('edit drafts belonging to another account are never shown or removed', async () => {
+ const f=orphanDraftSeed(), foreign=`todo-personal:entry-edit-draft:other:${f.removed}`, value=JSON.stringify(f.draft), dom=boot([...listFixture().seed,[foreign,value]]), w=dom.window;
+ try { await ready(dom); assert.equal(w.document.querySelector('[data-continue-draft]'),null); assert.equal(w.localStorage.getItem(foreign),value); }
+ finally { w.close(); }
+});
+
+for (const action of ['recovery-email', 'password-sign-in']) test(`late ${action} response cannot unlock a newer password save`, async () => {
+ const f=listFixture(),session=JSON.parse(f.seed[0][1]),listeners={};let releaseSave,releaseEmail,emailStarted=false,updates=0;
+ const saveGate=new Promise(r=>releaseSave=r),emailGate=new Promise(r=>releaseEmail=r);
+ const dom=new JSDOM(html,{url:'https://test.local/',runScripts:'outside-only',virtualConsole}),w=dom.window;
+ Object.defineProperty(w.navigator,'languages',{value:['ru-RU']});Object.defineProperty(w,'crypto',{value:webcrypto});w.androidBridge={postMessage(){}};
+ const definitions={App:{getLaunchUrl:'promise',minimizeApp:'promise',addListener:'callback',removeListener:'promise'},TimePicker:{deviceFormat:'promise'},Network:{addListener:'callback',removeListener:'promise'},Browser:{open:'promise'},LocalNotifications:{addListener:'callback',removeListener:'promise',cancelAll:'promise',checkPermissions:'promise'}};
+ w.Capacitor={PluginHeaders:Object.entries(definitions).map(([name,methods])=>({name,methods:Object.entries(methods).map(([name,rtype])=>({name,rtype}))})),nativeCallback:(plugin,method,opts,cb)=>{listeners[plugin+':'+opts.eventName]=cb;return 'callback-'+Object.keys(listeners).length;},nativePromise:async(plugin,method)=>method==='deviceFormat'?{is24Hour:true}:method==='checkPermissions'?{display:'prompt'}:{}};
+ Object.assign(w,{TextEncoder,TextDecoder,Request,Response,Headers,fetch:async(url,opts={})=>{
+  const address=String(url?.url||url);
+  if(address.includes('/auth/v1/recover')||address.includes('/auth/v1/token')){emailStarted=true;await emailGate;return new Response(JSON.stringify(action==='password-sign-in'?{...session,refresh_token:'superseded-sign-in'}:{}),{status:200,headers:{'Content-Type':'application/json'}});}
+  if(address.includes('/auth/v1/user')){if(opts.method==='PUT'&&JSON.parse(opts.body).password){updates++;await saveGate;}return new Response(JSON.stringify(session.user),{status:200,headers:{'Content-Type':'application/json'}});}
+  if(address.includes('/auth/v1/logout'))return new Response(null,{status:204});throw new TypeError('offline');
+ }});
+ for(const[key,value]of f.seed)w.localStorage.setItem(key,value);
+ try{
+  w.eval(bundle);await ready(dom);await wait();const d=w.document;
+  d.querySelector('[data-view="settings"]').click();d.querySelector('[data-reauthenticate]').click();if(action==='recovery-email')d.querySelector('[data-reauth-recovery]').click();else{d.querySelector('#mn-reauth-password').value='old-test-password';d.querySelector('[data-reauth-form]').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));}await wait();assert.equal(emailStarted,true);
+  listeners['App:appUrlOpen']({url:'todopersonal://auth-callback#type=recovery&access_token='+session.access_token+'&refresh_token=recovery-only'});await wait();await wait();
+  d.querySelector('#mn-new-password').value='new-test-password';d.querySelector('#mn-repeat-password').value='new-test-password';d.querySelector('[data-native-reset-form]').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await wait();assert.equal(updates,1);
+  releaseEmail();await wait();await wait();assert.equal(d.querySelector('[data-native-reset-form] button').disabled,true,'the older email request must not release the password-save UI lock');
+  d.querySelector('[data-native-reset-form]').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await wait();assert.equal(updates,1);
+ }finally{releaseEmail();releaseSave();await wait();try{assert.equal(JSON.parse(w.localStorage.getItem(cacheKey)).state.notes[0].text,'original text');assert.equal(JSON.parse(w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token')).refresh_token,session.refresh_token);}finally{w.close();}}
+});
+
+test('Back and restart preserve a recovered orphan draft before it is saved as a new record', async()=>{
+ const f=orphanDraftSeed(),dom=boot(f.seed),w=dom.window,d=w.document;let next;
+ try{
+  await ready(dom);assert.ok(d.querySelector(`[data-continue-draft="${f.removed}"]`));d.querySelector(`[data-continue-draft="${f.removed}"]`).click();
+  d.querySelector('[data-back]').click();assert.ok(d.querySelector('[data-continue-draft]'));assert.equal(JSON.parse(w.localStorage.getItem(draftKey)).details,f.draft.details);
+  const seed=Array.from({length:w.localStorage.length},(_,i)=>{const key=w.localStorage.key(i);return[key,w.localStorage.getItem(key)];});next=boot(seed);await ready(next);
+  next.window.document.querySelector('[data-continue-draft]').click();assert.equal(next.window.document.querySelector('#mn-details').value,f.draft.details);
+  assert.equal(next.window.document.querySelector('[name="reminderTime"]').value,f.draft.reminder.time);
+ }finally{w.close();next?.window.close();}
+});
+test('recovering one deleted record does not hide or overwrite another edited draft',async()=>{
+ const f=orphanDraftSeed(),second='removed-second',key=`todo-personal:entry-edit-draft:${id}:${second}`,other={...f.draft,editingId:second,details:'Second unfinished draft'};
+ const dom=boot([...f.seed,[key,JSON.stringify(other)]]),w=dom.window,d=w.document;
+ try{
+  await ready(dom);const button=d.querySelector('[data-continue-draft]');assert.ok(button);assert.equal(button.dataset.continueDraft,f.removed);button.click();
+  const input=d.querySelector('#mn-text');input.value='First recovered';input.dispatchEvent(new w.Event('input',{bubbles:true}));d.querySelector('[data-save]').click();
+  assert.equal(JSON.parse(w.localStorage.getItem(key)).details,other.details);assert.equal(d.querySelector('[data-continue-draft]').dataset.continueDraft,second);
+  d.querySelector('[data-continue-draft]').click();assert.equal(d.querySelector('#mn-details').value,other.details);
+ }finally{w.close();}
+});
+
+for(const method of ['password','google']) test(`leaving recovery permits a fresh explicit ${method} reauthentication without changing records`,async()=>{
+ const f=listFixture(),session=JSON.parse(f.seed[0][1]),listeners={},opened=[];session.user.app_metadata={providers:['email','google']};f.seed[0][1]=JSON.stringify(session);
+ const dom=new JSDOM(html,{url:'https://test.local/',runScripts:'outside-only',virtualConsole}),w=dom.window;
+ Object.defineProperty(w.navigator,'languages',{value:['ru-RU']});Object.defineProperty(w,'crypto',{value:webcrypto});w.androidBridge={postMessage(){}};
+ const definitions={App:{getLaunchUrl:'promise',minimizeApp:'promise',addListener:'callback',removeListener:'promise'},TimePicker:{deviceFormat:'promise'},Network:{addListener:'callback',removeListener:'promise'},Browser:{open:'promise'},LocalNotifications:{addListener:'callback',removeListener:'promise',cancelAll:'promise',checkPermissions:'promise'}};
+ w.Capacitor={PluginHeaders:Object.entries(definitions).map(([name,methods])=>({name,methods:Object.entries(methods).map(([name,rtype])=>({name,rtype}))})),nativeCallback:(plugin,name,opts,cb)=>{listeners[plugin+':'+opts.eventName]=cb;return 'callback-'+Object.keys(listeners).length;},nativePromise:async(plugin,name,opts)=>{if(plugin==='Browser')opened.push(opts.url);return name==='deviceFormat'?{is24Hour:true}:name==='checkPermissions'?{display:'prompt'}:{};}};
+ Object.assign(w,{TextEncoder,TextDecoder,Request,Response,Headers,fetch:async(url)=>{
+  const address=String(url?.url||url);
+  if(address.includes('/auth/v1/user'))return new Response(JSON.stringify(session.user),{status:200,headers:{'Content-Type':'application/json'}});
+  if(address.includes('/auth/v1/token'))return new Response(JSON.stringify({...session,refresh_token:'fresh-password'}),{status:200,headers:{'Content-Type':'application/json'}});
+  if(address.includes('/auth/v1/logout'))return new Response(null,{status:204});throw new TypeError('offline');
+ }});
+ for(const[key,value]of f.seed)w.localStorage.setItem(key,value);
+ try{
+  w.eval(bundle);await ready(dom);await wait();const d=w.document;
+  listeners['App:appUrlOpen']({url:'todopersonal://auth-callback#type=recovery&access_token='+session.access_token+'&refresh_token=recovery-only'});await wait();await wait();assert.ok(d.querySelector('[data-native-reset-form]'));
+  d.querySelector('[data-cancel-reauth]').click();assert.ok(d.querySelector('.mn-version'));d.querySelector('[data-reauthenticate]').click();
+  if(method==='password'){d.querySelector('#mn-reauth-password').value='test-password';d.querySelector('[data-reauth-form]').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));}
+  else{d.querySelector('[data-reauth-google]').click();await wait();assert.equal(opened.length,1);listeners['App:appUrlOpen']({url:'todopersonal://auth-callback#access_token='+session.access_token+'&refresh_token=fresh-google'});}
+  await wait();await wait();assert.ok(d.querySelector('.mn-version'));assert.equal(JSON.parse(w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token')).refresh_token,'fresh-'+method);
+  assert.deepEqual(JSON.parse(w.localStorage.getItem(cacheKey)).state,f.state);
+ }finally{w.close();}
+});

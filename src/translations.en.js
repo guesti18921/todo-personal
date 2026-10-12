@@ -1,5 +1,7 @@
 // Interface text only. Never pass entry contents through this dictionary.
 export default {
+  "Текст в черновике очищен.": "The draft text was cleared.",
+  "Исходная запись удалена. Черновик сохранён на этом устройстве; его можно сохранить как новую запись.": "The original entry was deleted. Its draft is saved on this device; you can save it as a new entry.",
   "Отмена": "Cancel",
   "Формат времени": "Time format",
   "Как на устройстве": "Use device setting",
@@ -273,7 +275,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.27": "TO-DO Personal · version 0.4.27",
+  "TO-DO Personal · версия 0.4.28": "TO-DO Personal · version 0.4.28",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",

@@ -221,6 +221,26 @@ const server = http.createServer((req, res) => {
     assert.deepEqual(await page.evaluate(async()=>(await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}})).violations.map(v=>v.id)),[]);
     await page.locator('[data-cancel-reauth]').click(); await page.locator('[data-view="all"]').click(); await page.locator('[data-open="note"]').click();
     assert.equal(await page.locator('#mn-details').inputValue(),'Preserve this draft during recovery');
+    // A remote deletion must not make the unfinished local edit inaccessible.
+    await page.locator('[data-back]').click();
+    await page.locator('[data-sync-open]').first().click(); await page.locator('[data-sync-now]').click();
+    await page.waitForFunction(()=>document.querySelector('.mn-status')?.dataset.state==='confirmed');
+    cloud = { ...cloud, revision: cloud.revision + 1, notes: cloud.notes.filter(n=>n.id!=='note') };
+    await page.locator('[data-sync-now]').click();
+    await page.waitForFunction(key=>JSON.parse(localStorage.getItem(key)).state.notes.every(n=>n.id!=='note'),cacheKey);
+    await page.locator('[data-view="all"]').click(); await page.locator('[data-continue-draft="note"]').waitFor();
+    assert.match(await page.locator('.mn-draft-panel').innerText(),name==='english-small'?/original entry was deleted/:/Исходная запись удалена/);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+    await page.locator('[data-continue-draft="note"]').click();
+    assert.equal(await page.locator('#mn-text').inputValue(),'');
+    assert.equal(await page.locator('#mn-details').inputValue(),'Preserve this draft during recovery');
+    await page.locator('#mn-text').fill('Recovered cloud-deleted entry'); await page.locator('[data-save]').click();
+    const recoveredId=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)).state.notes.find(n=>n.title==='Recovered cloud-deleted entry').id,cacheKey);
+    assert.notEqual(recoveredId,'note');
+    assert.equal(await page.evaluate(owner=>localStorage.getItem('todo-personal:entry-edit-draft:'+owner+':note'),id),null);
+    mode='offline'; await page.reload(); await page.locator('.mn-main h1').waitFor();
+    await page.locator('[data-view="all"]').click(); await page.locator(`[data-open="${recoveredId}"]`).click();
+    assert.equal(await page.locator('#mn-details').inputValue(),'Preserve this draft during recovery');
    }
    assert.deepEqual(errors, []); results.push({ name, width, height, overflow, javascriptErrors: errors, keyboardFocus: true, emptyDraftRecovery: true, dateParsing: true }); await context.close();
   }
