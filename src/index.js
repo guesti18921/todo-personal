@@ -286,6 +286,7 @@ let activeAuthMethods = (() => { try { return reauthenticationMethods(JSON.parse
 let googleReauthPending = null;
 let googleReauthRunning = false;
 let nativePasswordRecovery = null;
+let nativeRecoveryGeneration = 0;
 
 // A separate non-persistent client prevents a cancelled verification request
 // from silently changing the active account when its network response arrives.
@@ -792,6 +793,9 @@ mobileUI = createMobileNotebook({
     async resetPassword(password, repeat) {
         const recovery = nativePasswordRecovery;
         if (!recovery || recovery.owner !== activeUser || recovery.saving) throw new Error(t('Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.'));
+        // Invalidate callbacks that started verification before this save.
+        // The generation stays advanced after completion or failure as well.
+        nativeRecoveryGeneration++;
         recovery.saving = true;
         try {
             if (!await recovery.controller.save(password, repeat)) {
@@ -899,19 +903,27 @@ async function handleAuthLink(url) {
     if (recoveryTokens && activeUser) {
         if (googleReauthRunning) return false;
         const owner = activeUser;
+        const generation = nativeRecoveryGeneration;
         const temporary = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:native-recovery' }, global: { fetch: boundedFetch } });
         googleReauthRunning = true;
         try {
             const result = await temporary.auth.setSession(recoveryTokens);
+            if (generation !== nativeRecoveryGeneration || activeUser !== owner) return false;
             if (result.error) throw result.error;
             const verified = await temporary.auth.getUser();
+            if (generation !== nativeRecoveryGeneration || activeUser !== owner) return false;
             if (verified.error) throw verified.error;
             if (activeUser !== owner || result.data?.session?.user?.id !== owner || verified.data?.user?.id !== owner) throw new Error('account_mismatch');
             const recovery = { owner, status: '' };
             recovery.controller = createPasswordRecovery({ auth: temporary.auth, onStatus: value => { recovery.status = value; } });
-            if (!await recovery.controller.open(recoveryTokens) || activeUser !== owner) throw new Error('invalid_recovery');
+            const opened = await recovery.controller.open(recoveryTokens);
+            if (generation !== nativeRecoveryGeneration || activeUser !== owner) return false;
+            if (!opened) throw new Error('invalid_recovery');
             nativePasswordRecovery = recovery; return mobileUI.openPasswordRecovery();
-        } catch (error) { mobileUI.completeReauthentication(t(error.message === 'account_mismatch' ? 'Войдите в тот же аккаунт. Локальные записи не перенесены.' : 'Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.')); return false; }
+        } catch (error) {
+            if (generation !== nativeRecoveryGeneration || activeUser !== owner) return false;
+            mobileUI.completeReauthentication(t(error.message === 'account_mismatch' ? 'Войдите в тот же аккаунт. Локальные записи не перенесены.' : 'Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.')); return false;
+        }
         finally { googleReauthRunning = false; }
     }
 
