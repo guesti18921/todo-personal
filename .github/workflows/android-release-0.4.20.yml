@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # Reviewed snapshot. Update explicitly for each new app version.
-          ref: 6d2eb1813be5097fde687cab7b249c809a409349
+          ref: c36ea03695698e4a638846c31ccf763b37ab3ec0
           persist-credentials: false
       - name: Set up Node
         uses: actions/setup-node@v4
