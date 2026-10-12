@@ -22,6 +22,26 @@ function fixture() {
     fs.writeFileSync(gradle, 'android {\n    buildTypes {\n        release {\n            minifyEnabled false\n        }\n    }\n}\n');
     return { root, runner, gradle, env: { ...testEnv, RUNNER_TEMP: runner, ANDROID_KEYSTORE_BASE64: bytes.toString('base64') } };
 }
+// The production workflow pins the public release certificate and verifies an
+// AAB as well as an APK. Tests use a disposable certificate and a small real
+// JAR, retaining those checks without needing or exposing the release key.
+const releaseCertificate = '29171284f14c47ce93ce8658fcc2eba94aed25db0a3b954283a3c2183855fe6b';
+function fixtureScript(script, expected, mode) {
+    assert.ok(script.includes("if (expected !== '" + releaseCertificate + "')"), 'production signer must pin its certificate');
+    return mode === 'permanent-mismatch' ? script : script.replace(releaseCertificate, expected);
+}
+function prepareUnsignedFixture(f, apk, mode) {
+    const apkPath = path.join(f.root, 'unsigned/apk/release/app-release-unsigned.apk');
+    fs.mkdirSync(path.dirname(apkPath), { recursive: true });
+    if (apk) fs.copyFileSync(apk, apkPath); else fs.writeFileSync(apkPath, 'simulation-only');
+    const content = path.join(f.root, 'bundle-content');
+    fs.mkdirSync(path.join(content, 'base/manifest'), { recursive: true });
+    fs.writeFileSync(path.join(content, 'BundleConfig.pb'), 'fixture-config');
+    if (mode !== 'bad-bundle') fs.writeFileSync(path.join(content, 'base/manifest/AndroidManifest.xml'), 'fixture-manifest');
+    const bundle = path.join(f.root, 'unsigned/bundle/release/app-release.aab');
+    fs.mkdirSync(path.dirname(bundle), { recursive: true });
+    execFileSync('java', ['sun.tools.jar.Main', 'cf', bundle, '-C', content, '.'], { stdio: 'ignore' });
+}
 test('missing or malformed signing secrets fail without changing the native project', () => {
     const f = fixture(), before = fs.readFileSync(f.gradle, 'utf8');
     assert.throws(() => configure(f.root, { ...f.env, ANDROID_KEYSTORE_PASSWORD: '' }), /ANDROID_KEYSTORE_PASSWORD/);
@@ -91,8 +111,8 @@ test('isolated workflow signer keeps keys private, verifies the expected certifi
         const sdk = path.join(f.runner, 'sdk'), executable = path.join(sdk, 'build-tools/37.0.0/apksigner');
         fs.mkdirSync(path.dirname(executable), { recursive: true });
         fs.writeFileSync(executable, '#!/usr/bin/env node\nconst fs = require("node:fs"); const a = process.argv.slice(2); if (a[0] === "sign") { fs.copyFileSync(a.at(-1), a[a.indexOf("--out")+1]); } else { console.log("Signer #1 certificate SHA-256 digest: ' + (mode === 'mismatch' ? '0'.repeat(64) : expected) + '"); }\n', { mode: 0o700 });
-        fs.mkdirSync(path.join(f.root, 'unsigned')); fs.writeFileSync(path.join(f.root, 'unsigned/app-release-unsigned.apk'), 'simulation-only');
-        const scriptPath = path.join(f.root, 'isolated-sign.cjs'); fs.writeFileSync(scriptPath, script);
+        prepareUnsignedFixture(f, null, mode);
+        const scriptPath = path.join(f.root, 'isolated-sign.cjs'); fs.writeFileSync(scriptPath, fixtureScript(script, expected, mode));
         const env = { ...f.env, ANDROID_HOME: sdk };
         if (mode === 'modern' || mode === 'modern-mismatch' || mode === 'source-stamp-only' || mode === 'modern-with-stamp' || mode === 'public-key-only') {
             const digest = mode === 'modern-mismatch' ? '0'.repeat(64) : expected;
@@ -125,7 +145,7 @@ test('isolated workflow signer keeps keys private, verifies the expected certifi
             }
         }
     };
-    for (const mode of ['good', 'sdk-ranges', 'modern', 'modern-with-stamp', 'source-stamp-only', 'public-key-only', 'missing', 'wrong', 'mismatch', 'range-mismatch', 'modern-mismatch']) run(mode);
+    for (const mode of ['good', 'sdk-ranges', 'modern', 'modern-with-stamp', 'source-stamp-only', 'public-key-only', 'missing', 'wrong', 'mismatch', 'range-mismatch', 'modern-mismatch', 'permanent-mismatch', 'bad-bundle']) run(mode);
 });
 
 test('real Android tools sign the reviewed APK twice and reject a wrong certificate or damaged APK', {
@@ -137,9 +157,8 @@ test('real Android tools sign the reviewed APK twice and reject a wrong certific
     for (let attempt = 0; attempt < 2; attempt++) {
         const f = fixture(), expected = configure(f.root, f.env);
         const env = { ...f.env, ANDROID_HOME: process.env.TODO_SIGNING_TEST_SDK };
-        fs.mkdirSync(path.join(f.root, 'unsigned'));
-        fs.copyFileSync(process.env.TODO_SIGNING_TEST_UNSIGNED_APK, path.join(f.root, 'unsigned/app-release-unsigned.apk'));
-        const scriptPath = path.join(f.root, 'sign.cjs'); fs.writeFileSync(scriptPath, script);
+        prepareUnsignedFixture(f, process.env.TODO_SIGNING_TEST_UNSIGNED_APK);
+        const scriptPath = path.join(f.root, 'sign.cjs'); fs.writeFileSync(scriptPath, fixtureScript(script, expected));
         const result = require('node:child_process').spawnSync(process.execPath, [scriptPath], { cwd: f.root, env, encoding: 'utf8' });
         assert.equal(result.status, 0, result.stderr);
         assert.equal(fs.existsSync(path.join(f.runner, 'todo-personal-release.p12')), false);
