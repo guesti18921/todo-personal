@@ -791,12 +791,17 @@ mobileUI = createMobileNotebook({
     },
     async resetPassword(password, repeat) {
         const recovery = nativePasswordRecovery;
-        if (!recovery || recovery.owner !== activeUser) throw new Error(t('Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.'));
-        if (!await recovery.controller.save(password, repeat)) {
-            const messages = { short: 'Новый пароль — минимум 8 символов', mismatch: 'Пароли не совпадают.', same: 'Новый пароль должен отличаться от старого.' };
-            throw new Error(t(messages[recovery.status] || 'Не удалось изменить пароль. Проверьте соединение и повторите попытку.'));
+        if (!recovery || recovery.owner !== activeUser || recovery.saving) throw new Error(t('Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.'));
+        recovery.saving = true;
+        try {
+            if (!await recovery.controller.save(password, repeat)) {
+                const messages = { short: 'Новый пароль — минимум 8 символов', mismatch: 'Пароли не совпадают.', same: 'Новый пароль должен отличаться от старого.' };
+                throw new Error(t(messages[recovery.status] || 'Не удалось изменить пароль. Проверьте соединение и повторите попытку.'));
+            }
+            if (nativePasswordRecovery === recovery) nativePasswordRecovery = null;
+        } finally {
+            recovery.saving = false;
         }
-        nativePasswordRecovery = null;
     },
     getReauthenticationMethods: () => activeAuthMethods,
     async recoverPassword() {
@@ -886,6 +891,9 @@ const handleRegularAuthLink = createAuthLinkHandler({ auth: supabase.auth, onSta
     }
 } });
 async function handleAuthLink(url) {
+    // Android may deliver the same link again while the password request is pending.
+    // Keep its controller and disabled form intact until that request finishes.
+    if (nativePasswordRecovery?.saving) return false;
     let recoveryTokens = null;
     try { const address = new URL(url); if (address.protocol === 'todopersonal:' && address.hostname === 'auth-callback' && !address.username && !address.password && !address.port && ['', '/'].includes(address.pathname)) recoveryTokens = readRecoveryTokens(address.hash); } catch (_) {}
     if (recoveryTokens && activeUser) {
