@@ -2,7 +2,7 @@ name: Publish TO-DO
 
 on:
   push:
-    branches: [main]
+    branches: [main, web-push-calendar-0.4.29]
   workflow_dispatch:
 
 permissions:
@@ -17,6 +17,19 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: todo_push_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-test-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     outputs:
       artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -38,6 +51,10 @@ jobs:
           java-version: '21'
       - name: Test storage and account logic
         run: npm test
+      - name: Test push schema, account isolation and delivery leases
+        env:
+          PGPASSWORD: ci-test-only
+        run: psql -h localhost -U postgres -d todo_push_test -f tests/web-push-schema.sql
       - name: Build application
         run: npm run build
       - name: Test interface
@@ -61,6 +78,7 @@ jobs:
           path: site
           name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:

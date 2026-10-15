@@ -15,7 +15,7 @@ function worker() {
  let offline = false;
  const cache = { async addAll(list) { for (const r of list) { requests.push(r.url); files.set(r.url, new Response('cached:' + r.url)); } }, async match(request) { return files.get(String(request.url || request))?.clone(); }, async put(request, response) { files.set(String(request.url || request), response); } };
  const caches = { open: async () => cache, keys: async () => [], delete: async () => {}, match: async url => files.get(String(url))?.clone() };
- vm.runInNewContext(fs.readFileSync('dist/sw.js', 'utf8'), { self, caches, URL, Request, AbortController, setTimeout, clearTimeout, fetch: async () => { if (offline) throw Error('Offline'); return new Response('network'); } });
+ vm.runInNewContext(fs.readFileSync('dist/sw.js', 'utf8'), { self, caches, URL, Request, importScripts: () => {}, AbortController, setTimeout, clearTimeout, fetch: async () => { if (offline) throw Error('Offline'); return new Response('network'); } });
  return { listeners, requests, set offline(value) { offline = value; } };
 }
 test('offline shell caches public files and falls back for preview navigation, never Supabase or account URLs', async () => {

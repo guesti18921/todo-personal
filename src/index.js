@@ -1,3 +1,6 @@
+import { createWebPush } from './webPush.js';
+import { reminderMoment } from './reminderModel.js';
+import { usesNativeDatePicker, showDatePicker } from './datePicker.js';
 import { refreshDeviceTimeFormat, showClockPicker } from './timePicker.js';
 import { renewAccountSession, renewAccountFromLink, reauthenticationMethods } from './reauthentication.js';
 import { t, getLanguage, setLanguage, createLanguagePreferences } from './i18n.js';
@@ -19,6 +22,8 @@ import { PASSWORD_RESET_URL, readRecoveryTokens, createPasswordRecovery } from '
 import { createAccountGuard } from './accountGuard.js';
 let mobileUI = null;
 let reminderEngine = null;
+let webPush = null;
+let pendingPushOpen = null;
 const retiredAccounts = new Set();
 // all major functions are stored in these objects
 import {toDosManager, domManipulator, notesManager} from "./todoFunctions.js"
@@ -336,6 +341,7 @@ const languagePreferences = createLanguagePreferences({
         renderAuthLanguage();
         mobileUI?.render();
         reminderEngine?.refresh();
+        webPush?.refresh();
     },
     onStatus(status) {
         if (status === 'error') showAccountMessage(t('Не удалось сохранить язык на устройстве. Освободите место и попробуйте снова.'));
@@ -496,6 +502,7 @@ const checkAccount = createAccountGuard({
         activeUserEmail = '';
         languagePreferences.bindUser(null);
         mobileUI?.setAccount(null);
+        await webPush?.setAccount(null);
         const cleaned = clearDeletedAccount(localStorage, owner);
         const remindersCleared = await reminderEngine?.setAccount(null);
         // Avoid signing out a new account if the user logged in during cleanup.
@@ -583,6 +590,8 @@ supabase.auth.onAuthStateChange((_event, session) => {
     nativePasswordRecovery = null;
     googleReauthPending = null;
     activeUser = id;
+    if (id && pendingPushOpen?.owner !== id) pendingPushOpen = null;
+    webPush?.setAccount(id);
     mobileUI?.setAccount(id);
     const ticket = ++generation;
     resetScreen();
@@ -689,6 +698,7 @@ async function signOutAccount() {
                     : t('Не удалось сохранить последние изменения. Оставьте блокнот открытым, освободите место на устройстве и повторите сохранение.'));
             return;
         }
+        if (webPush && !await webPush.disable()) throw new Error('Could not stop notifications');
         const { error } = await supabase.auth.signOut({ scope: 'local' });
         if (error) showAccountMessage(t('Не удалось выйти. Попробуйте снова.'));
     } catch (_) { showAccountMessage(t('Не удалось выйти. Проверьте соединение и попробуйте снова.')); }
@@ -714,11 +724,13 @@ async function deleteAccount() {
             activeUserEmail = '';
             languagePreferences.bindUser(null);
             mobileUI?.setAccount(null);
+        await webPush?.setAccount(null);
         }
         const cleaned = clearDeletedAccount(localStorage, owner);
         const remindersCleared = await reminderEngine?.setAccount(activeUser);
         if (!activeUser) {
-            const { error } = await supabase.auth.signOut({ scope: 'local' });
+            if (webPush && !await webPush.disable()) throw new Error('Could not stop notifications');
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
             if (error) throw error;
             authScreen.hidden = false;
             authConfirm.hidden = true;
@@ -762,6 +774,10 @@ setInterval(() => { if (!document.hidden && !changingAccount) checkAccount(); },
 window.addEventListener('focus', checkAccount);
 window.addEventListener('online', checkAccount);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkAccount(); });
+if (!isNativeApp()) webPush = createWebPush({
+    auth: supabase.auth, fetcher: boundedFetch, serverUrl: SUPABASE_URL, publicKey: SUPABASE_PUBLIC_KEY,
+    language: getLanguage, onStatus: value => mobileUI?.setPushStatus(value)
+});
 reminderEngine = createReminderEngine({
     native: isNativeApp(), plugin: LocalNotifications, storage: localStorage, localize: t,
     getRecords: () => ready && isLocallySaved() ? listEntries(todos, notes) : [],
@@ -771,7 +787,8 @@ reminderEngine = createReminderEngine({
     onStatus: value => mobileUI?.setReminderStatus(value)
 });
 mobileUI = createMobileNotebook({
-    root: todoApp, todos, notes, changeLanguage, pickTime: showClockPicker,
+    root: todoApp, todos, notes, changeLanguage, pickTime: showClockPicker, pickDate: usesNativeDatePicker() ? showDatePicker : null,
+    configureWebPush: isNativeApp() ? null : value => value ? webPush.enable() : webPush.disable(),
     persist() {
         const saved = saveNotebook({ todos, notes });
         // The legacy desktop DOM is hidden; render only the active notebook.
@@ -841,7 +858,10 @@ mobileUI = createMobileNotebook({
         } catch (error) { if (googleReauthPending === pending) googleReauthPending = null; throw error; }
     },
     deleteAccount,
-    configureReminders: value => reminderEngine.configure(value),
+    configureReminders: async value => {
+        if (!value && webPush && !await webPush.disable()) return false;
+        return reminderEngine.configure(value);
+    },
     enableExactReminders: () => reminderEngine.enableExact(),
     refreshReminders: () => reminderEngine.refresh(),
     getSyncDetails,
@@ -873,6 +893,7 @@ mobileUI = createMobileNotebook({
 });
 refreshDeviceTimeFormat().then(() => mobileUI.render());
 mobileUI.setAccount(activeUser);
+webPush?.setAccount(activeUser);
 reminderEngine.setAccount(activeUser);
 reminderEngine.start().catch(() => mobileUI.setReminderStatus({ native: isNativeApp(), enabled: false, scheduled: 0, error: t('Не удалось подключить уведомления Android. Попробуйте открыть приложение снова.') }));
 setInterval(() => { if (!document.hidden) { reminderEngine.refresh(); languagePreferences.sync(); } }, 15000);
@@ -887,6 +908,7 @@ if (!activeUser) {
         const ticket = ++generation;
         resetScreen();
         mobileUI.setAccount(cached.id);
+        webPush?.setAccount(cached.id);
         reminderEngine.setAccount(cached.id);
         authScreen.hidden = false;
         authForm.hidden = true;
@@ -1000,3 +1022,35 @@ document.addEventListener('click', event => {
         openAuthBrowser(link.href).catch(() => showAccountMessage(t('Не удалось открыть страницу. Проверьте интернет и попробуйте снова.')));
     }
 });
+
+function openPendingPush() {
+    if (!pendingPushOpen || !ready) return;
+    if (pendingPushOpen.owner !== activeUser) { pendingPushOpen = null; return; }
+    const target = listEntries(todos, notes).find(record => record.entry.id === pendingPushOpen.entryId);
+    if (!target) {
+        // The browser may reopen an older offline snapshot before cloud sync.
+        pendingPushOpen.expires ||= Date.now() + 120000;
+        if (Date.now() >= pendingPushOpen.expires) pendingPushOpen = null;
+        else if (!pendingPushOpen.requested) { pendingPushOpen.requested = true; refreshCloud(); }
+        return;
+    }
+    if (reminderMoment(target.entry)?.toISOString() !== pendingPushOpen.at) { pendingPushOpen = null; return; }
+    if (mobileUI.openReminder(target)) pendingPushOpen = null;
+}
+if (!isNativeApp() && navigator.serviceWorker) {
+    const params = new URLSearchParams(location.search);
+    if (params.has('push-entry')) {
+        pendingPushOpen = { owner: params.get('push-owner'), entryId: params.get('push-entry'), at: params.get('push-at') };
+        const clean = new URL(location.href);
+        for (const name of ['push-owner', 'push-entry', 'push-at']) clean.searchParams.delete(name);
+        history.replaceState(null, '', clean.pathname + clean.search + clean.hash);
+    }
+    navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data?.type !== 'todo-push-open') return;
+        pendingPushOpen = { owner: event.data.owner, entryId: event.data.entryId, at: event.data.at };
+        openPendingPush();
+    });
+    setInterval(openPendingPush, 1000);
+    window.addEventListener('focus', () => webPush?.refresh());
+    setInterval(() => webPush?.refresh(), 6 * 60 * 60000);
+}

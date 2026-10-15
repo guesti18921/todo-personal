@@ -3,7 +3,7 @@ name: Build Android signed APK and AAB
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, web-push-calendar-0.4.29]
     paths: ['.github/workflows/android-signed.yml']
 
 permissions:

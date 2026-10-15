@@ -5,3 +5,6 @@ node_modules/
 *.jks
 *.keystore
 *.keystore.base64
+/private-web-push-config/
+.env*
+*.secret.env

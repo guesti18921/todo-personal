@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(LocalDataResetPlugin.class);
         registerPlugin(TimePickerPlugin.class);
+        registerPlugin(DatePickerPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

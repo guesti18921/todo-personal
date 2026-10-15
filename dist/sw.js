@@ -1,7 +1,8 @@
+importScripts('./push-worker.js');
 // Only public app files are cached. Supabase requests and account data never pass through this cache.
 const BASE = new URL('./', self.location.href).href;
 const PREFIX = `todo-personal-shell:${new URL(BASE).pathname}:`;
-const CACHE = PREFIX + 'ad2b37a8d5ff9efeda54';
+const CACHE = PREFIX + '0334e908038f1c0674db';
 const ASSETS = ['index.html', 'main.js?v=10-tap', 'main.css', 'auth.css?v=2', 'mobile.css?v=9-clear'];
 self.addEventListener('install', event => event.waitUntil((async () => {
     const cache = await caches.open(CACHE);

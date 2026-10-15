@@ -444,7 +444,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.28/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.29/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -844,7 +844,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.28');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.29');
  } finally { dom.window.close(); }
 });
 
@@ -1547,4 +1547,23 @@ for(const method of ['password','google']) test(`leaving recovery permits a fres
   await wait();await wait();assert.ok(d.querySelector('.mn-version'));assert.equal(JSON.parse(w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token')).refresh_token,'fresh-'+method);
   assert.deepEqual(JSON.parse(w.localStorage.getItem(cacheKey)).state,f.state);
  }finally{w.close();}
+});
+
+test('Android date fields open native calendar and preserve chosen deadline/custom reminder through save and restart',async()=>{
+ const f=listFixture(),dom=new JSDOM(html,{url:'https://test.local/',runScripts:'outside-only',virtualConsole});const w=dom.window;
+ Object.defineProperty(w.navigator,'languages',{value:['en-US']});Object.defineProperty(w,'crypto',{value:webcrypto});w.androidBridge={postMessage(){}};let date='2028-02-29',calls=0;
+ const definitions={App:{getLaunchUrl:'promise',minimizeApp:'promise',addListener:'callback',removeListener:'promise'},TimePicker:{deviceFormat:'promise'},DatePicker:{pick:'promise'},Network:{addListener:'callback',removeListener:'promise'},Browser:{open:'promise'},LocalNotifications:{addListener:'callback',removeListener:'promise',cancelAll:'promise',checkPermissions:'promise'}};
+ w.Capacitor={PluginHeaders:Object.entries(definitions).map(([name,methods])=>({name,methods:Object.entries(methods).map(([name,rtype])=>({name,rtype}))})),nativeCallback:()=> 'cb',nativePromise:async(plugin,method,options)=>{if(plugin==='DatePicker'){calls++;assert.match(options.date,/^\d{4}-\d{2}-\d{2}$/);return{date,cancelled:false}}return method==='deviceFormat'?{is24Hour:true}:method==='checkPermissions'?{display:'prompt'}:{}}};
+ Object.assign(w,{TextEncoder,TextDecoder,Request,Response,Headers,fetch:async()=>{throw Error('offline')}});for(const [k,v]of f.seed)w.localStorage.setItem(k,v);
+ let saved;
+ try{w.eval(bundle);await ready(dom);const d=w.document;d.querySelector('.mn-add').click();const input=d.querySelector('#mn-date');assert.equal(input.readOnly,true,'Android must not edit OEM date segments');input.click();await wait();assert.equal(calls,1);assert.equal(input.value,'2028-02-29');assert.equal(d.querySelector('[name="time"]').disabled,false);
+ d.querySelector('#mn-text').value='Calendar reminder';d.querySelector('#mn-text').dispatchEvent(new w.Event('input',{bubbles:true}));const mode=d.querySelector('[name="reminderMode"]');mode.value='custom';mode.dispatchEvent(new w.Event('change',{bubbles:true}));date='2028-02-28';d.querySelector('[name="reminderDate"]').click();await wait();d.querySelector('[name="reminderTime"]').value='12:00';d.querySelector('[name="reminderTime"]').dispatchEvent(new w.Event('change',{bubbles:true}));d.querySelector('[data-save]').click();saved=Array.from({length:w.localStorage.length},(_,i)=>{const key=w.localStorage.key(i);return[key,w.localStorage.getItem(key)]});const state=JSON.parse(w.localStorage.getItem(cacheKey)).state;const entry=Object.values(state.todos).flat().find(e=>e.name==='Calendar reminder');assert.equal(entry.date,'2028-02-29');assert.equal(entry.reminder.date,'2028-02-28');assert.equal(entry.reminder.time,'12:00');
+ }finally{w.close();}
+ const reopened=boot(saved);try{await ready(reopened);const records=JSON.parse(reopened.window.localStorage.getItem(cacheKey)).state;assert.ok(Object.values(records.todos).flat().some(e=>e.date==='2028-02-29'&&e.reminder.date==='2028-02-28'));}finally{reopened.window.close();}
+});
+
+test('push click waits for a newer cloud entry instead of dropping the target from an older cached notebook',async()=>{
+ const f=listFixture(),cached=JSON.parse(f.seed[1][1]),cloud=JSON.parse(JSON.stringify(cached.state));const now=new Date();now.setSeconds(0,0);const date=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-'),time=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');cloud.notes[0].reminder={mode:'custom',date,time};cached.state.notes=[];f.seed[1][1]=JSON.stringify(cached);const session=JSON.parse(f.seed[0][1]);let release;const gate=new Promise(r=>release=r);
+ const url=new URL('https://test.local/');url.searchParams.set('push-owner',id);url.searchParams.set('push-entry','n');url.searchParams.set('push-at',now.toISOString());const dom=new JSDOM(html,{url:url.href,runScripts:'outside-only',virtualConsole}),w=dom.window;Object.defineProperty(w.document,'hidden',{value:false});Object.defineProperty(w.navigator,'languages',{value:['en-US']});Object.defineProperty(w,'crypto',{value:webcrypto});Object.defineProperty(w.navigator,'serviceWorker',{value:{register:async()=>{throw Error('not available in test')},addEventListener(){}}});Object.assign(w,{TextEncoder,TextDecoder,Request,Response,Headers,fetch:async(address,options={})=>{const u=new URL(String(address?.url||address));if(u.pathname.includes('/rest/v1/notebooks')){if(u.searchParams.get('select')==='revision')return new Response(JSON.stringify({revision:1}));await gate;return new Response(JSON.stringify({...cloud,revision:1,user_id:id}));}if(u.pathname.endsWith('/user'))return new Response(JSON.stringify(session.user));if(u.pathname.endsWith('/settings'))return new Response(JSON.stringify({external:{google:false}}));throw Error('offline')}});for(const[k,v]of f.seed)w.localStorage.setItem(k,v);
+ try{w.eval(bundle);await ready(dom);await new Promise(r=>setTimeout(r,1200));release();await new Promise(r=>setTimeout(r,1500));assert.equal(w.document.querySelector('#mn-text')?.value,cloud.notes[0].title||'');assert.ok(w.document.querySelector('[data-save]'),'notification target editor opens after cloud sync');assert.equal(w.location.search,'');}finally{release();w.close();}
 });

@@ -42,14 +42,14 @@ if (!manifest.includes('com.m1strell.todopersonal.ReminderClockReceiver')) {
 fs.writeFileSync(manifestPath, manifest);
 const nativeSource = path.join(root, 'android/app/src/main/java/com/m1strell/todopersonal');
 fs.mkdirSync(nativeSource, { recursive: true });
-for (const name of ['ReminderClock.java', 'ReminderClockReceiver.java', 'MainActivity.java', 'LocalDataResetPlugin.java', 'TimePickerPlugin.java']) {
+for (const name of ['ReminderClock.java', 'ReminderClockReceiver.java', 'MainActivity.java', 'LocalDataResetPlugin.java', 'TimePickerPlugin.java', 'DatePickerPlugin.java']) {
     fs.copyFileSync(path.join(root, 'native/android', name), path.join(nativeSource, name));
 }
 fs.copyFileSync(path.join(root, 'native/android/time_picker_theme.xml'), path.join(root, 'android/app/src/main/res/values/time_picker_theme.xml'));
 const gradlePath = path.join(root, 'android/app/build.gradle');
 const gradle = fs.readFileSync(gradlePath, 'utf8')
-    .replace(/versionCode \d+/, 'versionCode 32')
-    .replace(/versionName "[^"]+"/, 'versionName "0.4.28"');
+    .replace(/versionCode \d+/, 'versionCode 33')
+    .replace(/versionName "[^"]+"/, 'versionName "0.4.29"');
 fs.writeFileSync(gradlePath, gradle);
 const drawable = path.join(root, 'android/app/src/main/res/drawable');
 fs.mkdirSync(drawable, { recursive: true });
