@@ -101,6 +101,11 @@ const server = http.createServer((req, res) => {
    await page.locator('.mn-time-dialog [data-clock-part="hour"]').selectOption('1');
    await page.locator('.mn-time-dialog .mn-secondary').click();
    assert.equal(await page.locator('[name="time"]').inputValue(),before);
+   const pinAlignment = await page.locator('.mn-entry-pin').evaluate(label => {
+    const box = label.querySelector('input').getBoundingClientRect(), text = label.querySelector('span').getBoundingClientRect();
+    return Math.abs((box.top + box.bottom) / 2 - (text.top + text.bottom) / 2);
+   });
+   assert.ok(pinAlignment < 1, 'pin text and checkbox centered: ' + name + ' delta=' + pinAlignment);
    const editorAccessibility = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => n.target) })));
    assert.deepEqual(editorAccessibility, [], 'editor accessibility: ' + name + JSON.stringify(editorAccessibility));
    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'editor overflow: ' + name);

@@ -1,15 +1,23 @@
 export function createWebPush({ auth, fetcher, serverUrl, publicKey, onStatus = () => {}, language = () => 'ru',
     storage = globalThis.localStorage, nav = globalThis.navigator, permission = globalThis.Notification,
     supported = Boolean(globalThis.isSecureContext && globalThis.PushManager && globalThis.Notification && globalThis.navigator?.serviceWorker),
-    bindWorker = null, timeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone }) {
+    bindWorker = null, requestTimeoutMs = 15000, timeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone }) {
     let owner = null, initialized = false, operation = 0, enabled = false, tail = Promise.resolve();
     const pref = id => `todo-personal:web-push:${id}`;
     const emit = error => onStatus({ supported, enabled, error: error || '' });
     const serial = action => { const result = tail.then(action); tail = result.catch(() => {}); return result; };
     const current = (id, ticket) => owner === id && operation === ticket;
     let binding = Promise.resolve();
+    async function bounded(action, onTimeout = () => {}) {
+        let timer;
+        try {
+            return await Promise.race([Promise.resolve().then(action), new Promise((_, reject) => {
+                timer = setTimeout(() => { onTimeout(); reject(Error('push_timeout')); }, requestTimeoutMs);
+            })]);
+        } finally { clearTimeout(timer); }
+    }
     async function registration() {
-        const reg = await nav.serviceWorker.register('/sw.js', { scope: '/' });
+        const reg = await bounded(() => nav.serviceWorker.register('/sw.js', { scope: '/' }));
         if (!reg.active) {
             const worker = reg.installing || reg.waiting;
             if (!worker) throw Error('worker_unavailable');
@@ -20,6 +28,9 @@ export function createWebPush({ auth, fetcher, serverUrl, publicKey, onStatus = 
                 worker.addEventListener('statechange', changed); changed();
             });
         }
+        // Wait for the browser's active registration on a first installation.
+        // A statechange alone can precede serviceWorker.ready.
+        if (nav.serviceWorker.ready) return bounded(() => nav.serviceWorker.ready);
         return reg;
     }
     function bind(id) {
@@ -37,13 +48,29 @@ export function createWebPush({ auth, fetcher, serverUrl, publicKey, onStatus = 
         });
         return binding;
     }
-    async function request(id, body) {
-        const result = await auth.getSession();
+    async function request(id, body, retry = true) {
+        const result = await bounded(() => auth.getSession());
         if (owner !== id || result.error || result.data?.session?.user?.id !== id) throw Error('account_changed');
-        const response = await fetcher(serverUrl + '/functions/v1/push-subscriptions', { method: 'POST', headers: {
-            'Content-Type': 'application/json', apikey: publicKey, Authorization: 'Bearer ' + result.data.session.access_token
-        }, body: JSON.stringify(body) });
-        const data = await response.json();
+        const controller = new AbortController();
+        let response, data;
+        try { ({ response, data } = await bounded(async () => {
+            const response = await fetcher(serverUrl + '/functions/v1/push-subscriptions', { method: 'POST', signal: controller.signal, headers: {
+                'Content-Type': 'application/json', apikey: publicKey, Authorization: 'Bearer ' + result.data.session.access_token
+            }, body: JSON.stringify(body) });
+            let data;
+            try { data = await response.json(); } catch (_) { data = {}; }
+            return { response, data };
+        }, () => controller.abort())); }
+        catch (error) {
+            if (retry && body.action === 'config' && error.name === 'TypeError' && owner === id) return request(id, body, false);
+            throw error;
+        }
+        if (response.status === 401 && retry && typeof auth.refreshSession === 'function') {
+            const refreshed = await bounded(() => auth.refreshSession());
+            if (owner !== id || refreshed.error || refreshed.data?.session?.user?.id !== id) throw Error('account_changed');
+            return request(id, body, false);
+        }
+        if (retry && body.action === 'config' && [502, 503, 504].includes(response.status) && owner === id) return request(id, body, false);
         if (!response.ok) throw Error(response.status === 404 || data.code === 'push_not_configured' ? 'push_not_configured' : data.code === 'subscription_owner_mismatch' ? 'account_changed' : 'push_server');
         return data;
     }
@@ -95,15 +122,17 @@ export function createWebPush({ auth, fetcher, serverUrl, publicKey, onStatus = 
             initialized = true;
             owner = id; const ticket = ++operation; enabled = false; emit();
             if (!supported) return Promise.resolve();
-            // Block deliveries immediately, before any slow auth/network operation.
-            bind(null).catch(() => {});
+            let restore = false;
+            try { restore = Boolean(id && storage.getItem(pref(id)) === 'true'); } catch (_) {}
+            // A new tab restoring the same account must not briefly suppress push
+            // for all other tabs sharing this service worker.
+            if (!restore || (previous && previous !== id)) bind(null).catch(() => {});
             return serial(async () => {
                 if (previous && previous !== id) {
                     try { storage.removeItem(pref(previous)); } catch (_) {}
                     await discardSubscription().catch(() => {});
                 }
                 if (!current(id, ticket) || !id) return;
-                let restore = false; try { restore = storage.getItem(pref(id)) === 'true'; } catch (_) {}
                 if (restore) return activate(id, ticket, Promise.resolve(permission.permission));
             });
         },
@@ -111,7 +140,9 @@ export function createWebPush({ auth, fetcher, serverUrl, publicKey, onStatus = 
             if (!supported || !owner) { emit('Этот браузер не поддерживает системные уведомления.'); return Promise.resolve(false); }
             const id = owner, ticket = ++operation;
             // Start the permission prompt in the user click's activation context.
-            const grant = permission.permission === 'granted' ? Promise.resolve('granted') : Promise.resolve(permission.requestPermission()).catch(() => 'denied');
+            let grant;
+            try { grant = permission.permission === 'granted' ? Promise.resolve('granted') : Promise.resolve(permission.requestPermission()).catch(() => 'denied'); }
+            catch (_) { grant = Promise.resolve('denied'); }
             return serial(() => activate(id, ticket, grant));
         },
         disable() {

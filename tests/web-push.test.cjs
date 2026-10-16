@@ -1,6 +1,6 @@
 const { test }=require('node:test');const assert=require('node:assert/strict');const vm=require('node:vm');const fs=require('node:fs');const path=require('node:path');const {webcrypto}=require('node:crypto');
 async function sourceModule(file,extras={}){
- const ctx=vm.createContext({Request,Response,URL,Date,JSON,Intl,Uint8Array,TextEncoder,atob,crypto:webcrypto,setTimeout,clearTimeout,...extras});const cache=new Map();
+ const ctx=vm.createContext({Request,Response,URL,Date,JSON,Intl,Uint8Array,TextEncoder,AbortController,atob,crypto:webcrypto,setTimeout,clearTimeout,...extras});const cache=new Map();
  async function load(file){if(cache.has(file))return cache.get(file);let m;if(file.startsWith('npm:')){const actual=require(file.replace(/^npm:/,'').replace(/@\d[^/]*$/,''));m=new vm.SyntheticModule(Object.keys(actual),function(){for(const k of Object.keys(actual))this.setExport(k,actual[k])},{context:ctx});}else m=new vm.SourceTextModule(fs.readFileSync(file,'utf8'),{context:ctx});cache.set(file,m);await m.link(name=>load(name.startsWith('npm:')?name:path.resolve(path.dirname(file),name)));return m;}const m=await load(path.resolve(file));await m.evaluate();return m.namespace;
 }
 const plain=v=>JSON.parse(JSON.stringify(v));
@@ -32,10 +32,10 @@ test('subscription API verifies owner; cannot select another account or take its
  f=await apiFixture();assert.equal((await f.request({action:'unsubscribe',subscription:validSub})).status,200);assert.equal(f.calls[0].conditions.owner_id,'a');
  f=await apiFixture({fail:true});assert.equal((await f.request(body)).status,503);
 });
-async function clientFixture(){
+async function clientFixture(options={}){
  let id='a',sub=null,permissionValue='granted',sendMode='ok',release;const statuses=[],bindings=[],requests=[],disk=new Map();let unsubscribed=0,subscribes=0;
  const reg={active:{},pushManager:{getSubscription:async()=>sub,subscribe:async()=>{subscribes++;return sub={toJSON:()=>validSub,unsubscribe:async()=>{unsubscribed++;sub=null;return true}}}}};
- const m=await sourceModule('src/webPush.js');const client=m.createWebPush({supported:true,nav:{serviceWorker:{register:async()=>reg,getRegistration:async()=>reg}},storage:{getItem:k=>disk.get(k),setItem:(k,v)=>disk.set(k,v),removeItem:k=>disk.delete(k)},permission:{get permission(){return permissionValue},requestPermission:()=>Promise.resolve(permissionValue)},auth:{getSession:async()=>({data:{session:{user:{id},access_token:'private-test-token'}}})},fetcher:async(url,options)=>{const b=JSON.parse(options.body);requests.push(b);if(sendMode==='offline')throw Error('offline');if(sendMode==='held'&&b.action==='subscribe')await new Promise(r=>release=r);return new Response(JSON.stringify(b.action==='config'?{enabled:sendMode!=='disabled',publicKey:validSub.keys.p256dh}:{enabled:true}),{status:200})},serverUrl:'https://test',publicKey:'public',bindWorker:async owner=>bindings.push(owner),onStatus:s=>statuses.push(plain(s)),timeZone:()=> 'UTC'});
+ const m=await sourceModule('src/webPush.js');const client=m.createWebPush({supported:true,nav:{serviceWorker:{register:async()=>reg,getRegistration:async()=>reg}},storage:{getItem:k=>disk.get(k),setItem:(k,v)=>disk.set(k,v),removeItem:k=>disk.delete(k)},permission:{get permission(){return permissionValue},requestPermission:()=>Promise.resolve(permissionValue)},auth:{getSession:async()=>({data:{session:{user:{id},access_token:'private-test-token'}}})},fetcher:async(url,options)=>{const b=JSON.parse(options.body);requests.push(b);if(sendMode==='offline')throw Error('offline');if(sendMode==='held'&&b.action==='subscribe')await new Promise(r=>release=r);return new Response(JSON.stringify(b.action==='config'?{enabled:sendMode!=='disabled',publicKey:validSub.keys.p256dh}:{enabled:true}),{status:200})},serverUrl:'https://test',publicKey:'public',bindWorker:async owner=>bindings.push(owner),onStatus:s=>statuses.push(plain(s)),timeZone:()=> 'UTC',...options});
  await client.setAccount(id);return{client,statuses,bindings,requests,disk,get unsubscribed(){return unsubscribed},get subscribes(){return subscribes},set id(v){id=v},set permission(v){permissionValue=v},set mode(v){sendMode=v},release:()=>release()};
 }
 test('browser permission, configured server, opt-in and offline disable are consistent',async()=>{
@@ -45,6 +45,68 @@ test('browser permission, configured server, opt-in and offline disable are cons
 });
 test('account switch during a late subscribe cannot bind old push to a new account',async()=>{
  const f=await clientFixture();f.mode='held';const activation=f.client.enable();while(!f.requests.some(r=>r.action==='subscribe'))await new Promise(r=>setImmediate(r));f.id='b';const switched=f.client.setAccount('b');f.release();await activation;await switched;assert.equal(f.bindings.includes('a'),false);assert.equal(f.statuses.at(-1).enabled,false);assert.equal(f.disk.has('todo-personal:web-push:a'),false);assert.ok(f.unsubscribed>=1);
+});
+test('first permission grant completes subscription in the same enable call',async()=>{
+ let grant, value='default';
+ const f=await clientFixture({permission:{get permission(){return value},requestPermission:()=>new Promise(resolve=>grant=resolve)}});
+ const activation=f.client.enable();assert.equal(typeof grant,'function');
+ await new Promise(r=>setImmediate(r));assert.equal(f.requests.length,0);
+ value='granted';grant(value);
+ assert.equal(await activation,true);assert.equal(f.subscribes,1);assert.equal(f.statuses.at(-1).enabled,true);
+});
+test('a temporary configuration gateway failure retries once without another permission prompt',async()=>{
+ let calls=0,prompts=0;
+ const f=await clientFixture({permission:{permission:'default',requestPermission:async()=>{prompts++;return 'granted'}},fetcher:async(url,options)=>{
+  const b=JSON.parse(options.body);
+  if(b.action==='config'&&++calls===1)return new Response('Bad Gateway',{status:502});
+  return new Response(JSON.stringify(b.action==='config'?{enabled:true,publicKey:validSub.keys.p256dh}:{enabled:true}));
+ }});
+ assert.equal(await f.client.enable(),true);assert.equal(calls,2);assert.equal(prompts,1);
+});
+test('an expired push token is refreshed once and the same enable call completes',async()=>{
+ let refreshed=0,calls=0;
+ const session={user:{id:'a'},access_token:'test-token'};
+ const f=await clientFixture({auth:{getSession:async()=>({data:{session}}),refreshSession:async()=>{refreshed++;return{data:{session}}}},fetcher:async(url,options)=>{
+  const b=JSON.parse(options.body);if(++calls===1)return new Response('{}',{status:401});
+  return new Response(JSON.stringify(b.action==='config'?{enabled:true,publicKey:validSub.keys.p256dh}:{enabled:true}));
+ }});
+ assert.equal(await f.client.enable(),true);assert.equal(refreshed,1);assert.equal(calls,3);
+});
+test('token refresh cannot attach push to a different account',async()=>{
+ const f=await clientFixture({auth:{getSession:async()=>({data:{session:{user:{id:'a'},access_token:'test-token'}}}),refreshSession:async()=>({data:{session:{user:{id:'b'},access_token:'other-test-token'}}})},fetcher:async()=>new Response('{}',{status:401})});
+ assert.equal(await f.client.enable(),false);assert.equal(f.subscribes,0);assert.equal(f.bindings.includes('a'),false);
+});
+test('persistent server failures stop after one retry',async()=>{
+ let calls=0;
+ const f=await clientFixture({fetcher:async()=>{calls++;return new Response('{}',{status:502})}});
+ assert.equal(await f.client.enable(),false);assert.equal(calls,2);
+});
+test('a first registration waits for browser readiness before subscribing',async()=>{
+ let release, subscribed=0;
+ const reg={active:{},pushManager:{getSubscription:async()=>null,subscribe:async()=>{subscribed++;return{toJSON:()=>validSub,unsubscribe:async()=>true}}}};
+ const ready=new Promise(resolve=>release=()=>resolve(reg));
+ const f=await clientFixture({nav:{serviceWorker:{register:async()=>reg,getRegistration:async()=>reg,ready}}});
+ const activation=f.client.enable();await new Promise(r=>setImmediate(r));assert.equal(subscribed,0);
+ release();assert.equal(await activation,true);assert.equal(subscribed,1);
+});
+test('a synchronous permission exception returns an error and permits retry',async()=>{
+ let fail=true;
+ const f=await clientFixture({permission:{permission:'default',requestPermission:()=>{if(fail)throw Error('blocked');return Promise.resolve('granted')}}});
+ assert.equal(await f.client.enable(),false);fail=false;assert.equal(await f.client.enable(),true);
+});
+test('hung network is aborted and does not block a later enable',async()=>{
+ let hang=true, signal;
+ const f=await clientFixture({requestTimeoutMs:20,fetcher:async(url,options)=>{
+  if(hang){signal=options.signal;return new Promise(()=>{});}
+  return new Response(JSON.stringify(JSON.parse(options.body).action==='config'?{enabled:true,publicKey:validSub.keys.p256dh}:{enabled:true}));
+ }});
+ assert.equal(await f.client.enable(),false);assert.equal(signal.aborted,true);
+ hang=false;assert.equal(await f.client.enable(),true);
+});
+test('restoring an opted-in account in a new tab does not clear its worker binding',async()=>{
+ const disk=new Map([['todo-personal:web-push:a','true']]);
+ const f=await clientFixture({storage:{getItem:k=>disk.get(k),setItem:(k,v)=>disk.set(k,v),removeItem:k=>disk.delete(k)}});
+ assert.equal(f.statuses.at(-1).enabled,true);assert.deepEqual(f.bindings,['a']);
 });
 function workerFixture(){
  const handlers=new Map(),disk=new Map(),shown=[],windows=[],messages=[];let storageFail=false,focuses=0,opened=0;
