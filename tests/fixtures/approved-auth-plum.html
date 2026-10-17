@@ -1,0 +1,225 @@
+<meta charset="UTF-8">
+<style>body{margin:0;color-scheme:light}@font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/inter-400.woff) format("woff")}
+@font-face{font-family:Inter;font-style:normal;font-weight:500;font-display:swap;src:url(/fonts/inter-500.woff) format("woff")}
+@font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;src:url(/fonts/inter-600.woff) format("woff")}</style>
+<div id="todo-auth-designs">
+<style>
+#todo-auth-designs .td-one{--td-rose:light-dark(#69415c,#d9a5c6)}
+#todo-auth-designs .td-one .td-brand-mark{background:var(--td-green);color:var(--td-green-ink)}
+#todo-auth-designs .td-one .td-brand-name{color:var(--td-green)}
+#todo-auth-designs .td-one .td-g{background:none!important;color:var(--td-green)!important;-webkit-text-fill-color:var(--td-green)}
+</style>
+<style>
+#todo-auth-designs .td-palette-plum{--td-green:light-dark(#69415c,#d9a5c6);--td-green-ink:light-dark(#fffdfb,#351c2e)}
+#todo-auth-designs .td-palette-rose{--td-green:light-dark(#9b536c,#e4a5ba);--td-green-ink:light-dark(#fffdfb,#3c1d2a)}
+#todo-auth-designs .td-palette-graphite{--td-green:light-dark(#36373f,#c7c5d0);--td-green-ink:light-dark(#fffdfb,#25232b)}
+#todo-auth-designs .td-palette-blue{--td-green:light-dark(#4d608e,#b6c5ee);--td-green-ink:light-dark(#fffdfb,#1f2b48)}
+#todo-auth-designs .td-one .td-g{background:conic-gradient(#4285f4 0deg 95deg,#34a853 95deg 190deg,#fbbc05 190deg 235deg,#ea4335 235deg 300deg,#4285f4 300deg);background-clip:text;-webkit-background-clip:text;color:transparent;transform:none}
+#todo-auth-designs .td-one .td-google:hover .td-g{transform:none}
+#todo-auth-designs .td-one .td-primary:hover{box-shadow:0 7px 18px color-mix(in srgb,var(--td-green) 25%,transparent)}
+#todo-auth-designs .td-one .td-tabs button[aria-pressed=true]{color:var(--td-green)}
+</style>
+<style>
+#todo-auth-designs .td-one{animation:td-arrive .75s cubic-bezier(.16,1,.3,1) both;transition:box-shadow .4s,border-color .4s}
+#todo-auth-designs .td-one:hover{box-shadow:0 24px 72px #501f3a1c}
+#todo-auth-designs .td-one .td-brand-mark{animation:td-logo .9s cubic-bezier(.2,.7,.3,1) both;animation-delay:.15s}
+#todo-auth-designs .td-one .td-tabs{position:relative;isolation:isolate}
+#todo-auth-designs .td-one .td-tabs:before{content:"";position:absolute;left:4px;top:4px;bottom:4px;width:calc(50% - 6px);background:var(--td-paper);box-shadow:0 2px 7px #501f3a12;border-radius:9px;z-index:-1;transition:transform .38s cubic-bezier(.2,.8,.2,1)}
+#todo-auth-designs .td-one.td-signup .td-tabs:before{transform:translateX(calc(100% + 4px))}
+#todo-auth-designs .td-one .td-tabs button[aria-pressed=true]{box-shadow:none;background:transparent}
+#todo-auth-designs .td-one .td-tabs button{transition:color .25s}
+#todo-auth-designs .td-one .td-input input{transition:border-color .2s,box-shadow .2s,background .2s}
+#todo-auth-designs .td-one .td-input input:focus{border-color:var(--td-green);box-shadow:0 0 0 4px color-mix(in srgb,var(--td-green) 12%,transparent)}
+#todo-auth-designs .td-one .td-google,#todo-auth-designs .td-one .td-primary{transition:transform .22s,box-shadow .22s,background .22s;position:relative;overflow:hidden}
+#todo-auth-designs .td-one .td-primary:hover{transform:translateY(-2px);box-shadow:0 7px 18px #367f7538}
+#todo-auth-designs .td-one .td-primary:active,#todo-auth-designs .td-one .td-google:active{transform:translateY(0) scale(.985)}
+#todo-auth-designs .td-one .td-primary svg{transition:transform .22s}
+#todo-auth-designs .td-one .td-primary:hover svg{transform:translateX(4px)}
+#todo-auth-designs .td-one .td-google:hover{transform:translateY(-1px);box-shadow:0 4px 12px #501f3a0c}
+#todo-auth-designs .td-one .td-g{transition:transform .35s}
+#todo-auth-designs .td-one .td-google:hover .td-g{transform:rotate(-12deg)}
+#todo-auth-designs .td-one .td-link{transition:color .2s,opacity .2s}
+#todo-auth-designs .td-one .td-primary:disabled{cursor:wait;transform:none}
+#todo-auth-designs .td-one .td-spinner{width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:td-spin .75s linear infinite}
+#todo-auth-designs .td-one .td-ripple{position:absolute;width:30px;height:30px;left:50%;top:50%;border-radius:50%;background:#ffffff33;pointer-events:none;animation:td-ripple .65s ease-out forwards}
+#todo-auth-designs .td-one .td-feedback:not(:empty){animation:td-feedback .35s ease-out both;padding:10px 12px;background:color-mix(in srgb,var(--td-green) 9%,var(--td-paper));border-radius:9px}
+@keyframes td-arrive{from{opacity:0;transform:translateY(22px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes td-logo{from{opacity:0;transform:rotate(-18deg) scale(.75)}to{opacity:1;transform:none}}
+@keyframes td-spin{to{transform:rotate(360deg)}}
+@keyframes td-ripple{from{opacity:1;transform:translate(-50%,-50%) scale(0)}to{opacity:0;transform:translate(-50%,-50%) scale(20)}}
+@keyframes td-feedback{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){#todo-auth-designs .td-one,#todo-auth-designs .td-one *{animation:none!important;transition:none!important}#todo-auth-designs .td-one .td-ripple{display:none}}
+</style>
+<style>
+#todo-auth-designs{--td-bg:light-dark(#f7f3ee,#211d20);--td-paper:light-dark(#fffdfb,#30272d);--td-ink:light-dark(#501f3a,#f5e5ee);--td-muted:light-dark(#806c77,#c9b7c1);--td-rose:light-dark(#c38d9e,#d4a0b1);--td-rose-soft:light-dark(#f1e0e6,#49303c);--td-green:light-dark(#367f75,#8cd2c3);--td-green-ink:light-dark(#ffffff,#163d35);--td-line:light-dark(#e5d6dc,#57404d);font-family:Inter,Arial,sans-serif;color:var(--td-ink)}
+#todo-auth-designs *{box-sizing:border-box}
+#todo-auth-designs [hidden]{display:none!important}
+#todo-auth-designs .td-stage{min-height:790px;padding:28px 20px;display:flex;align-items:center;justify-content:center}
+#todo-auth-designs .td-product{color:var(--td-ink);background:var(--td-bg);width:100%;font-size:14px;line-height:1.5}
+#todo-auth-designs button,#todo-auth-designs input{font:inherit}
+#todo-auth-designs button{cursor:pointer}
+#todo-auth-designs button:focus-visible,#todo-auth-designs input:focus-visible{outline:3px solid var(--td-green);outline-offset:3px}
+#todo-auth-designs .td-brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:2px;font-size:17px}
+#todo-auth-designs .td-brand-mark{background:var(--td-rose);color:#fffdfb;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;letter-spacing:-3px;font-size:24px;padding-right:4px}
+#todo-auth-designs h2{font-size:30px;letter-spacing:-1px;line-height:1.16;margin:0 0 10px;font-weight:600;color:var(--td-ink)}
+#todo-auth-designs p{margin:0}
+#todo-auth-designs .td-sub{color:var(--td-muted);font-size:14px}
+#todo-auth-designs .td-tabs{display:flex;gap:4px;background:var(--td-bg);padding:4px;border-radius:13px;margin:26px 0 22px}
+#todo-auth-designs .td-tabs button{border:0;background:transparent;flex:1;padding:10px 5px;border-radius:9px;color:var(--td-muted);min-height:44px;font-weight:500}
+#todo-auth-designs .td-tabs button[aria-pressed=true]{background:var(--td-paper);color:var(--td-ink);box-shadow:0 2px 6px #501f3a10}
+#todo-auth-designs .td-google{display:flex;justify-content:center;align-items:center;gap:12px;width:100%;min-height:48px;border:1px solid var(--td-line);border-radius:12px;color:var(--td-ink);background:var(--td-paper);font-weight:500}
+#todo-auth-designs .td-google:hover{background:var(--td-bg)}
+#todo-auth-designs .td-g{font-family:Arial,sans-serif;font-weight:600;font-size:20px;color:var(--td-green)}
+#todo-auth-designs .td-divider{display:flex;gap:12px;align-items:center;color:var(--td-muted);font-size:12px;margin:20px 0}
+#todo-auth-designs .td-divider:before,#todo-auth-designs .td-divider:after{content:"";height:1px;flex:1;background:var(--td-line)}
+#todo-auth-designs .td-field{display:block;margin:0 0 17px;font-size:13px;font-weight:500}
+#todo-auth-designs .td-field>span:first-child{display:block;margin-bottom:7px}
+#todo-auth-designs .td-input{position:relative;display:flex;align-items:center}
+#todo-auth-designs .td-input input{width:100%;min-width:0;background:var(--td-paper);border:1px solid var(--td-line);color:var(--td-ink);border-radius:11px;padding:13px 14px;min-height:49px;font-size:16px;font-weight:400}
+#todo-auth-designs input::placeholder{color:var(--td-muted);opacity:.75}
+#todo-auth-designs .td-input.has-eye input{padding-right:52px}
+#todo-auth-designs .td-eye{position:absolute;right:3px;top:3px;width:44px;height:43px;border:0;background:transparent;color:var(--td-muted);display:grid;place-items:center}
+#todo-auth-designs .td-eye svg{width:19px;height:19px}
+#todo-auth-designs .td-forgot-row{text-align:right;margin:-8px 0 20px}
+#todo-auth-designs .td-link{background:transparent;border:0;color:var(--td-green);padding:5px 0;min-height:32px;font-size:12px;font-weight:500;text-decoration:none}
+#todo-auth-designs .td-link:hover{text-decoration:underline}
+#todo-auth-designs .td-primary{border:0;background:var(--td-green);color:var(--td-green-ink);width:100%;min-height:49px;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:10px;font-weight:500}
+#todo-auth-designs .td-primary:hover{filter:brightness(.95)}
+#todo-auth-designs .td-primary svg{width:17px;height:17px}
+#todo-auth-designs .td-privacy{display:block;text-align:center;color:var(--td-muted);font-size:11px;margin-top:23px;padding:4px 0;text-decoration:underline;text-underline-offset:3px}
+#todo-auth-designs .td-feedback{margin-top:14px;color:var(--td-green);font-size:12px;min-height:0}
+#todo-auth-designs .td-feedback:empty{display:none}
+#todo-auth-designs .td-hint{color:var(--td-muted);font-size:11px;margin:-8px 0 18px}
+#todo-auth-designs .td-one{max-width:440px;border-radius:28px;padding:32px 34px;background:var(--td-paper);box-shadow:0 18px 65px #501f3a12;border:1px solid var(--td-line);position:relative;overflow:hidden}
+#todo-auth-designs .td-one:before{content:"";height:5px;position:absolute;top:0;left:0;right:0;background:var(--td-rose)}
+#todo-auth-designs .td-one .td-brand{margin:3px 0 32px}
+#todo-auth-designs .td-one .td-caption{display:flex;justify-content:center;gap:6px;align-items:center;margin-top:24px;color:var(--td-muted);font-size:11px}
+#todo-auth-designs .td-caption svg{width:13px;height:13px}
+#todo-auth-designs .td-two{display:grid;grid-template-columns:.9fr 1.1fr;max-width:900px;border-radius:24px;overflow:hidden;border:1px solid var(--td-line);background:var(--td-paper);box-shadow:0 18px 65px #501f3a12}
+#todo-auth-designs .td-story{background:var(--td-rose-soft);padding:34px 26px;display:flex;flex-direction:column;justify-content:space-between;gap:36px}
+#todo-auth-designs .td-story h3{font-size:36px;line-height:1.12;font-weight:500;letter-spacing:-1.5px;margin:0 0 18px}
+#todo-auth-designs .td-story p{font-size:13px;color:var(--td-muted)}
+#todo-auth-designs .td-note{margin-top:30px;padding:19px 17px;background:var(--td-paper);border-radius:14px;box-shadow:0 8px 28px #501f3a10;transform:rotate(-3deg)}
+#todo-auth-designs .td-note-head{font-size:11px;letter-spacing:1.2px;color:var(--td-muted);margin-bottom:14px}
+#todo-auth-designs .td-note-line{display:flex;gap:9px;font-size:12px;align-items:center;padding:8px 0}
+#todo-auth-designs .td-dot{width:17px;height:17px;flex:0 0 17px;border:1px solid var(--td-line);border-radius:5px;display:grid;place-items:center;color:var(--td-green)}
+#todo-auth-designs .td-dot.done{background:var(--td-green);border-color:var(--td-green);color:var(--td-green-ink)}
+#todo-auth-designs .td-dot svg{width:12px;height:12px}
+#todo-auth-designs .td-story-foot{font-size:11px;color:var(--td-muted);display:flex;gap:8px;align-items:center}
+#todo-auth-designs .td-story-foot svg{width:16px;height:16px;flex-shrink:0}
+#todo-auth-designs .td-two-main{padding:35px 28px}
+#todo-auth-designs .td-two .td-tabs{background:transparent;padding:0;border-radius:0;border-bottom:1px solid var(--td-line);gap:24px;margin-bottom:26px}
+#todo-auth-designs .td-two .td-tabs button{flex:initial;padding:10px 0;border-radius:0;position:relative}
+#todo-auth-designs .td-two .td-tabs button[aria-pressed=true]{box-shadow:none;background:transparent;color:var(--td-green)}
+#todo-auth-designs .td-two .td-tabs button[aria-pressed=true]:after{content:"";height:2px;position:absolute;bottom:-1px;left:0;right:0;background:var(--td-green)}
+#todo-auth-designs .td-two h2{font-size:25px}
+#todo-auth-designs .td-three{max-width:410px;border-radius:28px;overflow:hidden;border:1px solid var(--td-line);background:var(--td-paper);box-shadow:0 18px 65px #501f3a12}
+#todo-auth-designs .td-three-top{background:var(--td-green);color:var(--td-green-ink);padding:27px 28px 48px}
+#todo-auth-designs .td-three-top .td-brand{font-size:14px;margin-bottom:30px}
+#todo-auth-designs .td-three-top .td-brand-mark{background:#ffffff24;color:var(--td-green-ink);width:31px;height:31px;border-radius:9px;font-size:21px}
+#todo-auth-designs .td-three-top h2{color:var(--td-green-ink);font-size:29px}
+#todo-auth-designs .td-three-top p{opacity:.85;font-size:13px}
+#todo-auth-designs .td-three-main{padding:23px 27px 27px;background:var(--td-paper);border-radius:24px 24px 0 0;margin-top:-23px;position:relative}
+#todo-auth-designs .td-three .td-tabs{margin:0 0 22px;background:var(--td-rose-soft)}
+#todo-auth-designs .td-three .td-primary{background:var(--td-rose);color:#3f1c2d}
+#todo-auth-designs .td-three .td-google{border-radius:12px}
+#todo-auth-designs .td-three .td-privacy{margin-top:20px}
+@media(max-width:600px){#todo-auth-designs .td-stage{padding:20px 10px;min-height:840px;align-items:center}#todo-auth-designs .td-one{padding:30px 22px}#todo-auth-designs .td-two{grid-template-columns:1fr;max-width:430px}#todo-auth-designs .td-story{padding:22px 24px;gap:18px}#todo-auth-designs .td-story h3{font-size:25px;margin:0}#todo-auth-designs .td-story p,#todo-auth-designs .td-note,#todo-auth-designs .td-story-foot{display:none}#todo-auth-designs .td-two-main{padding:24px}#todo-auth-designs .td-three-main{padding-left:22px;padding-right:22px}}
+</style>
+<div class="viz-carousel viz-dotted-background" aria-label="Цвета кнопок TO-DO" data-previous-label="Предыдущий" data-next-label="Следующий">
+<section data-variant="Сливовый" aria-label="Сливовый">
+ <div class="td-stage"><div class="td-product td-one td-palette-plum" data-demo="soft">
+  <div class="td-brand"><span class="td-brand-mark">//</span> TO-DO</div>
+  <h2 data-heading>С возвращением</h2><p class="td-sub" data-subtitle>Твои мысли и планы — на своём месте.</p>
+  <div class="td-tabs" aria-label="Способ входа"><button type="button" data-mode="login" aria-pressed="true">Вход</button><button type="button" data-mode="signup" aria-pressed="false">Регистрация</button></div>
+  <button class="td-google" type="button" data-google><span class="td-g" aria-hidden="true">G</span>Продолжить с Google</button>
+  <div class="td-divider">или по электронной почте</div>
+  <form data-form>
+   <label class="td-field"><span>Email</span><span class="td-input"><input type="email" name="email" placeholder="you@example.com" autocomplete="off" required></span></label>
+   <label class="td-field" data-password-field><span>Пароль</span><span class="td-input has-eye"><input type="password" name="password" placeholder="Введите пароль" autocomplete="off" required><button class="td-eye" type="button" data-eye aria-label="Показать пароль"><svg
+  class="lucide lucide-eye"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+  <circle cx="12" cy="12" r="3" />
+</svg>
+</button></span></label>
+   <p class="td-hint" data-signup-hint hidden>Не меньше 8 символов.</p>
+   <div class="td-forgot-row" data-forgot-row><button type="button" class="td-link" data-forgot>Забыли пароль?</button></div>
+   <button class="td-primary" type="submit"><span data-submit>Войти</span></button>
+  </form>
+  <p class="td-feedback" role="status" aria-live="polite"></p>
+  <div class="td-caption"><svg
+  class="lucide lucide-cloud-check"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m17 15-5.5 5.5L9 18" />
+  <path d="M5.516 16.07A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 3.501 7.327" />
+</svg>
+Один аккаунт для всех устройств</div>
+  <button type="button" class="td-link td-privacy" data-privacy style="width:100%">Политика конфиденциальности</button>
+ </div></div>
+</section>
+</div>
+<script>
+(()=>{
+ const root=document.getElementById('todo-auth-designs');
+ const titles={soft:['С возвращением','Твои мысли и планы — на своём месте.','Войти'],split:['Рады тебя видеть','Продолжим с того, где остановились.','Войти'],mobile:['Всё важное. В одном месте.','Твой блокнот, всегда с тобой.','Открыть мой блокнот']};
+ root.querySelectorAll('[data-demo]').forEach(product=>{
+  let mode='login';
+  const form=product.querySelector('[data-form]'),email=form.elements.email,password=form.elements.password;
+  const feedback=product.querySelector('.td-feedback');
+  const originalHeading=product.querySelector('[data-heading]').innerHTML;
+  const originalSubtitle=product.querySelector('[data-subtitle]').textContent;
+  function setMode(next){
+   mode=next;feedback.textContent='';
+   product.classList.toggle('td-signup',mode==='signup');
+   if(product.dataset.demo==='soft'&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    [form,product.querySelector('[data-heading]'),product.querySelector('[data-subtitle]')].forEach(el=>el.animate([{opacity:.3,transform:'translateY(7px)'},{opacity:1,transform:'translateY(0)'}],{duration:300,easing:'cubic-bezier(.2,.8,.2,1)'}));
+   }
+   product.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===mode)));
+   product.querySelector('[data-heading]').innerHTML=mode==='login'?originalHeading:mode==='signup'?'Начнём с чистого листа':'Забыли пароль?';
+   product.querySelector('[data-subtitle]').textContent=mode==='login'?originalSubtitle:mode==='signup'?'Создай аккаунт — сохрани свои идеи.':'Отправим ссылку для восстановления на почту.';
+   product.querySelector('[data-password-field]').hidden=mode==='recovery';password.required=mode!=='recovery';
+   product.querySelector('[data-signup-hint]').hidden=mode!=='signup';
+   product.querySelector('[data-forgot-row]').hidden=mode!=='login';
+   product.querySelector('[data-submit]').textContent=mode==='login'?titles[product.dataset.demo][2]:mode==='signup'?'Создать аккаунт':'Отправить ссылку';
+   password.minLength=mode==='signup'?8:1;password.placeholder=mode==='signup'?'Придумайте пароль':'Введите пароль';
+  }
+  product.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+  product.querySelector('[data-forgot]').addEventListener('click',()=>setMode('recovery'));
+  product.querySelector('[data-eye]').addEventListener('click',e=>{password.type=password.type==='password'?'text':'password';e.currentTarget.setAttribute('aria-label',password.type==='text'?'Скрыть пароль':'Показать пароль');});
+  let pending=false;
+  form.addEventListener('submit',e=>{
+   e.preventDefault();if(pending)return;
+   const message=mode==='signup'?'Демо: здесь появится подтверждение регистрации.':mode==='recovery'?'Демо: здесь появится подтверждение отправки письма.':'Демо: здесь откроется твой блокнот.';
+   if(product.dataset.demo!=='soft'){feedback.textContent=message;return;}
+   pending=true;const submit=form.querySelector('[type="submit"]');submit.disabled=true;submit.setAttribute('aria-busy','true');
+   const spinner=document.createElement('span');spinner.className='td-spinner';spinner.setAttribute('aria-hidden','true');submit.prepend(spinner);
+   const ripple=document.createElement('span');ripple.className='td-ripple';submit.append(ripple);
+   const previousLabel=product.querySelector('[data-submit]').textContent;product.querySelector('[data-submit]').textContent='Секунду…';
+   product.querySelectorAll('[data-mode],[data-forgot]').forEach(b=>b.disabled=true);
+   setTimeout(()=>{pending=false;spinner.remove();ripple.remove();submit.disabled=false;submit.removeAttribute('aria-busy');product.querySelector('[data-submit]').textContent=previousLabel;product.querySelectorAll('[data-mode],[data-forgot]').forEach(b=>b.disabled=false);feedback.textContent=message;},850);
+  });
+  product.querySelector('[data-google]').addEventListener('click',()=>{feedback.textContent='Демо: здесь откроется выбор аккаунта Google.';});
+  product.querySelector('[data-privacy]').addEventListener('click',()=>{feedback.textContent='Демо: здесь откроется политика конфиденциальности.';});
+ });
+})();
+</script>
+</div>

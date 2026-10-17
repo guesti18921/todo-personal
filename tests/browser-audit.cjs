@@ -17,6 +17,7 @@ const seed = [[authKey, JSON.stringify({ access_token: jwt, refresh_token: 'test
 const types = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff': 'font/woff', '.woff2': 'font/woff2' };
 const server = http.createServer((req, res) => {
  const url = new URL(req.url, 'http://localhost');
+ if(url.pathname==='/__auth-reference.html'){res.setHeader('Content-Type','text/html');res.end(fs.readFileSync(path.join(__dirname,'fixtures/approved-auth-plum.html')));return;}
  const file = path.resolve(assets, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
  if (!file.startsWith(assets + path.sep)) { res.writeHead(403).end(); return; }
  try { res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream'); res.end(fs.readFileSync(file)); }
@@ -249,6 +250,7 @@ const server = http.createServer((req, res) => {
    }
    assert.deepEqual(errors, []); results.push({ name, width, height, overflow, javascriptErrors: errors, keyboardFocus: true, emptyDraftRecovery: true, dateParsing: true }); await context.close();
   }
+  await require('./auth-demo-parity.cjs')(browser,origin,out);
   const login = await browser.newContext({ viewport: { width: 320, height: 640 }, serviceWorkers: 'block', locale: 'ru-RU' });
   await login.route('**/*.supabase.co/**', route => route.fulfill({ json: { external: { google: true } } }));
   const p = await login.newPage(); await p.goto(origin); await p.locator('#auth-google').waitFor();
@@ -264,7 +266,7 @@ const server = http.createServer((req, res) => {
   await p.locator('#auth-password-toggle').click();assert.equal(await p.locator('#auth-password').getAttribute('type'),'text');
   await p.locator('#auth-password-toggle').click();
   await p.locator('#auth-forgot').click();await p.locator('#auth-recovery-form').waitFor();
-  assert.equal(await p.locator('#auth-tabs').isVisible(),false);
+  assert.equal(await p.locator('#auth-tabs').isVisible(),true);
   await p.locator('#auth-recovery-back').click();await p.locator('#auth-tabs').waitFor();
   await p.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
   for (const width of [320,736,1280]) {

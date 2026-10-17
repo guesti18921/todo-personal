@@ -11,50 +11,42 @@
 </head>
 <body>
     <section class="auth-screen" id="auth-screen" aria-labelledby="auth-title">
-        <div class="auth-card">
-            <div class="auth-card__header">
-                <span class="auth-brand-mark" aria-hidden="true">//</span><span class="auth-brand-name">TO-DO</span>
-            </div>
+        <div class="auth-card td-product td-one td-palette-plum">
+            <div class="auth-card__header td-brand"><span class="td-brand-mark" aria-hidden="true">//</span> TO-DO</div>
             <div class="auth-card__body">
-                <label class="auth-language" for="auth-language"><span data-auth-text="Язык интерфейса">Язык интерфейса</span><select id="auth-language"><option value="ru">Русский</option><option value="en">English</option></select></label>
-                <h1 id="auth-title">Войти</h1>
-                <p class="auth-card__intro" data-auth-text="Задачи и заметки в одном месте.">Задачи и заметки в одном месте.</p>
-                <div class="auth-tabs" id="auth-tabs" role="group" aria-label="Вход или регистрация">
+                <h1 id="auth-title">С возвращением</h1>
+                <p class="auth-card__intro td-sub">Твои мысли и планы — на своём месте.</p>
+                <div class="td-tabs" id="auth-tabs" role="group" aria-label="Вход или регистрация">
                     <button id="auth-tab-login" type="button" aria-pressed="true" data-auth-text="Вход">Вход</button>
                     <button id="auth-tab-register" type="button" aria-pressed="false" data-auth-text="Регистрация">Регистрация</button>
                 </div>
-                <div id="auth-google-area" hidden><button id="auth-google" type="button" data-auth-text="Продолжить с Google">Продолжить с Google</button><p class="auth-method-divider" data-auth-text="или по почте">или по почте</p></div>
+                <div id="auth-google-area" hidden><button class="td-google" id="auth-google" type="button" data-auth-text="Продолжить с Google">Продолжить с Google</button><p class="td-divider" data-auth-text="или по электронной почте">или по электронной почте</p></div>
                 <form id="auth-form">
-                    <label for="auth-email">Email</label>
-                    <input id="auth-email" type="email" autocomplete="email" required>
-                    <label for="auth-password" data-auth-text="Пароль">Пароль</label>
-                    <div class="auth-password-field"><input id="auth-password" type="password" autocomplete="current-password" minlength="6" required>
-                    <button id="auth-password-toggle" class="auth-card__switch" type="button" aria-controls="auth-password" aria-pressed="false">Показать пароль</button>
-                    </div>
-                    <button class="auth-card__switch" id="auth-forgot" type="button" data-auth-text="Забыли пароль?">Забыли пароль?</button>
-                    <button id="auth-submit" type="submit">Войти</button>
+                    <label class="td-field" for="auth-email"><span>Email</span><span class="td-input"><input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" required></span></label>
+                    <label class="td-field" for="auth-password"><span data-auth-text="Пароль">Пароль</span><span class="td-input has-eye"><input id="auth-password" type="password" autocomplete="current-password" placeholder="Введите пароль" minlength="6" required><button id="auth-password-toggle" class="td-eye" type="button" aria-controls="auth-password" aria-pressed="false">Показать пароль</button></span></label>
+                    <p class="td-hint" id="auth-password-hint" data-auth-text="Не меньше 8 символов." hidden>Не меньше 8 символов.</p>
+                    <div class="td-forgot-row" id="auth-forgot-row"><button class="td-link" id="auth-forgot" type="button" data-auth-text="Забыли пароль?">Забыли пароль?</button></div>
+                    <button class="td-primary" id="auth-submit" type="submit">Войти</button>
                 </form>
-                <button class="auth-card__switch" id="auth-switch" type="button">Создать аккаунт</button>
+                <button id="auth-switch" type="button">Создать аккаунт</button>
                 <form id="auth-recovery-form" hidden>
-                    <h2 data-auth-text="Восстановление пароля">Восстановление пароля</h2>
-                    <label for="auth-recovery-email" data-auth-text="Почта аккаунта">Почта аккаунта</label>
-                    <input id="auth-recovery-email" type="email" autocomplete="email" required>
-                    <button id="auth-recovery-send" type="submit" data-auth-text="Отправить письмо">Отправить письмо</button>
-                    <button class="auth-card__switch" id="auth-recovery-back" type="button" data-auth-text="Вернуться к входу">Вернуться к входу</button>
+                    <label class="td-field" for="auth-recovery-email"><span>Email</span><span class="td-input"><input id="auth-recovery-email" type="email" autocomplete="email" placeholder="you@example.com" required></span></label>
+                    <button class="td-primary" id="auth-recovery-send" type="submit" data-auth-text="Отправить ссылку">Отправить ссылку</button>
+                    <button class="td-link auth-recovery-back" id="auth-recovery-back" type="button" data-auth-text="Вернуться к входу">Вернуться к входу</button>
                 </form>
                 <div class="auth-confirm" id="auth-confirm" hidden>
-    <h2 data-auth-text="Проверьте почту">Проверьте почту</h2>
-    <p data-auth-text="Ссылка для подтверждения отправлена на:">Ссылка для подтверждения отправлена на:</p>
-    <p class="auth-confirm__email" id="auth-confirm-email"></p>
-    <p id="auth-confirm-instructions">Откройте ссылку из письма, затем вернитесь и войдите.</p>
-    <button class="auth-card__switch" data-auth-text="Вернуться к входу" id="auth-confirm-back" type="button">
-        Вернуться к входу
-    </button>
-</div>
-                <div class="auth-legal"><a data-public-page href="https://todo.m1strell.com/privacy.html" target="_blank" rel="noopener noreferrer" data-auth-text="Политика конфиденциальности">Политика конфиденциальности</a></div>
-                <p id="auth-message" role="status" aria-live="polite"></p>
+                    <h2 data-auth-text="Проверьте почту">Проверьте почту</h2>
+                    <p data-auth-text="Ссылка для подтверждения отправлена на:">Ссылка для подтверждения отправлена на:</p>
+                    <p class="auth-confirm__email" id="auth-confirm-email"></p>
+                    <p id="auth-confirm-instructions">Откройте ссылку из письма, затем вернитесь и войдите.</p>
+                    <button class="td-link" data-auth-text="Вернуться к входу" id="auth-confirm-back" type="button">Вернуться к входу</button>
+                </div>
+                <p class="td-feedback" id="auth-message" role="status" aria-live="polite"></p>
+                <div class="td-caption"><span class="auth-cloud-check" aria-hidden="true"></span><span data-auth-text="Один аккаунт для всех устройств">Один аккаунт для всех устройств</span></div>
+                <div class="auth-legal"><a class="td-link td-privacy" data-public-page href="https://todo.m1strell.com/privacy.html" target="_blank" rel="noopener noreferrer" data-auth-text="Политика конфиденциальности">Политика конфиденциальности</a></div>
             </div>
         </div>
+        <label class="auth-language" for="auth-language"><span data-auth-text="Язык интерфейса">Язык интерфейса</span><select id="auth-language"><option value="ru">Русский</option><option value="en">English</option></select></label>
     </section>
 
 

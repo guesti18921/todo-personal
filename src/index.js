@@ -321,11 +321,18 @@ window.addEventListener('focus', () => emailConfirmation.check());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) emailConfirmation.check(); });
 
 const authLanguage = document.querySelector('#auth-language');
+function renderAuthCopy() {
+    const recovering = !recoveryForm.hidden;
+    authTitle.textContent = t(recovering ? 'Забыли пароль?' : registering ? 'Начнём с чистого листа' : 'С возвращением');
+    document.querySelector('.auth-card__intro').textContent = t(recovering
+        ? 'Отправим ссылку для восстановления на почту.' : registering
+        ? 'Создай аккаунт — сохрани свои идеи.' : 'Твои мысли и планы — на своём месте.');
+}
 function renderAuthLanguage() {
     document.documentElement.lang = getLanguage();
     authLanguage.value = getLanguage();
     document.querySelectorAll('[data-auth-text]').forEach(el => { el.textContent = t(el.dataset.authText); });
-    authTitle.textContent = t(registering ? 'Регистрация' : 'Войти');
+    renderAuthCopy();
     authSubmit.textContent = t(registering ? 'Создать аккаунт' : 'Войти');
     authSwitch.textContent = t(registering ? 'Уже есть аккаунт? Войти' : 'Создать аккаунт');
     document.querySelectorAll('.auth-retry').forEach(el => { if (el.dataset.authText) el.textContent = t(el.dataset.authText); });
@@ -369,6 +376,7 @@ window.addEventListener('focus', () => languagePreferences.sync());
 function updateGoogleVisibility() { authGoogleArea.hidden = !googleEnabled || Boolean(activeUser) || authConfirm.hidden === false || authForm.hidden; }
 function closeRecoveryForm() {
     recoveryForm.hidden = true;
+    renderAuthCopy();
     recoveryForm.reset();
     authForm.hidden = Boolean(activeUser);
     authSwitch.hidden = Boolean(activeUser);
@@ -382,6 +390,7 @@ authForgot.addEventListener('click', () => {
     authPassword.value = '';
     authForm.hidden = authSwitch.hidden = authForgot.hidden = true;
     recoveryForm.hidden = false;
+    renderAuthCopy();
     authMessage.textContent = '';
     updateGoogleVisibility();
     recoveryEmail.focus();
@@ -516,7 +525,7 @@ const checkAccount = createAccountGuard({
         authForm.hidden = authSwitch.hidden = false;
         authForm.reset();
         registering = false;
-        authTitle.textContent = authSubmit.textContent = t('Войти');
+        authSubmit.textContent = t('Войти'); renderAuthCopy();
         authSwitch.textContent = t('Создать аккаунт');
         authPassword.autocomplete = 'current-password';
         authForgot.hidden = false;
@@ -603,6 +612,7 @@ supabase.auth.onAuthStateChange((_event, session) => {
     authForm.hidden = Boolean(id);
     authSwitch.hidden = Boolean(id);
     recoveryForm.hidden = true;
+    renderAuthCopy();
     recoveryForm.reset();
     authForgot.hidden = Boolean(id) || registering;
     updateGoogleVisibility();
@@ -624,7 +634,7 @@ authSwitch.addEventListener('click', () => {
     emailConfirmation.stop();
     registering = !registering;
     authMessage.textContent = '';
-    authTitle.textContent = registering ? t('Регистрация') : t('Войти');
+    renderAuthCopy();
     authSubmit.textContent = registering ? t('Создать аккаунт') : t('Войти');
     authSwitch.textContent = registering ? t('Уже есть аккаунт? Войти') : t('Создать аккаунт');
     authPassword.autocomplete = registering ? 'new-password' : 'current-password';
@@ -643,7 +653,7 @@ authConfirmBack.addEventListener('click', () => {
     authPassword.value = '';
 
     registering = false;
-    authTitle.textContent = t('Войти');
+    renderAuthCopy();
     authSubmit.textContent = t('Войти');
     authSwitch.textContent = t('Создать аккаунт');
     authPassword.autocomplete = 'current-password';
@@ -740,7 +750,7 @@ async function deleteAccount() {
             authForm.hidden = authSwitch.hidden = false;
             authForm.reset();
             registering = false;
-            authTitle.textContent = authSubmit.textContent = t('Войти');
+            authSubmit.textContent = t('Войти'); renderAuthCopy();
             authSwitch.textContent = t('Создать аккаунт');
             authPassword.autocomplete = 'current-password';
             updateGoogleVisibility();

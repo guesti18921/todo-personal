@@ -2,8 +2,8 @@ importScripts('./push-worker.js');
 // Only public app files are cached. Supabase requests and account data never pass through this cache.
 const BASE = new URL('./', self.location.href).href;
 const PREFIX = `todo-personal-shell:${new URL(BASE).pathname}:`;
-const CACHE = PREFIX + '149abe51f1a04c5d409d';
-const ASSETS = ['index.html', 'main.js?v=10-tap', 'main.css', 'auth.css?v=3-auth', 'mobile.css?v=9-clear'];
+const CACHE = PREFIX + '47ee0ea6f87f913ee8b8';
+const ASSETS = ['index.html', 'main.js?v=10-tap', 'main.css', 'auth.css?v=3-auth', 'fonts/inter-400.woff', 'fonts/inter-500.woff', 'fonts/inter-600.woff', 'mobile.css?v=9-clear'];
 self.addEventListener('install', event => event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
     await cache.addAll(ASSETS.map(path => new Request(new URL(path, BASE), { cache: 'reload' })));
@@ -23,7 +23,7 @@ self.addEventListener('fetch', event => {
             catch (error) { const cached = await caches.match(new URL('index.html', BASE)); if (cached) return cached; throw error; }
             finally { clearTimeout(timer); }
         })());
-    } else if (/\.(js|css|png|jpg|jpeg|svg|ico|woff2?)$/.test(url.pathname) && !url.pathname.endsWith('/sw.js')) {
+    } else if (/\.(js|css|png|jpg|jpeg|svg|ico|woff2?|ttf)$/.test(url.pathname) && !url.pathname.endsWith('/sw.js')) {
         event.respondWith((async () => {
             const cache = await caches.open(CACHE), cached = await cache.match(request);
             if (cached) return cached;

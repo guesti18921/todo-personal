@@ -444,7 +444,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.32/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.33/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -601,7 +601,7 @@ test('English login and registration preserve typed credentials and explicit lan
  }, ['en-RU']);
  try {
   let d=dom.window.document; await wait();
-  assert.equal(d.documentElement.lang,'en'); assert.equal(d.querySelector('#auth-title').textContent,'Sign in');
+  assert.equal(d.documentElement.lang,'en'); assert.equal(d.querySelector('#auth-title').textContent,'Welcome back');
   assert.equal(d.querySelector('#auth-google').textContent,'Continue with Google');
   d.querySelector('#auth-email').value='test@example.com'; d.querySelector('#auth-password').value='good-password';
   d.querySelector('#auth-password-toggle').click();
@@ -613,7 +613,7 @@ test('English login and registration preserve typed credentials and explicit lan
   d.querySelector('#auth-form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})); await wait();
   assert.match(d.querySelector('#auth-message').textContent,/Incorrect email or password/);
   d.querySelector('#auth-switch').click(); choose('ru'); choose('en');
-  assert.equal(d.querySelector('#auth-title').textContent,'Create an account');
+  assert.equal(d.querySelector('#auth-title').textContent,'Start with a fresh page');
   d.querySelector('#auth-form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})); await wait();
   assert.equal(d.querySelector('#auth-confirm').hidden,false); assert.match(d.querySelector('#auth-confirm').textContent,/Check your email/);
   assert.equal(signUpOptions.data.todo_personal_language,'en');
@@ -844,7 +844,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.32');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.33');
  } finally { dom.window.close(); }
 });
 

@@ -1,5 +1,16 @@
 // Interface text only. Never pass entry contents through this dictionary.
 export default {
+  "С возвращением": "Welcome back",
+  "Твои мысли и планы — на своём месте.": "Your thoughts and plans, right where they belong.",
+  "Начнём с чистого листа": "Start with a fresh page",
+  "Создай аккаунт — сохрани свои идеи.": "Create an account. Keep your ideas.",
+  "Отправим ссылку для восстановления на почту.": "We’ll email you a password reset link.",
+  "или по электронной почте": "or with your email",
+  "Один аккаунт для всех устройств": "One account for all your devices",
+  "Не меньше 8 символов.": "At least 8 characters.",
+  "Отправить ссылку": "Send reset link",
+  "Секунду…": "One moment…",
+
   "Вход": "Sign in",
   "Вход или регистрация": "Sign in or create an account",
   "Придумайте пароль": "Create a password",
@@ -294,7 +305,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.32": "TO-DO Personal · version 0.4.32",
+  "TO-DO Personal · версия 0.4.33": "TO-DO Personal · version 0.4.33",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",
