@@ -1,18 +1,18 @@
 @font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:swap;src:url(./fonts/inter-400.woff) format("woff")}
 @font-face{font-family:Inter;font-style:normal;font-weight:500;font-display:swap;src:url(./fonts/inter-500.woff) format("woff")}
 @font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;src:url(./fonts/inter-600.woff) format("woff")}
-/* Imported directly from the approved plum demo. */
+/* Exact dark plum palette from the approved screenshot. */
 
-.auth-screen .td-one{--td-rose:#69415c}
+.auth-screen .td-one{--td-rose:#d9a5c6}
 .auth-screen .td-one .td-brand-mark{background:var(--td-green);color:var(--td-green-ink)}
 .auth-screen .td-one .td-brand-name{color:var(--td-green)}
 .auth-screen .td-one .td-g{background:none!important;color:var(--td-green)!important;-webkit-text-fill-color:var(--td-green)}
 
 
-.auth-screen .td-palette-plum{--td-green:#69415c;--td-green-ink:#fffdfb}
-.auth-screen .td-palette-rose{--td-green:#9b536c;--td-green-ink:#fffdfb}
-.auth-screen .td-palette-graphite{--td-green:#36373f;--td-green-ink:#fffdfb}
-.auth-screen .td-palette-blue{--td-green:#4d608e;--td-green-ink:#fffdfb}
+.auth-screen .td-palette-plum{--td-green:#d9a5c6;--td-green-ink:#351c2e}
+.auth-screen .td-palette-rose{--td-green:#e4a5ba;--td-green-ink:#3c1d2a}
+.auth-screen .td-palette-graphite{--td-green:#c7c5d0;--td-green-ink:#25232b}
+.auth-screen .td-palette-blue{--td-green:#b6c5ee;--td-green-ink:#1f2b48}
 .auth-screen .td-one .td-g{background:conic-gradient(#4285f4 0deg 95deg,#34a853 95deg 190deg,#fbbc05 190deg 235deg,#ea4335 235deg 300deg,#4285f4 300deg);background-clip:text;-webkit-background-clip:text;color:transparent;transform:none}
 .auth-screen .td-one .td-google:hover .td-g{transform:none}
 .auth-screen .td-one .td-primary:hover{box-shadow:0 7px 18px color-mix(in srgb,var(--td-green) 25%,transparent)}
@@ -50,9 +50,9 @@
 @media(prefers-reduced-motion:reduce){.auth-screen .td-one,.auth-screen .td-one *{animation:none!important;transition:none!important}.auth-screen .td-one .td-ripple{display:none}}
 
 
-.auth-screen{--td-bg:#f7f3ee;--td-paper:#fffdfb;--td-ink:#501f3a;--td-muted:#806c77;--td-rose:#c38d9e;--td-rose-soft:#f1e0e6;--td-green:#367f75;--td-green-ink:#ffffff;--td-line:#e5d6dc;font-family:Inter,Arial,sans-serif;color:var(--td-ink)}
+.auth-screen{--td-bg:#211d20;--td-paper:#30272d;--td-ink:#f5e5ee;--td-muted:#c9b7c1;--td-rose:#d4a0b1;--td-rose-soft:#49303c;--td-green:#8cd2c3;--td-green-ink:#163d35;--td-line:#57404d;font-family:Inter,Arial,sans-serif;color:var(--td-ink)}
 .auth-screen *{box-sizing:border-box}
-.auth-screen [hidden]{display:none!important}
+.auth-screen[hidden],.auth-screen [hidden]{display:none!important}
 .auth-screen .td-stage{min-height:790px;padding:28px 20px;display:flex;align-items:center;justify-content:center}
 .auth-screen .td-product{color:var(--td-ink);background:var(--td-bg);width:100%;font-size:14px;line-height:1.5}
 .auth-screen button,.auth-screen input{font:inherit}
@@ -125,9 +125,7 @@
 .auth-screen .td-three .td-privacy{margin-top:20px}
 @media(max-width:600px){.auth-screen .td-stage{padding:20px 10px;min-height:840px;align-items:center}.auth-screen .td-one{padding:30px 22px}.auth-screen .td-two{grid-template-columns:1fr;max-width:430px}.auth-screen .td-story{padding:22px 24px;gap:18px}.auth-screen .td-story h3{font-size:25px;margin:0}.auth-screen .td-story p,.auth-screen .td-note,.auth-screen .td-story-foot{display:none}.auth-screen .td-two-main{padding:24px}.auth-screen .td-three-main{padding-left:22px;padding-right:22px}}
 
-/* Production IDs retain the demo geometry; auth handlers remain unchanged. */
-[hidden]{display:none!important}
-.auth-screen{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:calc(28px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));background:#f7f3ee;font-size:14px;line-height:1.5}
+.auth-screen{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:calc(28px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));color-scheme:dark;background:var(--td-bg);font-size:14px;line-height:1.5}
 .auth-screen .auth-card__body{display:contents}
 .auth-screen #auth-title{font-size:30px;letter-spacing:-1px;line-height:1.16;margin:0 0 10px;font-weight:600;color:var(--td-ink)}
 .auth-screen form{margin:0}
