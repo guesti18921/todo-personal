@@ -1,5 +1,9 @@
 // Interface text only. Never pass entry contents through this dictionary.
 export default {
+  "Вход": "Sign in",
+  "Вход или регистрация": "Sign in or create an account",
+  "Придумайте пароль": "Create a password",
+  "Введите пароль": "Enter your password",
   "Не удалось открыть календарь. Попробуйте снова.": "Could not open the calendar. Try again.",
   "Системные уведомления браузера": "Browser system notifications",
   "Уведомления включены для этого аккаунта и браузера. Вкладку можно закрыть; нужен интернет и разрешённая фоновая работа браузера. Отправка проверяется раз в минуту.": "Notifications are enabled for this account and browser. You can close the tab; internet access and browser background operation are required. Reminders are checked once a minute.",
@@ -290,7 +294,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.29": "TO-DO Personal · version 0.4.29",
+  "TO-DO Personal · версия 0.4.31": "TO-DO Personal · version 0.4.31",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",

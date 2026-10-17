@@ -1,3 +1,4 @@
+import { createAuthPresentation } from './authPresentation.js';
 import { createWebPush } from './webPush.js';
 import { reminderMoment } from './reminderModel.js';
 import { usesNativeDatePicker, showDatePicker } from './datePicker.js';
@@ -617,6 +618,7 @@ supabase.auth.onAuthStateChange((_event, session) => {
     if (id) setTimeout(() => { if (ticket === generation) loadAccount(id, ticket); }, 0);
 });
 resetScreen();
+createAuthPresentation({ root: authScreen, isRegistering: () => registering, translate: t });
 
 authSwitch.addEventListener('click', () => {
     emailConfirmation.stop();

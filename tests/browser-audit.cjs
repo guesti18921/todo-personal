@@ -251,8 +251,36 @@ const server = http.createServer((req, res) => {
   }
   const login = await browser.newContext({ viewport: { width: 320, height: 640 }, serviceWorkers: 'block', locale: 'ru-RU' });
   await login.route('**/*.supabase.co/**', route => route.fulfill({ json: { external: { google: true } } }));
-  const p = await login.newPage(); await p.goto(origin); await p.locator('#auth-google').waitFor(); await p.screenshot({ path: path.join(out, 'small-login.png'), fullPage: true });
-  assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false); await login.close();
+  const p = await login.newPage(); await p.goto(origin); await p.locator('#auth-google').waitFor();
+  await p.locator('#auth-email').fill('preview@example.test');
+  await p.locator('#auth-tab-register').click();
+  assert.equal(await p.locator('#auth-password').getAttribute('autocomplete'),'new-password');
+  assert.equal(await p.locator('#auth-tab-register').getAttribute('aria-pressed'),'true');
+  await p.locator('#auth-tab-register').click();
+  assert.equal(await p.locator('#auth-password').getAttribute('autocomplete'),'new-password','active tab does not toggle modes');
+  await p.locator('#auth-tab-login').click();
+  assert.equal(await p.locator('#auth-email').inputValue(),'preview@example.test');
+  assert.equal(await p.locator('#auth-password').getAttribute('autocomplete'),'current-password');
+  await p.locator('#auth-password-toggle').click();assert.equal(await p.locator('#auth-password').getAttribute('type'),'text');
+  await p.locator('#auth-password-toggle').click();
+  await p.locator('#auth-forgot').click();await p.locator('#auth-recovery-form').waitFor();
+  assert.equal(await p.locator('#auth-tabs').isVisible(),false);
+  await p.locator('#auth-recovery-back').click();await p.locator('#auth-tabs').waitFor();
+  await p.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
+  for (const width of [320,736,1280]) {
+   await p.setViewportSize({width,height:900});
+   assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'auth overflow '+width);
+   const violations=await p.evaluate(async()=>(await axe.run(document.querySelector('#auth-screen'),{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}})).violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})));
+   assert.deepEqual(violations,[],'auth accessibility '+width+JSON.stringify(violations));
+   await p.screenshot({path:path.join(out,'auth-'+width+'.png'),fullPage:true});
+  }
+  await p.locator('#auth-language').selectOption('en');
+  await p.waitForFunction(()=>document.querySelector('#auth-tab-register').textContent==='Create an account');
+  assert.equal(await p.locator('#auth-password').getAttribute('placeholder'),'Enter your password');
+  await p.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await p.locator('.auth-card').evaluate(e=>getComputedStyle(e).animationName),'none');
+  await p.screenshot({ path: path.join(out, 'small-login.png'), fullPage: true });
+  await login.close();
   fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify(results, null, 2)); console.log('Browser audit passed:', results.length, 'viewports, sync failures, recovery and offline restart.');
  } finally { await browser.close(); server.close(); }
 })().catch(e => { console.error(e); server.close(); process.exitCode = 1; });
