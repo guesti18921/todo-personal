@@ -444,7 +444,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.34/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.35/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -590,7 +590,7 @@ test('failed first account load hides server errors and allows switching account
  } finally { dom.window.close(); }
 });
 
-test('English login and registration preserve typed credentials and explicit language through restart', async () => {
+test('login follows system language, ignores an old manual choice and preserves typed credentials', async () => {
  let signUpOptions, signUpRedirect;
  let dom = boot([], false, async (request, options) => {
   const url=String(request?.url||request);
@@ -605,14 +605,13 @@ test('English login and registration preserve typed credentials and explicit lan
   assert.equal(d.querySelector('#auth-google').textContent,'Continue with Google');
   d.querySelector('#auth-email').value='test@example.com'; d.querySelector('#auth-password').value='good-password';
   d.querySelector('#auth-password-toggle').click();
-  const choose=value=>{const el=d.querySelector('#auth-language');el.value=value;el.dispatchEvent(new dom.window.Event('change',{bubbles:true}));};
-  choose('ru'); choose('en');
+  assert.equal(d.querySelector('#auth-language'),null);
   assert.equal(d.querySelector('#auth-password').value,'good-password'); assert.equal(d.querySelector('#auth-password').type,'text');
   assert.equal(d.querySelector('#auth-password-toggle').textContent,'Hide password');
   assert.equal(d.querySelector('#auth-email').value,'test@example.com');
   d.querySelector('#auth-form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})); await wait();
   assert.match(d.querySelector('#auth-message').textContent,/Incorrect email or password/);
-  d.querySelector('#auth-switch').click(); choose('ru'); choose('en');
+  d.querySelector('#auth-switch').click();
   assert.equal(d.querySelector('#auth-title').textContent,'Start with a fresh page');
   d.querySelector('#auth-form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})); await wait();
   assert.equal(d.querySelector('#auth-confirm').hidden,false); assert.match(d.querySelector('#auth-confirm').textContent,/Check your email/);
@@ -621,8 +620,10 @@ test('English login and registration preserve typed credentials and explicit lan
   assert.equal(d.querySelector('#auth-password').value,'');
   assert.match(d.querySelector('#auth-confirm-instructions').textContent,/any device/);
   const seed=Array.from({length:dom.window.localStorage.length},(_,i)=>{const key=dom.window.localStorage.key(i);return[key,dom.window.localStorage.getItem(key)];});
+  seed.push(['todo-personal:language',JSON.stringify({language:'en'})]);
   dom.window.close();dom=boot(seed,false,null,['ru-RU']);d=dom.window.document;
-  assert.equal(d.documentElement.lang,'en');
+  assert.equal(d.documentElement.lang,'ru');
+  assert.equal(d.querySelector('#auth-title').textContent,'С возвращением');
  } finally {dom.window.close();}
 });
 
@@ -844,7 +845,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.34');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.35');
  } finally { dom.window.close(); }
 });
 

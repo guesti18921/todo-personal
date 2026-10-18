@@ -276,9 +276,7 @@ const server = http.createServer((req, res) => {
    assert.deepEqual(violations,[],'auth accessibility '+width+JSON.stringify(violations));
    await p.screenshot({path:path.join(out,'auth-'+width+'.png'),fullPage:true});
   }
-  await p.locator('#auth-language').selectOption('en');
-  await p.waitForFunction(()=>document.querySelector('#auth-tab-register').textContent==='Create an account');
-  assert.equal(await p.locator('#auth-password').getAttribute('placeholder'),'Enter your password');
+  assert.equal(await p.locator('#auth-language').count(),0);
   await p.emulateMedia({reducedMotion:'reduce'});
   assert.equal(await p.locator('.auth-card').evaluate(e=>getComputedStyle(e).animationName),'none');
   await p.screenshot({ path: path.join(out, 'small-login.png'), fullPage: true });

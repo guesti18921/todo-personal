@@ -13,16 +13,16 @@ export function translate(text, language) {
     return english[text] ?? text.replace(pattern, key => english[key]);
 }
 
-export function createLanguagePreferences({ storage, languages = [], updateUser = null, onChange = () => {}, onStatus = () => {} }) {
+export function createLanguagePreferences({ storage, languages = [], systemWhenSignedOut = false, updateUser = null, onChange = () => {}, onStatus = () => {} }) {
     let language = detectLanguage(languages), account = null, explicitLoginChoice = false, syncing = false;
     const accountKey = id => `${LANGUAGE_KEY}:${id}`;
     const read = key => { try { return JSON.parse(storage.getItem(key)); } catch (_) { return null; } };
     const saved = read(LANGUAGE_KEY);
-    if (valid(saved?.language)) language = saved.language;
+    if (!systemWhenSignedOut && valid(saved?.language)) language = saved.language;
     function apply(next) { if (next !== language) { language = next; onChange(next); } }
     function bindUser(user, { cached = false } = {}) {
         const id = user?.id || null;
-        if (!id) { account = null; return; }
+        if (!id) { account = null; if (systemWhenSignedOut) apply(detectLanguage(languages)); return; }
         const changing = id !== account;
         account = id;
         const local = read(accountKey(id)), remote = user.user_metadata?.[LANGUAGE_METADATA];

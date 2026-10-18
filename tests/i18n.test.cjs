@@ -78,3 +78,16 @@ test('clock presentation round-trips every minute without changing stored HH:mm'
  }
  for (const invalid of ['', '24:00', '12:60', '<script>', null]) assert.equal(formatClock(invalid, 'en'), '');
 });
+test('signed-out auth uses system locale while account language survives sign-out', async () => {
+ const m=await moduleUnderTest(), disk=storage();
+ disk.setItem(m.LANGUAGE_KEY,JSON.stringify({language:'en'}));
+ const changes=[],p=m.createLanguagePreferences({storage:disk,languages:['ru-RU'],systemWhenSignedOut:true,onChange:lang=>changes.push(lang)});
+ assert.equal(p.getLanguage(),'ru');
+ p.bindUser({id:'account',user_metadata:{todo_personal_language:'en'}});
+ assert.equal(p.getLanguage(),'en');
+ p.bindUser(null);assert.equal(p.getLanguage(),'ru');
+ p.bindUser({id:'account',user_metadata:{todo_personal_language:'en'}});
+ assert.equal(p.getLanguage(),'en');
+ assert.equal(m.createLanguagePreferences({storage:disk,languages:['en-GB'],systemWhenSignedOut:true}).getLanguage(),'en');
+ assert.deepEqual(changes,['en','ru','en']);
+});

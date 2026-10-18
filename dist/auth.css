@@ -1,18 +1,18 @@
 @font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:swap;src:url(./fonts/inter-400.woff) format("woff")}
 @font-face{font-family:Inter;font-style:normal;font-weight:500;font-display:swap;src:url(./fonts/inter-500.woff) format("woff")}
 @font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;src:url(./fonts/inter-600.woff) format("woff")}
-/* Exact dark plum palette from the approved screenshot. */
+/* Approved light notebook palette with plum accents. */
 
-.auth-screen .td-one{--td-rose:#d9a5c6}
+.auth-screen .td-one{--td-rose:#69415c}
 .auth-screen .td-one .td-brand-mark{background:var(--td-green);color:var(--td-green-ink)}
 .auth-screen .td-one .td-brand-name{color:var(--td-green)}
 .auth-screen .td-one .td-g{background:none!important;color:var(--td-green)!important;-webkit-text-fill-color:var(--td-green)}
 
 
-.auth-screen .td-palette-plum{--td-green:#d9a5c6;--td-green-ink:#351c2e}
-.auth-screen .td-palette-rose{--td-green:#e4a5ba;--td-green-ink:#3c1d2a}
-.auth-screen .td-palette-graphite{--td-green:#c7c5d0;--td-green-ink:#25232b}
-.auth-screen .td-palette-blue{--td-green:#b6c5ee;--td-green-ink:#1f2b48}
+.auth-screen .td-palette-plum{--td-green:#69415c;--td-green-ink:#fffdfb}
+.auth-screen .td-palette-rose{--td-green:#9b536c;--td-green-ink:#fffdfb}
+.auth-screen .td-palette-graphite{--td-green:#36373f;--td-green-ink:#fffdfb}
+.auth-screen .td-palette-blue{--td-green:#4d608e;--td-green-ink:#fffdfb}
 .auth-screen .td-one .td-g{background:conic-gradient(#4285f4 0deg 95deg,#34a853 95deg 190deg,#fbbc05 190deg 235deg,#ea4335 235deg 300deg,#4285f4 300deg);background-clip:text;-webkit-background-clip:text;color:transparent;transform:none}
 .auth-screen .td-one .td-google:hover .td-g{transform:none}
 .auth-screen .td-one .td-primary:hover{box-shadow:0 7px 18px color-mix(in srgb,var(--td-green) 25%,transparent)}
@@ -50,7 +50,7 @@
 @media(prefers-reduced-motion:reduce){.auth-screen .td-one,.auth-screen .td-one *{animation:none!important;transition:none!important}.auth-screen .td-one .td-ripple{display:none}}
 
 
-.auth-screen{--td-bg:#211d20;--td-paper:#30272d;--td-ink:#f5e5ee;--td-muted:#c9b7c1;--td-rose:#d4a0b1;--td-rose-soft:#49303c;--td-green:#8cd2c3;--td-green-ink:#163d35;--td-line:#57404d;font-family:Inter,Arial,sans-serif;color:var(--td-ink)}
+.auth-screen{--td-bg:#f7f3ee;--td-paper:#fffdfb;--td-ink:#501f3a;--td-muted:#806c77;--td-rose:#c38d9e;--td-rose-soft:#f1e0e6;--td-green:#367f75;--td-green-ink:#ffffff;--td-line:#e5d6dc;font-family:Inter,Arial,sans-serif;color:var(--td-ink)}
 .auth-screen *{box-sizing:border-box}
 .auth-screen[hidden],.auth-screen [hidden]{display:none!important}
 .auth-screen .td-stage{min-height:790px;padding:28px 20px;display:flex;align-items:center;justify-content:center}
@@ -125,7 +125,7 @@
 .auth-screen .td-three .td-privacy{margin-top:20px}
 @media(max-width:600px){.auth-screen .td-stage{padding:20px 10px;min-height:840px;align-items:center}.auth-screen .td-one{padding:30px 22px}.auth-screen .td-two{grid-template-columns:1fr;max-width:430px}.auth-screen .td-story{padding:22px 24px;gap:18px}.auth-screen .td-story h3{font-size:25px;margin:0}.auth-screen .td-story p,.auth-screen .td-note,.auth-screen .td-story-foot{display:none}.auth-screen .td-two-main{padding:24px}.auth-screen .td-three-main{padding-left:22px;padding-right:22px}}
 
-.auth-screen{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:calc(28px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));color-scheme:dark;background:var(--td-bg);font-size:14px;line-height:1.5}
+.auth-screen{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:calc(28px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));color-scheme:light;background:var(--td-bg);font-size:14px;line-height:1.5}
 .auth-screen .auth-card__body{display:contents}
 .auth-screen #auth-title{font-size:30px;letter-spacing:-1px;line-height:1.16;margin:0 0 10px;font-weight:600;color:var(--td-ink)}
 .auth-screen form{margin:0}
@@ -135,9 +135,6 @@
 .auth-screen #auth-submit:after{content:none}
 .auth-screen #auth-submit[aria-busy=true]:after,.auth-screen #auth-recovery-send:disabled:after{content:'';width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:td-spin .75s linear infinite}
 .auth-screen .td-primary:disabled,.auth-screen #auth-google:disabled,.auth-screen .td-tabs button:disabled{cursor:wait}
-.auth-screen .auth-language{display:flex;align-items:center;gap:8px;margin:14px 0 0;color:var(--td-muted);font-size:12px}
-.auth-screen .auth-language>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
-.auth-screen .auth-language select{font:inherit;border:1px solid var(--td-line);border-radius:9px;color:var(--td-ink);background:var(--td-paper);padding:6px 10px;min-height:36px}
 .auth-screen .auth-legal{margin:0;border:0;padding:0}
 .auth-screen .auth-recovery-back{display:block;width:100%;margin-top:12px}
 .auth-screen .auth-confirm{text-align:center}
@@ -155,3 +152,50 @@
 .auth-screen .auth-cloud-check{content:"";display:block;width:13px;height:13px;background:currentColor;mask:center/contain no-repeat url("data:image/svg+xml,%3Csvg%0A%20%20class%3D%22lucide%20lucide-cloud-check%22%0A%20%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%0A%20%20width%3D%2224%22%0A%20%20height%3D%2224%22%0A%20%20viewBox%3D%220%200%2024%2024%22%0A%20%20fill%3D%22none%22%0A%20%20stroke%3D%22currentColor%22%0A%20%20stroke-width%3D%222%22%0A%20%20stroke-linecap%3D%22round%22%0A%20%20stroke-linejoin%3D%22round%22%0A%3E%0A%20%20%3Cpath%20d%3D%22m17%2015-5.5%205.5L9%2018%22%20%2F%3E%0A%20%20%3Cpath%20d%3D%22M5.516%2016.07A7%207%200%201%201%2015.71%208h1.79a4.5%204.5%200%200%201%203.501%207.327%22%20%2F%3E%0A%3C%2Fsvg%3E%0A")}
 
 .auth-screen .td-google,.auth-screen .td-primary,.auth-screen .td-eye{padding:revert}
+
+/* Fit the sign-in and registration forms to phone viewports; keep scrolling
+   available for the keyboard, validation messages and enlarged text. */
+@media(max-width:600px){
+ .auth-screen{padding:calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));justify-content:safe center}
+ .auth-screen .td-one{padding:24px 22px;border-radius:24px}
+ .auth-screen .td-one .td-brand{margin:0 0 20px}
+ .auth-screen #auth-title{font-size:27px}
+ .auth-screen .td-tabs{margin:18px 0 16px}
+ .auth-screen .td-divider{margin:15px 0}
+ .auth-screen .td-field{margin-bottom:13px}
+ .auth-screen .td-forgot-row{margin:-6px 0 14px}
+ .auth-screen .td-one .td-caption{margin-top:18px}
+ .auth-screen .td-privacy{margin-top:14px}
+}
+@media(max-width:600px) and (max-height:740px){
+ .auth-screen{padding:calc(8px + env(safe-area-inset-top)) 10px calc(8px + env(safe-area-inset-bottom))}
+ .auth-screen .td-one{padding:16px 18px;border-radius:20px}
+ .auth-screen .td-one .td-brand{margin-bottom:12px;font-size:15px}
+ .auth-screen .td-brand-mark{width:30px;height:30px;border-radius:10px;font-size:21px}
+ .auth-screen #auth-title{font-size:25px;margin-bottom:6px}
+ .auth-screen .td-sub{font-size:12px;line-height:1.4}
+ .auth-screen .td-tabs{margin:12px 0}
+ .auth-screen .td-tabs button{padding:8px 5px}
+ .auth-screen .td-google,.auth-screen .td-primary{min-height:44px}
+ .auth-screen .td-divider{margin:10px 0}
+ .auth-screen .td-field{margin-bottom:10px;font-size:12px}
+ .auth-screen .td-field>span:first-child{margin-bottom:4px}
+ .auth-screen .td-input input{min-height:44px;padding:10px 12px}
+ .auth-screen .td-input.has-eye input{padding-right:48px}
+ .auth-screen #auth-password-toggle{top:0;right:0;min-height:44px;height:44px}
+ .auth-screen .td-forgot-row{margin:-6px 0 8px}
+ .auth-screen .td-hint{margin:-4px 0 10px}
+ .auth-screen .td-one .td-caption{margin-top:12px}
+ .auth-screen .td-privacy{margin-top:8px;min-height:24px}
+}
+@media(max-width:600px) and (max-height:620px){
+ .auth-screen .td-one{padding-top:10px;padding-bottom:10px}
+ .auth-screen .td-one .td-brand{margin-bottom:8px}
+ .auth-screen #auth-title{font-size:23px;line-height:1.14}
+ .auth-screen .td-tabs{margin:8px 0}
+ .auth-screen .td-tabs button{font-size:12px}
+ .auth-screen .td-divider{margin:6px 0}
+ .auth-screen .td-input input{padding-top:9px;padding-bottom:9px}
+ .auth-screen .td-one .td-caption{margin-top:8px}
+ .auth-screen .td-privacy{margin-top:4px}
+}

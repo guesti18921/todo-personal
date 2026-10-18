@@ -320,7 +320,6 @@ const emailConfirmation = createEmailConfirmation({
 window.addEventListener('focus', () => emailConfirmation.check());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) emailConfirmation.check(); });
 
-const authLanguage = document.querySelector('#auth-language');
 function renderAuthCopy() {
     const recovering = !recoveryForm.hidden;
     authTitle.textContent = t(recovering ? 'Забыли пароль?' : registering ? 'Начнём с чистого листа' : 'С возвращением');
@@ -330,7 +329,6 @@ function renderAuthCopy() {
 }
 function renderAuthLanguage() {
     document.documentElement.lang = getLanguage();
-    authLanguage.value = getLanguage();
     document.querySelectorAll('[data-auth-text]').forEach(el => { el.textContent = t(el.dataset.authText); });
     renderAuthCopy();
     authSubmit.textContent = t(registering ? 'Создать аккаунт' : 'Войти');
@@ -342,7 +340,7 @@ function renderAuthLanguage() {
         : 'Откройте ссылку из письма, затем вернитесь и войдите.'));
 }
 const languagePreferences = createLanguagePreferences({
-    storage: localStorage, languages: navigator.languages || [navigator.language],
+    storage: localStorage, languages: navigator.languages || [navigator.language], systemWhenSignedOut: true,
     updateUser: options => supabase.auth.updateUser(options),
     onChange(language) {
         setLanguage(language);
@@ -360,7 +358,6 @@ renderAuthLanguage();
 function changeLanguage(language) {
     const before = getLanguage();
     const saved = languagePreferences.choose(language);
-    authLanguage.value = getLanguage();
     if (saved && before !== language) {
         // Clear only the obsolete auth status, preserving email/password and registration mode.
         if (!activeUser) authMessage.textContent = '';
@@ -369,7 +366,6 @@ function changeLanguage(language) {
     if (saved) setTimeout(() => languagePreferences.sync(), 0);
     return saved;
 }
-authLanguage.addEventListener('change', event => changeLanguage(event.target.value));
 window.addEventListener('online', () => languagePreferences.sync());
 window.addEventListener('focus', () => languagePreferences.sync());
 
