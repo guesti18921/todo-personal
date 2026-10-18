@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # Reviewed snapshot. Update explicitly for each new app version.
-          ref: d121ad6fde2c494bda2c7f3695e4835d91563fb2
+          ref: f62ba07519eb0a9cd1b471f27df5ff1c9b1827b6
           persist-credentials: false
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -172,3 +172,4 @@ jobs:
       - name: Remove private signing file after interruption
         if: always()
         run: rm -f "$RUNNER_TEMP/todo-personal-release.p12"
+
