@@ -5,13 +5,13 @@
 @font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;src:url(/fonts/inter-600.woff) format("woff")}</style>
 <div id="todo-auth-designs">
 <style>
-#todo-auth-designs .td-one{--td-rose:light-dark(#69415c,#d9a5c6)}
+#todo-auth-designs .td-one{--td-rose:light-dark(#d6a2c9,#d9a5c6)}
 #todo-auth-designs .td-one .td-brand-mark{background:var(--td-green);color:var(--td-green-ink)}
 #todo-auth-designs .td-one .td-brand-name{color:var(--td-green)}
 #todo-auth-designs .td-one .td-g{background:none!important;color:var(--td-green)!important;-webkit-text-fill-color:var(--td-green)}
 </style>
 <style>
-#todo-auth-designs .td-palette-plum{--td-green:light-dark(#69415c,#d9a5c6);--td-green-ink:light-dark(#fffdfb,#351c2e)}
+#todo-auth-designs .td-palette-plum{--td-green:light-dark(#d6a2c9,#d9a5c6);--td-green-ink:light-dark(#501f3a,#351c2e)}
 #todo-auth-designs .td-palette-rose{--td-green:light-dark(#9b536c,#e4a5ba);--td-green-ink:light-dark(#fffdfb,#3c1d2a)}
 #todo-auth-designs .td-palette-graphite{--td-green:light-dark(#36373f,#c7c5d0);--td-green-ink:light-dark(#fffdfb,#25232b)}
 #todo-auth-designs .td-palette-blue{--td-green:light-dark(#4d608e,#b6c5ee);--td-green-ink:light-dark(#fffdfb,#1f2b48)}
@@ -224,3 +224,9 @@
 })();
 </script>
 </div>
+<style>
+#todo-auth-designs .td-one .td-tabs:before{background:var(--td-green)}
+#todo-auth-designs .td-one .td-tabs button[aria-pressed=true],#todo-auth-designs .td-link,#todo-auth-designs .td-feedback{color:var(--td-ink)}
+#todo-auth-designs button:focus-visible,#todo-auth-designs input:focus-visible{outline-color:var(--td-ink)}
+#todo-auth-designs .td-one .td-input input:focus{border-color:var(--td-ink)}
+</style>

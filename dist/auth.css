@@ -3,13 +3,13 @@
 @font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;src:url(./fonts/inter-600.woff) format("woff")}
 /* Approved light notebook palette with plum accents. */
 
-.auth-screen .td-one{--td-rose:#69415c}
+.auth-screen .td-one{--td-rose:#d6a2c9}
 .auth-screen .td-one .td-brand-mark{background:var(--td-green);color:var(--td-green-ink)}
 .auth-screen .td-one .td-brand-name{color:var(--td-green)}
 .auth-screen .td-one .td-g{background:none!important;color:var(--td-green)!important;-webkit-text-fill-color:var(--td-green)}
 
 
-.auth-screen .td-palette-plum{--td-green:#69415c;--td-green-ink:#fffdfb}
+.auth-screen .td-palette-plum{--td-green:#d6a2c9;--td-green-ink:#501f3a}
 .auth-screen .td-palette-rose{--td-green:#9b536c;--td-green-ink:#fffdfb}
 .auth-screen .td-palette-graphite{--td-green:#36373f;--td-green-ink:#fffdfb}
 .auth-screen .td-palette-blue{--td-green:#4d608e;--td-green-ink:#fffdfb}
@@ -199,3 +199,9 @@
  .auth-screen .td-one .td-caption{margin-top:8px}
  .auth-screen .td-privacy{margin-top:4px}
 }
+
+/* Exact user accent; dark text keeps light controls readable. */
+.auth-screen .td-one .td-tabs:before{background:var(--td-green)}
+.auth-screen .td-one .td-tabs button[aria-pressed=true],.auth-screen .td-link,.auth-screen .td-feedback{color:var(--td-ink)}
+.auth-screen button:focus-visible,.auth-screen input:focus-visible{outline-color:var(--td-ink)}
+.auth-screen .td-one .td-input input:focus{border-color:var(--td-ink)}
