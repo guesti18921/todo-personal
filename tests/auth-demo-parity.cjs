@@ -40,12 +40,23 @@ module.exports = async function verifyAuthDemo(browser, origin, output) {
    await phone.addInitScript(()=>localStorage.setItem('todo-personal:language',JSON.stringify({language:navigator.language.startsWith('ru')?'en':'ru'})));
    const p=await phone.newPage();
    try {
-    for(const [width,height] of [[320,568],[320,640],[360,640],[360,800],[390,844],[412,915]]) {
+    for(const [width,height] of [[320,568],[320,640],[360,640],[360,800],[390,844],[412,915],[736,900]]) {
      await p.setViewportSize({width,height});await p.goto(origin);await p.locator('#auth-google').waitFor();await p.evaluate(()=>document.fonts.ready);
      assert.equal(await p.locator('#auth-language').count(),0);
      assert.equal(await p.locator('html').getAttribute('lang'),locale.startsWith('ru')?'ru':'en','system language overrides obsolete login choice');
      for(const mode of ['login','signup','recovery']) {
       if(mode==='signup') await p.locator('#auth-tab-register').click();
+      if(mode!=='recovery') {
+       const eye=await p.locator('#auth-password-toggle').evaluate(button=>{
+        const input=document.querySelector('#auth-password').getBoundingClientRect(),b=button.getBoundingClientRect(),icon=getComputedStyle(button,'::before');
+        const matrix=new DOMMatrix(icon.transform);
+        return {inputY:input.y+input.height/2,buttonY:b.y+b.height/2,iconX:b.x+parseFloat(icon.left)+matrix.m41+parseFloat(icon.width)/2,iconY:b.y+parseFloat(icon.top)+matrix.m42+parseFloat(icon.height)/2,buttonX:b.x+b.width/2};
+       });
+       assert.ok(Math.abs(eye.inputY-eye.buttonY)<.5,'eye control centered on input');
+       assert.ok(Math.abs(eye.iconY-eye.inputY)<.5,'eye icon vertically centered');
+       assert.ok(Math.abs(eye.iconX-eye.buttonX)<.5,'eye icon horizontally centered in control');
+      }
+
       if(mode==='recovery') {await p.locator('#auth-tab-login').click();await p.locator('#auth-forgot').click();}
       const size=await p.evaluate(()=>({w:innerWidth,h:innerHeight,sw:document.documentElement.scrollWidth,sh:document.documentElement.scrollHeight}));
       assert.ok(size.sw<=width+1,'phone horizontal overflow '+JSON.stringify({locale,mode,...size}));
@@ -55,7 +66,7 @@ module.exports = async function verifyAuthDemo(browser, origin, output) {
     }
    } finally {await phone.close();}
   }
-  console.log('Phone auth fits 6 portrait viewports in RU/EN, login, signup and recovery; system language ignores old manual choice.');
+  console.log('Auth fits 6 phone viewports and a desktop viewport in RU/EN, login, signup and recovery; system language ignores old manual choice.');
   console.log('Approved light plum desktop demo parity passed: text, typography, colors and geometry at 736px, login and signup.');
  } finally {await context.close();}
 };
