@@ -444,7 +444,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.39/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.40/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -595,7 +595,7 @@ test('login follows system language, ignores an old manual choice and preserves 
  let dom = boot([], false, async (request, options) => {
   const url=String(request?.url||request);
   if(url.includes('/auth/v1/settings')) return new Response(JSON.stringify({external:{google:true}}));
-  if(url.includes('/auth/v1/signup')) { signUpOptions=JSON.parse(options.body); signUpRedirect=new URL(url).searchParams.get('redirect_to'); return new Response(JSON.stringify({user:{id,email:'test@example.com',identities:[]},session:null}),{headers:{'Content-Type':'application/json'}}); }
+  if(url.includes('/auth/v1/signup')) { signUpOptions=JSON.parse(options.body); signUpRedirect=new URL(url).searchParams.get('redirect_to'); return new Response(JSON.stringify({user:{id,email:'test@example.com',identities:[{provider:'email'}]},session:null}),{headers:{'Content-Type':'application/json'}}); }
   if(url.includes('/auth/v1/token')) return new Response(JSON.stringify({error_code:'invalid_credentials',msg:'Invalid login credentials'}),{status:400,headers:{'Content-Type':'application/json'}});
   throw Error('Unexpected request');
  }, ['en-RU']);
@@ -850,7 +850,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.39');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.40');
  } finally { dom.window.close(); }
 });
 
@@ -1590,11 +1590,14 @@ test('duplicate signup sends once, masked repeat signup never claims delivery or
   for(let i=0;i<2;i++)d.querySelector('#auth-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
   await wait();assert.equal(signups,1);release();await wait();await wait();
   assert.equal(d.querySelector('#auth-confirm').hidden,false);
-  assert.match(d.querySelector('#auth-confirm-instructions').textContent,/уже подтверждён/);
+  assert.equal(d.querySelector('#auth-confirm-title').textContent,'Аккаунт уже существует');
+  assert.match(d.querySelector('#auth-confirm-instructions').textContent,/не заменяет пароль/);
+  assert.equal(d.querySelector('#auth-confirm-back').textContent,'Войти');
+  assert.equal(d.querySelector('#auth-existing-recovery').hidden,false);
   assert.equal(d.querySelector('#auth-password').value,'');
   assert.equal(d.querySelector('.auth-card__intro').hidden,true);
   w.dispatchEvent(new w.Event('focus'));await wait();assert.equal(tokens,0);
   assert.equal(JSON.stringify(w.localStorage).includes('fixture-secret-password'),false);
-  d.querySelector('#auth-confirm-back').click();await wait();assert.equal(d.querySelector('#auth-form').hidden,false);assert.equal(d.querySelector('.auth-card__intro').hidden,false);
+  d.querySelector('#auth-existing-recovery').click();await wait();assert.equal(d.querySelector('#auth-recovery-form').hidden,false);assert.equal(d.querySelector('#auth-recovery-email').value,'test@example.com');assert.equal(d.querySelector('#auth-confirm').hidden,true);
  }finally{release();dom.window.close();}
 });

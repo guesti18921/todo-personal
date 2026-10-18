@@ -35,11 +35,12 @@
                     <button class="td-link auth-recovery-back" id="auth-recovery-back" type="button" data-auth-text="Вернуться к входу">Вернуться к входу</button>
                 </form>
                 <div class="auth-confirm" id="auth-confirm" hidden>
-                    <h1 id="auth-confirm-title" tabindex="-1" data-auth-text="Проверьте почту">Проверьте почту</h1>
+                    <h1 id="auth-confirm-title" tabindex="-1">Проверьте почту</h1>
                     <p id="auth-confirm-lead"></p>
                     <p class="auth-confirm__email" id="auth-confirm-email"></p>
                     <p id="auth-confirm-instructions">Откройте ссылку из письма, затем вернитесь и войдите.</p>
-                    <button class="td-link" data-auth-text="Вернуться к входу" id="auth-confirm-back" type="button">Вернуться к входу</button>
+                    <button class="td-link" id="auth-confirm-back" type="button">Вернуться к входу</button>
+                    <button class="td-link" id="auth-existing-recovery" type="button" hidden>Восстановить пароль</button>
                 </div>
                 <p class="td-feedback" id="auth-message" role="status" aria-live="polite"></p>
                 <div class="td-caption"><span class="auth-cloud-check" aria-hidden="true"></span><span data-auth-text="Один аккаунт для всех устройств">Один аккаунт для всех устройств</span></div>

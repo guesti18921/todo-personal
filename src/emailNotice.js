@@ -1,6 +1,10 @@
 // Copy shared by signed-out and in-notebook email receipt screens.
 export function emailNoticeCopy(kind) {
-    return kind === 'recovery' ? {
+    return kind === 'existing' ? {
+        title: 'Аккаунт уже существует',
+        lead: 'Эта почта уже используется для входа:',
+        instructions: 'Войдите с прежним паролем или восстановите доступ. Пароль, введённый при повторной регистрации, не заменяет пароль аккаунта.'
+    } : kind === 'recovery' ? {
         lead: 'Запрос на восстановление пароля для адреса:',
         instructions: 'Если аккаунт с этой почтой существует, письмо со ссылкой для смены пароля будет отправлено. Проверьте входящие и спам. Ссылку можно открыть на любом устройстве.'
     } : kind === 'unconfirmed' ? {

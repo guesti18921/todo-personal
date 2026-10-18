@@ -18,14 +18,14 @@ module.exports=async function auditEmailNotices(browser,origin,out,{seed,cacheKe
   await context.route('**/*.supabase.co/**',route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/settings'))return route.fulfill({json:{external:{google:true}}});
-   if(path.endsWith('/signup')){sent++;return route.fulfill({json:{user:{id:'notice-fixture',identities:mode==='masked'?[]:[{provider:'email'}]},session:null}})}
+   if(path.endsWith('/signup')){sent++;if(mode==='existing-error')return route.fulfill({status:422,json:{error_code:'user_already_exists',msg:'User already registered'}});return route.fulfill({json:{user:{id:'notice-fixture',identities:mode==='masked'?[]:[{provider:'email'}]},session:null}})}
    if(path.endsWith('/recover')){sent++;return route.fulfill(mode==='error'?{status:503,json:{error_code:'unexpected_failure',msg:'Fixture failure'}}:{json:{}})}
    if(path.endsWith('/token'))return route.fulfill({status:400,json:{error_code:'email_not_confirmed',msg:'Email not confirmed'}});
    return route.abort();
   });
   const p=await context.newPage();
   try{
-   for(mode of ['recovery','signup','masked','unconfirmed']){
+   for(mode of ['recovery','signup','masked','existing-error','unconfirmed']){
     await p.goto(origin);await p.locator('#auth-google').waitFor();await p.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
     const email='a'.repeat(64)+'@'+'b'.repeat(50)+'.example.test';
     await p.locator('#auth-email').fill(email);
@@ -44,7 +44,17 @@ module.exports=async function auditEmailNotices(browser,origin,out,{seed,cacheKe
     assert.equal(await p.locator('#auth-message').textContent(),'');
     assert.equal(await p.locator('#auth-password').inputValue(),'');
     await fit(p,width,height,locale+' '+mode+' '+width);
-    if(mode==='masked')assert.match(await p.locator('#auth-confirm-instructions').textContent(),locale==='ru-RU'?/уже подтверждён/:/already confirmed/);
+    if(['masked','existing-error'].includes(mode)){
+     assert.equal(await p.locator('#auth-confirm-title').textContent(),locale==='ru-RU'?'Аккаунт уже существует':'Account already exists');
+     assert.equal(await p.locator('#auth-confirm-back').textContent(),locale==='ru-RU'?'Войти':'Sign in');
+     assert.equal(await p.locator('#auth-existing-recovery').isVisible(),true);
+     assert.doesNotMatch(await p.locator('#auth-confirm-instructions').textContent(),/письмо|email.*sent/i);
+     await p.locator('#auth-existing-recovery').click();await p.locator('#auth-recovery-form').waitFor();
+     assert.equal(await p.locator('#auth-recovery-email').inputValue(),email);
+     await p.locator('#auth-recovery-back').click();
+     if(mode==='masked'){checked++;continue;}
+     await p.locator('#auth-tab-register').click();await p.locator('#auth-password').fill('fixture-password-123');await p.locator('#auth-submit').click();await p.locator('#auth-confirm').waitFor();
+    }
     await p.screenshot({path:out+'/email-'+locale+'-'+width+'-'+mode+'.png',fullPage:true});
     await p.locator('#auth-confirm-back').click();await p.locator('#auth-submit').waitFor();
     assert.equal(await p.locator('.auth-card__intro').isVisible(),true);

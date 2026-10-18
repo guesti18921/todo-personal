@@ -221,3 +221,5 @@
 /* Center the control on the input and its icon inside the touch target. */
 .auth-screen #auth-password-toggle{top:50%;right:3px;width:44px;height:44px;min-height:44px;padding:0;transform:translateY(-50%);line-height:0}
 .auth-screen #auth-password-toggle:before{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+
+.auth-screen #auth-existing-recovery{display:block;width:100%;margin-top:8px}

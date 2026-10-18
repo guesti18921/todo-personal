@@ -324,6 +324,13 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) emai
 
 function renderEmailNotice() {
     const copy = emailNoticeCopy(emailNoticeKind);
+    const existing = emailNoticeKind === 'existing';
+    document.querySelector('#auth-confirm-title').textContent = t(copy.title || 'Проверьте почту');
+    authConfirmBack.textContent = t(existing ? 'Войти' : 'Вернуться к входу');
+    authConfirmBack.classList.toggle('td-primary', existing);
+    authConfirmBack.classList.toggle('td-link', !existing);
+    document.querySelector('#auth-existing-recovery').hidden = !existing;
+    document.querySelector('#auth-existing-recovery').textContent = t('Восстановить пароль');
     document.querySelector('#auth-confirm-lead').textContent = t(copy.lead);
     document.querySelector('#auth-confirm-instructions').textContent = t(
         emailNoticeKind !== 'recovery' && confirmationMessages[confirmationStatus]
@@ -663,7 +670,14 @@ authSwitch.addEventListener('click', () => {
     authForgot.hidden = registering;
 });
 
+document.querySelector('#auth-existing-recovery').addEventListener('click', () => {
+    const email = authConfirmEmail.textContent;
+    authConfirmBack.click();
+    document.querySelector('#auth-email').value = email;
+    authForgot.click();
+});
 authConfirmBack.addEventListener('click', () => {
+    document.querySelector('#auth-email').value = authConfirmEmail.textContent;
     emailConfirmation.stop();
     authConfirm.hidden = true;
     recoveryForm.hidden = true;
@@ -697,14 +711,17 @@ authForm.addEventListener('submit', async event => {
             ? await supabase.auth.signUp({ email, password, options: { data: { todo_personal_language: getLanguage() }, emailRedirectTo: EMAIL_CONFIRMATION_URL } })
             : await supabase.auth.signInWithPassword({ email, password });
         if (activeUser) return;
-        if (error && error.code !== 'email_not_confirmed' && error.message !== 'Email not confirmed') authMessage.textContent = t(authErrorMessage(error));
-        else if ((signUp && !error && !data.session) || error?.code === 'email_not_confirmed' || error?.message === 'Email not confirmed') {
-    showEmailNotice(signUp ? 'confirmation' : 'unconfirmed', email);
-    // Supabase deliberately masks sign-up attempts for already confirmed users.
-    // A successful response in that case does not mean a new email was sent.
-    const maskedSignup = signUp && Array.isArray(data?.user?.identities) && data.user.identities.length === 0;
-    if (!maskedSignup) emailConfirmation.start(email, password);
-}
+        // Use only the sign-up response; never query users from the browser.
+        const existingSignup = signUp && (
+            (Array.isArray(data?.user?.identities) && data.user.identities.length === 0)
+            || ['user_already_exists', 'email_exists'].includes(error?.code)
+            || error?.message === 'User already registered');
+        if (existingSignup) showEmailNotice('existing', email);
+        else if (error && error.code !== 'email_not_confirmed' && error.message !== 'Email not confirmed') authMessage.textContent = t(authErrorMessage(error));
+        else if ((signUp && !error && !data?.session) || error?.code === 'email_not_confirmed' || error?.message === 'Email not confirmed') {
+            showEmailNotice(signUp ? 'confirmation' : 'unconfirmed', email);
+            emailConfirmation.start(email, password);
+        }
     } catch (_) { authMessage.textContent = t('Нет соединения. Проверьте интернет и попробуйте снова.'); }
     finally { authGoogle.disabled = authSubmit.disabled = authSwitch.disabled = false; }
 });
