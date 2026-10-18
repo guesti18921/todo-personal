@@ -10,6 +10,11 @@ export function createAuthPresentation({ root, isRegistering, translate }) {
     function sync() {
         const registering = Boolean(isRegistering());
         const recovering = !recovery.hidden;
+        const notice = !find('#auth-confirm').hidden;
+        card.classList.toggle('auth-card--notice', notice);
+        const intro = find('.auth-card__intro');
+        if (intro.hidden !== notice) intro.hidden = notice;
+        attribute(root, 'aria-labelledby', notice ? 'auth-confirm-title' : 'auth-title');
         const hideTabs = toggle.hidden && !recovering;
         if (tabs.hidden !== hideTabs) tabs.hidden = hideTabs;
         if (login.disabled !== toggle.disabled) login.disabled = toggle.disabled;

@@ -1,3 +1,4 @@
+import { emailNoticeCopy } from './emailNotice.js';
 import { createAuthPresentation } from './authPresentation.js';
 import { createWebPush } from './webPush.js';
 import { reminderMoment } from './reminderModel.js';
@@ -301,6 +302,7 @@ const confirmationAuth = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, {
     global: { fetch: boundedFetch }
 });
 let confirmationStatus = null;
+let emailNoticeKind = 'confirmation';
 const confirmationMessages = {
     waiting: 'Ожидаем подтверждение почты. Откройте письмо на любом устройстве. После подтверждения вход здесь завершится автоматически в течение 30 секунд.',
     offline: 'Нет соединения. Продолжим проверку подтверждения, когда появится интернет.',
@@ -314,12 +316,33 @@ const emailConfirmation = createEmailConfirmation({
     visible: () => !document.hidden && !authConfirm.hidden,
     onStatus(status) {
         confirmationStatus = status;
-        if (confirmationMessages[status]) document.querySelector('#auth-confirm-instructions').textContent = t(confirmationMessages[status]);
+        if (emailNoticeKind !== 'recovery' && confirmationMessages[status]) document.querySelector('#auth-confirm-instructions').textContent = t(confirmationMessages[status]);
     }
 });
 window.addEventListener('focus', () => emailConfirmation.check());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) emailConfirmation.check(); });
 
+function renderEmailNotice() {
+    const copy = emailNoticeCopy(emailNoticeKind);
+    document.querySelector('#auth-confirm-lead').textContent = t(copy.lead);
+    document.querySelector('#auth-confirm-instructions').textContent = t(
+        emailNoticeKind !== 'recovery' && confirmationMessages[confirmationStatus]
+            ? confirmationMessages[confirmationStatus] : copy.instructions);
+}
+function showEmailNotice(kind, email) {
+    emailConfirmation.stop();
+    emailNoticeKind = kind;
+    confirmationStatus = null;
+    recoveryForm.hidden = true;
+    authForm.hidden = authSwitch.hidden = authForgot.hidden = authTitle.hidden = true;
+    authConfirmEmail.textContent = email;
+    authConfirm.hidden = false;
+    authPassword.value = '';
+    authMessage.textContent = '';
+    renderEmailNotice();
+    updateGoogleVisibility();
+    document.querySelector('#auth-confirm-title').focus();
+}
 function renderAuthCopy() {
     const recovering = !recoveryForm.hidden;
     authTitle.textContent = t(recovering ? 'Забыли пароль?' : registering ? 'Начнём с чистого листа' : 'С возвращением');
@@ -335,9 +358,7 @@ function renderAuthLanguage() {
     authSwitch.textContent = t(registering ? 'Уже есть аккаунт? Войти' : 'Создать аккаунт');
     document.querySelectorAll('.auth-retry').forEach(el => { if (el.dataset.authText) el.textContent = t(el.dataset.authText); });
     passwordToggle.textContent = t(authPassword.type === 'password' ? 'Показать пароль' : 'Скрыть пароль');
-    document.querySelector('#auth-confirm-instructions').textContent = t(confirmationMessages[confirmationStatus] || (isNativeApp()
-        ? 'Откройте ссылку из письма: после подтверждения вы вернётесь в приложение.'
-        : 'Откройте ссылку из письма, затем вернитесь и войдите.'));
+    renderEmailNotice();
 }
 const languagePreferences = createLanguagePreferences({
     storage: localStorage, languages: navigator.languages || [navigator.language], systemWhenSignedOut: true,
@@ -398,17 +419,21 @@ recoveryBack.addEventListener('click', () => {
 });
 recoveryForm.addEventListener('submit', async event => {
     event.preventDefault();
-    if (recoveryRequestBusy) return;
+    if (recoveryRequestBusy || recoveryForm.hidden) return;
     recoveryRequestBusy = true;
     recoverySend.disabled = recoveryBack.disabled = recoveryEmail.disabled = true;
     authMessage.textContent = t('Отправляем письмо…');
     try {
         const { error } = await confirmationAuth.auth.resetPasswordForEmail(recoveryEmail.value.trim(), { redirectTo: PASSWORD_RESET_URL });
-        authMessage.textContent = error
-            ? t(['over_email_send_rate_limit', 'over_request_rate_limit'].includes(error.code)
-                ? 'Слишком много писем. Подождите немного и повторите попытку.' : 'Не удалось отправить письмо. Проверьте интернет и попробуйте снова.')
-            : t('Если аккаунт с этой почтой существует, письмо для смены пароля будет отправлено. Проверьте входящие и спам. Ссылку можно открыть на любом устройстве.');
-    } catch (_) { authMessage.textContent = t('Не удалось отправить письмо. Проверьте интернет и попробуйте снова.'); }
+        // An OAuth return can finish while this request is pending.
+        if (activeUser || recoveryForm.hidden) return;
+        if (error) authMessage.textContent = t(['over_email_send_rate_limit', 'over_request_rate_limit'].includes(error.code)
+            ? 'Слишком много писем. Подождите немного и повторите попытку.' : 'Не удалось отправить письмо. Проверьте интернет и попробуйте снова.');
+        else {
+            document.querySelector('#auth-email').value = recoveryEmail.value.trim();
+            showEmailNotice('recovery', recoveryEmail.value.trim());
+        }
+    } catch (_) { if (!activeUser && !recoveryForm.hidden) authMessage.textContent = t('Не удалось отправить письмо. Проверьте интернет и попробуйте снова.'); }
     finally { recoveryRequestBusy = false; recoverySend.disabled = recoveryBack.disabled = recoveryEmail.disabled = false; }
 });
 async function refreshGoogleProvider() {
@@ -641,6 +666,9 @@ authSwitch.addEventListener('click', () => {
 authConfirmBack.addEventListener('click', () => {
     emailConfirmation.stop();
     authConfirm.hidden = true;
+    recoveryForm.hidden = true;
+    recoveryForm.reset();
+    confirmationStatus = null;
     authForm.hidden = false;
     authSwitch.hidden = false;
     updateGoogleVisibility();
@@ -658,6 +686,7 @@ authConfirmBack.addEventListener('click', () => {
 });
 authForm.addEventListener('submit', async event => {
     event.preventDefault();
+    if (authSubmit.disabled || authForm.hidden) return;
     const email = document.querySelector('#auth-email').value.trim();
     const password = authPassword.value;
     const signUp = registering;
@@ -667,21 +696,14 @@ authForm.addEventListener('submit', async event => {
         const { data, error } = signUp
             ? await supabase.auth.signUp({ email, password, options: { data: { todo_personal_language: getLanguage() }, emailRedirectTo: EMAIL_CONFIRMATION_URL } })
             : await supabase.auth.signInWithPassword({ email, password });
+        if (activeUser) return;
         if (error && error.code !== 'email_not_confirmed' && error.message !== 'Email not confirmed') authMessage.textContent = t(authErrorMessage(error));
         else if ((signUp && !error && !data.session) || error?.code === 'email_not_confirmed' || error?.message === 'Email not confirmed') {
-    authForm.hidden = true;
-    authSwitch.hidden = true;
-    authForgot.hidden = true;
-    updateGoogleVisibility();
-    authTitle.hidden = true;
-    authMessage.textContent = '';
-    authConfirmEmail.textContent = email;
-    document.querySelector('#auth-confirm-instructions').textContent = isNativeApp()
-        ? t('Откройте ссылку из письма: после подтверждения вы вернётесь в приложение.')
-        : t('Откройте ссылку из письма, затем вернитесь и войдите.');
-    authConfirm.hidden = false;
-    authPassword.value = '';
-    emailConfirmation.start(email, password);
+    showEmailNotice(signUp ? 'confirmation' : 'unconfirmed', email);
+    // Supabase deliberately masks sign-up attempts for already confirmed users.
+    // A successful response in that case does not mean a new email was sent.
+    const maskedSignup = signUp && Array.isArray(data?.user?.identities) && data.user.identities.length === 0;
+    if (!maskedSignup) emailConfirmation.start(email, password);
 }
     } catch (_) { authMessage.textContent = t('Нет соединения. Проверьте интернет и попробуйте снова.'); }
     finally { authGoogle.disabled = authSubmit.disabled = authSwitch.disabled = false; }

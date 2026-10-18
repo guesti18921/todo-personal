@@ -205,3 +205,16 @@
 .auth-screen .td-one .td-tabs button[aria-pressed=true],.auth-screen .td-link,.auth-screen .td-feedback{color:var(--td-ink)}
 .auth-screen button:focus-visible,.auth-screen input:focus-visible{outline-color:var(--td-ink)}
 .auth-screen .td-one .td-input input:focus{border-color:var(--td-ink)}
+
+/* Center each email receipt as a separate screen, without the form subtitle. */
+.auth-screen .auth-card--notice .td-brand{margin-bottom:24px}
+.auth-screen .auth-confirm h1{color:var(--td-ink);font-size:28px;line-height:1.2;letter-spacing:-.7px;font-weight:600;margin:0 0 18px}
+.auth-screen .auth-confirm p{margin:0 0 16px;line-height:1.5}
+.auth-screen .auth-confirm .auth-confirm__email{margin:0 0 20px;overflow-wrap:anywhere;font-weight:600}
+.auth-screen .auth-confirm button{margin-top:2px;min-height:44px}
+.auth-screen .auth-confirm h1:focus{outline:none}
+@media(max-width:600px) and (max-height:740px){
+ .auth-screen .auth-card--notice .td-brand{margin-bottom:18px}
+ .auth-screen .auth-confirm h1{font-size:25px;margin-bottom:16px}
+ .auth-screen .auth-confirm p{font-size:13px;margin-bottom:14px}
+}

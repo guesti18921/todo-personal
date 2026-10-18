@@ -305,7 +305,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.37": "TO-DO Personal · version 0.4.37",
+  "TO-DO Personal · версия 0.4.38": "TO-DO Personal · version 0.4.38",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",
@@ -456,4 +456,10 @@ export default {
   "Новый пароль — минимум 8 символов": "New password — at least 8 characters",
   "Повторите пароль": "Repeat password",
   "Сохранить пароль": "Save password",
+  "Запрос на восстановление пароля для адреса:": "Password reset requested for:",
+  "Почта для подтверждения аккаунта:": "Account confirmation email address:",
+  "Подтвердите почту для аккаунта:": "Confirm the email for this account:",
+  "Откройте ссылку из письма с подтверждением. Проверьте входящие и спам. Ссылку можно открыть на любом устройстве.": "Open the confirmation link in your email. Check your inbox and spam. You can open the link on any device.",
+  "Если для этого адреса требуется подтверждение, письмо со ссылкой будет отправлено. Проверьте входящие и спам. Если аккаунт уже подтверждён, вернитесь к входу. Ссылку можно открыть на любом устройстве.": "If this address needs confirmation, an email with a link will be sent. Check your inbox and spam. If your account is already confirmed, return to sign in. You can open the link on any device.",
+  "Если аккаунт с этой почтой существует, письмо со ссылкой для смены пароля будет отправлено. Проверьте входящие и спам. Ссылку можно открыть на любом устройстве.": "If an account with this email exists, a password reset link will be sent. Check your inbox and spam. You can open the link on any device."
 };

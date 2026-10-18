@@ -183,3 +183,10 @@
 [data-reauth-form] > button { margin-top: 16px; }
 
 .mn-time-dialog { position: fixed; inset: 0; margin: auto; box-shadow: 0 12px 40px #30142233; }
+
+/* Email requests keep the active notebook, but open a dedicated receipt. */
+.mobile-notebook.mn-mail-open{padding-bottom:0}
+.mn-mail-open>.mn-header{display:none}
+.mn-mail-open>.mn-main{padding:0}
+.mn-mail-open .mn-mail-notice{width:100%}
+.mn-mail-open>:not(.mn-main){display:none!important}

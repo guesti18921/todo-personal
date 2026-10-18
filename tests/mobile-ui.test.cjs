@@ -444,7 +444,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.37/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.38/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -800,9 +800,14 @@ test('forgot password sends only email and dedicated redirect, without notebook 
   assert.equal(requests.length, 1); assert.equal(requests[0].body.email, 'test@example.com');
   assert.equal(requests[0].body.password, undefined);
   assert.equal(new URL(requests[0].url).searchParams.get('redirect_to'), 'https://guesti18921.github.io/todo-personal/reset-password.html');
-  assert.match(d.querySelector('#auth-message').textContent, /Если аккаунт/);
+  assert.equal(d.querySelector('#auth-confirm').hidden,false);
+  assert.match(d.querySelector('#auth-confirm-instructions').textContent, /Если аккаунт/);
+  assert.equal(d.querySelector('#auth-recovery-form').hidden,true);
+  assert.equal(d.querySelector('.auth-card__intro').hidden,true);
+  assert.equal(d.querySelector('#auth-confirm-email').textContent,'test@example.com');
+  assert.equal(d.activeElement.id,'auth-confirm-title');
   assert.equal(d.querySelector('#todo-app').hidden, true);
-  d.querySelector('#auth-recovery-back').click(); assert.equal(d.querySelector('#auth-form').hidden, false);
+  d.querySelector('#auth-confirm-back').click(); assert.equal(d.querySelector('#auth-form').hidden, false);
   d.querySelector('#auth-switch').click(); assert.equal(d.querySelector('#auth-forgot').hidden, true);
   assert.equal(d.querySelector('#auth-password').minLength, 8);
  } finally { dom.window.close(); }
@@ -845,7 +850,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.37');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.38');
  } finally { dom.window.close(); }
 });
 
@@ -1287,7 +1292,7 @@ test('Google-only reauthentication shows Google without demanding an uncreated p
 test('password recovery in an open notebook uses current email and preserves pending edits on success and failure',async()=>{
  const f=listFixture();let fail=false,requests=[];
  const fetcher=async(url,opts={})=>{const address=String(url?.url||url);if(address.includes('/auth/v1/recover')){requests.push(JSON.parse(opts.body));return new Response(JSON.stringify(fail?{message:'offline'}:{}),{status:fail?503:200,headers:{'Content-Type':'application/json'}});}throw new TypeError('offline');};
- const dom=boot(f.seed,false,fetcher);try{await ready(dom);const d=dom.window.document,w=dom.window;d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();const el=d.querySelector('#mn-details');el.value='Preserve pending edits';el.dispatchEvent(new w.Event('input',{bubbles:true}));d.querySelector('[data-save]').click();const before=w.localStorage.getItem(cacheKey);d.querySelector('[data-view="settings"]').click();d.querySelector('[data-reauthenticate]').click();d.querySelector('[data-reauth-recovery]').click();await wait();await wait();assert.equal(requests[0].email,'test@example.com');assert.match(d.querySelector('[data-reauth-message]').textContent,/Письмо/);assert.equal(w.localStorage.getItem(cacheKey),before);fail=true;d.querySelector('[data-reauth-recovery]').click();await wait();await wait();assert.match(d.querySelector('[data-reauth-form] [role="alert"]').textContent,/Не удалось/);assert.equal(w.localStorage.getItem(cacheKey),before);assert.ok(d.querySelector('#mn-reauth-password'));}finally{dom.window.close();}
+ const dom=boot(f.seed,false,fetcher);try{await ready(dom);const d=dom.window.document,w=dom.window;d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();const el=d.querySelector('#mn-details');el.value='Preserve pending edits';el.dispatchEvent(new w.Event('input',{bubbles:true}));d.querySelector('[data-save]').click();const before=w.localStorage.getItem(cacheKey);d.querySelector('[data-view="settings"]').click();d.querySelector('[data-reauthenticate]').click();d.querySelector('[data-reauth-recovery]').click();await wait();await wait();assert.equal(requests[0].email,'test@example.com');assert.ok(d.querySelector('.mn-mail-notice'));assert.match(d.querySelector('.mn-mail-notice').textContent,/Если аккаунт/);assert.equal(d.querySelector('[data-reauth-screen]'),null);assert.equal(w.localStorage.getItem(cacheKey),before);d.querySelector('[data-mail-back]').click();fail=true;d.querySelector('[data-reauth-recovery]').click();await wait();await wait();assert.match(d.querySelector('[data-reauth-form] [role="alert"]').textContent,/Не удалось/);assert.equal(w.localStorage.getItem(cacheKey),before);assert.ok(d.querySelector('#mn-reauth-password'));}finally{dom.window.close();}
 });
 
 test('Google OAuth return rejects a different user before replacing cached account or pending records',async()=>{
@@ -1567,4 +1572,29 @@ test('push click waits for a newer cloud entry instead of dropping the target fr
  const f=listFixture(),cached=JSON.parse(f.seed[1][1]),cloud=JSON.parse(JSON.stringify(cached.state));const now=new Date();now.setSeconds(0,0);const date=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-'),time=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');cloud.notes[0].reminder={mode:'custom',date,time};cached.state.notes=[];f.seed[1][1]=JSON.stringify(cached);const session=JSON.parse(f.seed[0][1]);let release;const gate=new Promise(r=>release=r);
  const url=new URL('https://test.local/');url.searchParams.set('push-owner',id);url.searchParams.set('push-entry','n');url.searchParams.set('push-at',now.toISOString());const dom=new JSDOM(html,{url:url.href,runScripts:'outside-only',virtualConsole}),w=dom.window;Object.defineProperty(w.document,'hidden',{value:false});Object.defineProperty(w.navigator,'languages',{value:['en-US']});Object.defineProperty(w,'crypto',{value:webcrypto});Object.defineProperty(w.navigator,'serviceWorker',{value:{register:async()=>{throw Error('not available in test')},addEventListener(){}}});Object.assign(w,{TextEncoder,TextDecoder,Request,Response,Headers,fetch:async(address,options={})=>{const u=new URL(String(address?.url||address));if(u.pathname.includes('/rest/v1/notebooks')){if(u.searchParams.get('select')==='revision')return new Response(JSON.stringify({revision:1}));await gate;return new Response(JSON.stringify({...cloud,revision:1,user_id:id}));}if(u.pathname.endsWith('/user'))return new Response(JSON.stringify(session.user));if(u.pathname.endsWith('/settings'))return new Response(JSON.stringify({external:{google:false}}));throw Error('offline')}});for(const[k,v]of f.seed)w.localStorage.setItem(k,v);
  try{w.eval(bundle);await ready(dom);await new Promise(r=>setTimeout(r,1200));release();await new Promise(r=>setTimeout(r,1500));assert.equal(w.document.querySelector('#mn-text')?.value,cloud.notes[0].title||'');assert.ok(w.document.querySelector('[data-save]'),'notification target editor opens after cloud sync');assert.equal(w.location.search,'');}finally{release();w.close();}
+});
+
+test('duplicate signup sends once, masked repeat signup never claims delivery or starts confirmation polling',async()=>{
+ let release,signups=0,tokens=0;
+ const gate=new Promise(resolve=>release=resolve);
+ const dom=boot([],false,async(url,options={})=>{
+  const address=String(url?.url||url);
+  if(address.includes('/auth/v1/settings'))return new Response(JSON.stringify({external:{google:false}}));
+  if(address.includes('/auth/v1/signup')){signups++;await gate;return new Response(JSON.stringify({user:{id,identities:[]},session:null}),{headers:{'Content-Type':'application/json'}});}
+  if(address.includes('/auth/v1/token'))tokens++;
+  throw new TypeError('offline');
+ });
+ try{
+  const d=dom.window.document,w=dom.window;await wait();d.querySelector('#auth-tab-register').click();
+  d.querySelector('#auth-email').value='test@example.com';d.querySelector('#auth-password').value='fixture-secret-password';
+  for(let i=0;i<2;i++)d.querySelector('#auth-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  await wait();assert.equal(signups,1);release();await wait();await wait();
+  assert.equal(d.querySelector('#auth-confirm').hidden,false);
+  assert.match(d.querySelector('#auth-confirm-instructions').textContent,/уже подтверждён/);
+  assert.equal(d.querySelector('#auth-password').value,'');
+  assert.equal(d.querySelector('.auth-card__intro').hidden,true);
+  w.dispatchEvent(new w.Event('focus'));await wait();assert.equal(tokens,0);
+  assert.equal(JSON.stringify(w.localStorage).includes('fixture-secret-password'),false);
+  d.querySelector('#auth-confirm-back').click();await wait();assert.equal(d.querySelector('#auth-form').hidden,false);assert.equal(d.querySelector('.auth-card__intro').hidden,false);
+ }finally{release();dom.window.close();}
 });
