@@ -444,7 +444,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.41/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.42/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -850,7 +850,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.41');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.42');
  } finally { dom.window.close(); }
 });
 
@@ -1292,7 +1292,7 @@ test('Google-only reauthentication shows Google without demanding an uncreated p
 test('password recovery in an open notebook uses current email and preserves pending edits on success and failure',async()=>{
  const f=listFixture();let fail=false,requests=[];
  const fetcher=async(url,opts={})=>{const address=String(url?.url||url);if(address.includes('/auth/v1/recover')){requests.push(JSON.parse(opts.body));return new Response(JSON.stringify(fail?{message:'offline'}:{}),{status:fail?503:200,headers:{'Content-Type':'application/json'}});}throw new TypeError('offline');};
- const dom=boot(f.seed,false,fetcher);try{await ready(dom);const d=dom.window.document,w=dom.window;d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();const el=d.querySelector('#mn-details');el.value='Preserve pending edits';el.dispatchEvent(new w.Event('input',{bubbles:true}));d.querySelector('[data-save]').click();const before=w.localStorage.getItem(cacheKey);d.querySelector('[data-view="settings"]').click();d.querySelector('[data-reauthenticate]').click();d.querySelector('[data-reauth-recovery]').click();await wait();await wait();assert.equal(requests[0].email,'test@example.com');assert.ok(d.querySelector('.mn-mail-notice'));assert.match(d.querySelector('.mn-mail-notice').textContent,/Если аккаунт/);assert.equal(d.querySelector('[data-reauth-screen]'),null);assert.equal(w.localStorage.getItem(cacheKey),before);d.querySelector('[data-mail-back]').click();fail=true;d.querySelector('[data-reauth-recovery]').click();await wait();await wait();assert.match(d.querySelector('[data-reauth-form] [role="alert"]').textContent,/Не удалось/);assert.equal(w.localStorage.getItem(cacheKey),before);assert.ok(d.querySelector('#mn-reauth-password'));}finally{dom.window.close();}
+ const dom=boot(f.seed,false,fetcher);try{await ready(dom);const d=dom.window.document,w=dom.window;d.querySelector('[data-view="all"]').click();d.querySelector('[data-open="n"]').click();const el=d.querySelector('#mn-details');el.value='Preserve pending edits';el.dispatchEvent(new w.Event('input',{bubbles:true}));d.querySelector('[data-save]').click();const before=w.localStorage.getItem(cacheKey);d.querySelector('[data-view="settings"]').click();d.querySelector('[data-reauthenticate]').click();d.querySelector('[data-reauth-recovery]').click();await wait();await wait();assert.equal(requests[0].email,'test@example.com');assert.ok(d.querySelector('.mn-mail-notice'));assert.match(d.querySelector('.mn-mail-notice').textContent,/Если аккаунт/);assert.equal(d.querySelector('[data-reauth-screen]'),null);assert.equal(w.localStorage.getItem(cacheKey),before);d.querySelector('[data-mail-back]').click();fail=true;d.querySelector('[data-reauth-recovery]').click();await wait();await wait();assert.match(d.querySelector('[data-reauth-form] [role="alert"]').textContent,/временно недоступен/);assert.equal(w.localStorage.getItem(cacheKey),before);assert.ok(d.querySelector('#mn-reauth-password'));}finally{dom.window.close();}
 });
 
 test('Google OAuth return rejects a different user before replacing cached account or pending records',async()=>{
@@ -1600,4 +1600,21 @@ test('duplicate signup sends once, masked repeat signup never claims delivery or
   assert.equal(JSON.stringify(w.localStorage).includes('fixture-secret-password'),false);
   d.querySelector('#auth-existing-recovery').click();await wait();assert.equal(d.querySelector('#auth-recovery-form').hidden,false);assert.equal(d.querySelector('#auth-recovery-email').value,'test@example.com');assert.equal(d.querySelector('#auth-confirm').hidden,true);
  }finally{release();dom.window.close();}
+});
+
+for(const language of ['ru-RU','en-US'])for(const header of [true,false])test(`wrong login password releases button and keeps credentials distinct from network failures: ${language}, header ${header}`,async()=>{
+ let requests=0,release,cancelled=false;
+ const gate=new Promise(r=>release=r);
+ const dom=boot([],false,async(input)=>{
+  const url=String(input?.url||input);
+  if(url.includes('/auth/v1/settings'))return new Response(JSON.stringify({external:{google:false}}),{status:200});
+  if(url.includes('/auth/v1/token')){requests++;await gate;return header?{status:400,ok:false,headers:new Headers({'x-sb-error-code':'invalid_credentials'}),body:{cancel(){cancelled=true;return Promise.resolve()}},text:()=>new Promise(()=>{}),json:()=>new Promise(()=>{})}:new Response(JSON.stringify({code:'invalid_credentials',message:'Invalid login credentials'}),{status:400,headers:{'content-type':'application/json','x-supabase-api-version':'2024-01-01'}});}
+  throw new TypeError('offline');
+ },[language]);
+ try{
+  await wait();const w=dom.window,d=w.document;d.querySelector('#auth-email').value='audit@example.test';d.querySelector('#auth-password').value='deliberately-wrong';
+  const submit=()=>d.querySelector('#auth-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));submit();submit();await wait();assert.equal(requests,1);assert.equal(d.querySelector('#auth-submit').disabled,true);
+  release();await wait();await wait();assert.equal(d.querySelector('#auth-submit').disabled,false);assert.equal(d.querySelector('#auth-submit').getAttribute('aria-busy'),'false');
+  assert.match(d.querySelector('#auth-message').textContent,language==='ru-RU'?/Неверная почта или пароль/:/Incorrect email or password/);assert.equal(d.querySelector('#auth-email').value,'audit@example.test');assert.equal(d.querySelector('#todo-app').hidden,true);if(header)assert.equal(cancelled,true);
+ }finally{release();dom.window.close()}
 });

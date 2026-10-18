@@ -1,5 +1,9 @@
 // Interface text only. Never pass entry contents through this dictionary.
 export default {
+  "Вход отклонён. Проверьте почту и пароль и попробуйте снова.": "Sign-in was rejected. Check your email and password and try again.",
+  "Сервер входа не ответил. Проверьте соединение и попробуйте ещё раз.": "The sign-in server did not respond. Check your connection and try again.",
+  "Сервис входа временно недоступен. Попробуйте позже.": "The sign-in service is temporarily unavailable. Try again later.",
+  "Не удалось выполнить вход. Попробуйте ещё раз.": "Could not complete sign-in. Try again.",
   "Пароль сохранён": "Password saved",
   "Теперь можно войти с новым паролем.": "You can now sign in with your new password.",
   "Вернуться ко входу": "Return to sign in",
@@ -310,7 +314,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.41": "TO-DO Personal · version 0.4.41",
+  "TO-DO Personal · версия 0.4.42": "TO-DO Personal · version 0.4.42",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",

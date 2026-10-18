@@ -40,3 +40,19 @@ test('timeout also bounds a stalled body after headers; HTTP metadata remains in
  const good = await m.namespace.boundedFetch('https://server.test', {}, 1000, async () => new Response(JSON.stringify({ code: '42501' }), { status: 403 }));
  assert.equal(good.status, 403); assert.deepEqual(await good.json(), { code: '42501' });
 });
+
+test('password rejection header survives a stalled body and does not affect data requests', async () => {
+ const context=vm.createContext({URL,AbortController,setTimeout,clearTimeout});
+ const m=new vm.SourceTextModule(fs.readFileSync('src/networkFetch.js','utf8'),{context});await m.link(()=>{});await m.evaluate();
+ let reads=0,cancelled=0;
+ const rejected={status:400,ok:false,headers:new Headers({'x-sb-error-code':'invalid_credentials'}),body:{cancel(){cancelled++;return Promise.resolve()}},json(){reads++;return new Promise(()=>{})},text(){reads++;return new Promise(()=>{})}};
+ const response=await m.namespace.boundedFetch('https://project.supabase.co/auth/v1/token?grant_type=password',{},50,async()=>rejected);
+ assert.equal((await response.json()).error_code,'invalid_credentials');assert.equal(response.status,400);assert.equal(reads,0);assert.equal(cancelled,1);
+ const data=await m.namespace.boundedFetch('https://project.supabase.co/rest/v1/notebooks',{},10,async()=>rejected);
+ await assert.rejects(data.json(),/timed out/);assert.equal(reads,1);
+});
+test('interactive password login has a finite ten-second network deadline',async()=>{
+ let duration;const context=vm.createContext({URL,AbortController,clearTimeout,setTimeout:(cb,ms)=>{duration=ms;return setTimeout(cb,5)}});
+ const m=new vm.SourceTextModule(fs.readFileSync('src/networkFetch.js','utf8'),{context});await m.link(()=>{});await m.evaluate();
+ await assert.rejects(m.namespace.boundedFetch('https://project.supabase.co/auth/v1/token?grant_type=password',{},15000,()=>new Promise(()=>{})),/timed out/);assert.equal(duration,10000);
+});

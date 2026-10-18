@@ -57,3 +57,12 @@ test('auth errors give actionable messages without raw backend details', async (
     assert.match(authErrorMessage({ status: 429 }), /Подождите/);
     assert.ok(!authErrorMessage({ message: 'server-internals-secret' }).includes('secret'));
 });
+
+test('password errors distinguish credential rejection, unavailable service and a network timeout',async()=>{
+ const {authErrorMessage}=await fixture();
+ for(const e of [{code:'invalid_credentials'},{error_code:'invalid_credentials'},{message:'Invalid login credentials'},{error_description:'Invalid login credentials'}])assert.match(authErrorMessage(e),/Неверная почта или пароль/);
+ assert.match(authErrorMessage({name:'AuthRetryableFetchError',status:503}),/временно недоступен/);
+ assert.match(authErrorMessage({name:'AuthRetryableFetchError',status:0}),/не ответил/);
+ assert.doesNotMatch(authErrorMessage({status:400,message:'private backend details'}),/соединение|интернет|private/);
+ assert.match(authErrorMessage({name:'AuthUnknownError',originalError:{status:400}}),/Вход отклонён/);
+});

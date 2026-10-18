@@ -722,7 +722,7 @@ authForm.addEventListener('submit', async event => {
             showEmailNotice(signUp ? 'confirmation' : 'unconfirmed', email);
             emailConfirmation.start(email, password);
         }
-    } catch (_) { authMessage.textContent = t('Нет соединения. Проверьте интернет и попробуйте снова.'); }
+    } catch (error) { authMessage.textContent = t(authErrorMessage(error)); }
     finally { authGoogle.disabled = authSubmit.disabled = authSwitch.disabled = false; }
 });
 function showAccountMessage(message) {
