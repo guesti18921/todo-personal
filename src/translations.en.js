@@ -1,5 +1,10 @@
 // Interface text only. Never pass entry contents through this dictionary.
 export default {
+  "Пароль сохранён": "Password saved",
+  "Теперь можно войти с новым паролем.": "You can now sign in with your new password.",
+  "Вернуться ко входу": "Return to sign in",
+  "Придумайте новый пароль.": "Choose a new password.",
+  "Сохраняем…": "Saving…",
   "С возвращением": "Welcome back",
   "Твои мысли и планы — на своём месте.": "Your thoughts and plans, right where they belong.",
   "Начнём с чистого листа": "Start with a fresh page",
@@ -305,7 +310,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.40": "TO-DO Personal · version 0.4.40",
+  "TO-DO Personal · версия 0.4.41": "TO-DO Personal · version 0.4.41",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",

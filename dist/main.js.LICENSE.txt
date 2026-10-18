@@ -4,3 +4,5 @@
  * by David DeSandro
  * MIT license
  */
+
+/*! Capacitor: https://capacitorjs.com/ - MIT License */

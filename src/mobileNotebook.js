@@ -1,3 +1,4 @@
+import { resetFrame, resetFields, resetSave, resetNote, resetSuccess, toggleResetEye } from './passwordResetView.js';
 import { emailNoticeCopy } from './emailNotice.js';
 import { attachNativeDatePicker } from './dateInput.js';
 import { t, ui, getLanguage } from './i18n.js';
@@ -214,6 +215,8 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         nav.hidden = view === 'delete-account'; add.hidden = selecting || ['settings', 'sync', 'delete-account'].includes(view);
         nav.querySelectorAll('button').forEach(button => { if (button.dataset.view === view) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
         shell.classList.toggle('mn-mail-open', view === 'mail-notice');
+        shell.classList.toggle('mn-reset-open', ['reset-password','reset-success'].includes(view));
+        if (view === 'reset-success') { add.hidden = nav.hidden = true; main.innerHTML = resetFrame(resetSuccess(t)); return; }
         if (view === 'mail-notice') {
             add.hidden = nav.hidden = true;
             const copy = emailNoticeCopy('recovery');
@@ -224,8 +227,11 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         if (view === 'delete-account') { renderDeletion(); return; }
         if (view === 'reset-password') {
             add.hidden = true; nav.hidden = true;
-            if (!main.querySelector('[data-native-reset-form]')) main.innerHTML = ui`<section><button type="button" class="mn-back" data-cancel-reauth>← Назад</button><h1>Новый пароль</h1><p>${escape(getAccount() || '')}</p><form data-native-reset-form><label for="mn-new-password">Новый пароль — минимум 8 символов</label><input class="mn-input" id="mn-new-password" type="password" autocomplete="new-password" minlength="8" required><label for="mn-repeat-password">Повторите пароль</label><input class="mn-input" id="mn-repeat-password" type="password" autocomplete="new-password" minlength="8" required><button class="mn-primary" type="submit">Сохранить пароль</button><p role="alert"></p></form></section>`;
+            if (!main.querySelector('[data-native-reset-form]')) main.innerHTML = resetFrame(`<h1>${t('Новый пароль')}</h1><p class="pr-sub">${t('Придумайте новый пароль.')}</p><form data-native-reset-form>${resetFields(t,true)}<p class="pr-error" role="alert"></p><button class="pr-save" type="submit">${resetSave(t)}</button></form>${resetNote(t)}<button class="pr-link" type="button" data-cancel-reauth>${t('Назад')}</button>`);
             main.querySelectorAll('input, button').forEach(el => { el.disabled = reauthBusy; });
+            const save = main.querySelector('[type="submit"]');
+            save.setAttribute('aria-busy', String(reauthBusy));
+            save.innerHTML = reauthBusy ? `<span class="pr-spin" aria-hidden="true"></span><span>${t('Сохраняем…')}</span>` : resetSave(t);
             main.querySelector('[role="alert"]').textContent = reauthError;
             return;
         }
@@ -247,7 +253,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
             return;
         }
         if (view === 'settings') {
-            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button>${reauthButton()}<button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${timeSettings()}${reminderSettings()}${webPushSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.40</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
+            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button>${reauthButton()}<button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${timeSettings()}${reminderSettings()}${webPushSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.41</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
             return;
         }
         // Android's keyboard changes the viewport. Keep the focused search
@@ -689,6 +695,8 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         else if (button.hasAttribute('data-reauthenticate')) { if (editor) { back(); if (editor) return; } reauthError = ''; reauthMessage = ''; view = 'reauthenticate'; render(); }
         else if (button.hasAttribute('data-reauth-google')) runReauthenticationAction(reauthenticateGoogle, t('Завершите вход в окне Google. Если закрыли его, можно попробовать снова.'));
         else if (button.hasAttribute('data-reauth-recovery')) runReauthenticationAction(recoverPassword, '', true);
+        else if (button.hasAttribute('data-reset-eye')) { toggleResetEye(button,main,t); }
+        else if (button.hasAttribute('data-reset-back')) { view = 'reauthenticate'; render(); }
         else if (button.hasAttribute('data-mail-back')) { view = 'reauthenticate'; reauthMessage = reauthError = ''; render(); }
         else if (button.hasAttribute('data-cancel-reauth') && !reauthBusy) { view = 'settings'; reauthError = ''; render(); }
         else if (button.hasAttribute('data-logout')) { logout(); }
@@ -709,7 +717,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
             const operation = ++reauthOperation;
             const current = () => owner === account && operation === reauthOperation;
             reauthBusy = true; reauthError = ''; render();
-            try { await resetPassword(password, repeat); if (current()) { view = 'reauthenticate'; reauthMessage = t('Пароль изменён. Войдите с новым паролем. Локальные записи сохранены.'); } }
+            try { await resetPassword(password, repeat); if (current()) { view = 'reset-success'; reauthMessage = t('Пароль изменён. Войдите с новым паролем. Локальные записи сохранены.'); } }
             catch (error) { if (current()) reauthError = error.message; }
             finally { if (current()) { reauthBusy = false; render(); if (view === 'mail-notice') main.querySelector('#mn-mail-title')?.focus(); } }
             return;
@@ -796,14 +804,14 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         back() {
             if (deletionBusy) return true;
             if (view === 'mail-notice') { view = 'reauthenticate'; render(); return true; }
-            if (['reauthenticate', 'reset-password'].includes(view)) { if (!reauthBusy) { view = 'settings'; render(); } return true; }
+            if (['reauthenticate', 'reset-password', 'reset-success'].includes(view)) { if (!reauthBusy) { view = 'settings'; render(); } return true; }
             if (view === 'delete-account') { view = 'settings'; deletionError = ''; render(); return true; }
             if (editor) { back(); return true; }
             if (selecting) { clearSelection(); render(); return true; }
             if (view !== 'today' || query) { view = 'today'; query = ''; filter = 'all'; undo = null; say(''); render(); return true; }
             return false;
         },
-        isEditing: () => editor || selecting || Boolean(undo) || ['delete-account', 'reauthenticate', 'reset-password', 'mail-notice'].includes(view),
+        isEditing: () => editor || selecting || Boolean(undo) || ['delete-account', 'reauthenticate', 'reset-password', 'reset-success', 'mail-notice'].includes(view),
         openPasswordRecovery() {
             // Preserve every editor field, including an empty title, before replacing its DOM.
             // If storage refuses the draft, leave the editor and its text on screen.
@@ -812,6 +820,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
             clearSelection(); reauthBusy = false; reauthError = ''; reauthMessage = ''; view = 'reset-password'; render(); return true;
         },
         completeReauthentication(error = '') {
+            if (view === 'reset-success') return;
             if (view === 'reset-password') { if (!reauthBusy && error) { reauthError = error; render(); } return; }
             reauthOperation++;
             reauthBusy = false; reauthError = error; reauthMessage = '';

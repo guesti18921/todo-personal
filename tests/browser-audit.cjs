@@ -29,6 +29,7 @@ const server = http.createServer((req, res) => {
  const browser = await chromium.launch({ headless: true, ...(process.env.TODO_CHROMIUM_PATH ? { executablePath: process.env.TODO_CHROMIUM_PATH, args: ['--no-sandbox', '--disable-gpu'] } : {}) });
  const results = [];
  try {
+  await require('./password-reset-audit.cjs')(browser,origin,out);
   await require('./email-notice-audit.cjs')(browser,origin,out,{seed,cacheKey});
   for (const [name, width, height, locale, appLanguage] of [['small', 320, 640, 'ru-RU'], ['phone', 360, 800, 'ru-RU'], ['large', 412, 915, 'ru-RU'], ['landscape', 800, 360, 'ru-RU'], ['desktop', 1280, 800, 'ru-RU'], ['english', 360, 800, 'en-US'], ['english-small', 320, 640, 'en-GB'], ['english-wide', 412, 915, 'en-US'], ['english-ru-os', 360, 800, 'ru-RU', 'en'], ['russian-en-os', 360, 800, 'en-US', 'ru']]) {
    const context = await browser.newContext({ viewport: { width, height }, locale, serviceWorkers: 'block' });
@@ -220,6 +221,9 @@ const server = http.createServer((req, res) => {
     releaseAuth(); await page.locator('[data-native-reset-form]').waitFor();
     assert.equal(await page.evaluate(owner => JSON.parse(localStorage.getItem('todo-personal:entry-edit-draft:'+owner+':note')).details, id), 'Preserve this draft during recovery');
     assert.equal(await page.locator('.mn-main h1').textContent(), name==='english-small' ? 'New password' : 'Новый пароль');
+    const resetStyle=await page.locator('.password-reset').evaluate(root=>({card:getComputedStyle(root.querySelector('.pr-card')).backgroundColor,save:getComputedStyle(root.querySelector('[type="submit"]')).backgroundColor,font:getComputedStyle(root).fontFamily}));
+    assert.equal(resetStyle.card,'rgb(255, 253, 251)');assert.equal(resetStyle.save,'rgb(195, 141, 158)');assert.match(resetStyle.font,/Inter/);
+    await page.locator('[data-reset-eye="mn-new-password"]').click();assert.equal(await page.locator('#mn-new-password').getAttribute('type'),'text');assert.equal(await page.locator('#mn-repeat-password').getAttribute('type'),'password');
     await page.locator('#mn-new-password').fill('test-password'); const resetInput=await page.locator('#mn-new-password').elementHandle();
     await page.setViewportSize({width,height:Math.max(220,height-220)}); await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
     assert.equal(await resetInput.evaluate(el=>el.isConnected && document.activeElement===el && el.value==='test-password'),true);

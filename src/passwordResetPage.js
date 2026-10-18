@@ -1,3 +1,4 @@
+import { resetFrame, resetFields, resetSave, resetNote, resetSuccess, toggleResetEye } from './passwordResetView.js';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_PUBLIC_KEY } from './authConfig.js';
 import { boundedFetch } from './networkFetch.js';
@@ -8,18 +9,22 @@ delete window.todoRecoveryFragment;
 const en = !navigator.language.toLowerCase().startsWith('ru');
 document.documentElement.lang = en ? 'en' : 'ru';
 const text = (ru, english) => en ? english : ru;
+const translations = {
+ 'Новый пароль':'New password','Повторите пароль':'Repeat password','Показать пароль':'Show password','Скрыть пароль':'Hide password',
+ 'Сохранить пароль':'Save password','Не меньше 8 символов.':'At least 8 characters.','Один аккаунт для всех устройств':'One account for all your devices',
+ 'Пароль сохранён':'Password saved','Теперь можно войти с новым паролем.':'You can now sign in with your new password.','Вернуться ко входу':'Return to sign in'
+};
+const t = ru => en ? translations[ru] || ru : ru;
+document.querySelector('#reset-root').innerHTML = resetFrame(`<div id="reset-editor"><h1 id="heading">${t('Новый пароль')}</h1><p class="pr-sub" id="status" role="status" aria-live="polite"></p><form id="reset-form" hidden>${resetFields(t)}<p class="pr-error" id="reset-error" role="alert"></p><button class="pr-save" id="save-password" type="submit">${resetSave(t)}</button></form><button class="pr-save" id="retry" type="button" hidden>${text('Повторить проверку','Retry verification')}</button>${resetNote(t)}</div><div id="return-message" hidden>${resetSuccess(t)}</div><a class="pr-link" id="open-app" href="todopersonal://auth-callback" hidden>${text('Открыть Android-приложение','Open Android app')}</a>`);
 const form = document.querySelector('#reset-form');
 const password = document.querySelector('#new-password');
 const repeat = document.querySelector('#repeat-password');
 const retry = document.querySelector('#retry');
-const show = document.querySelector('#show-password');
-document.querySelector('#heading').textContent = text('Новый пароль', 'New password');
-document.querySelector('#password-label').textContent = text('Новый пароль — минимум 8 символов', 'New password — at least 8 characters');
-document.querySelector('#repeat-label').textContent = text('Повторите пароль', 'Repeat password');
-document.querySelector('#save-password').textContent = text('Сохранить пароль', 'Save password');
-retry.textContent = text('Повторить проверку', 'Retry verification');
-document.querySelector('#return-message').textContent = text('Вернитесь в TO-DO Personal и войдите с новым паролем.', 'Return to TO-DO Personal and sign in with your new password.');
-document.querySelector('#open-app').textContent = text('Открыть Android-приложение', 'Open Android app');
+document.addEventListener('click', event => {
+ const eye = event.target.closest('[data-reset-eye]');
+ if (eye) toggleResetEye(eye, document, t);
+ if (event.target.closest('[data-reset-back]')) location.assign('https://todo.m1strell.com/');
+});
 const messages = {
     checking: ['Проверяем ссылку…', 'Checking the link…'],
     ready: ['Придумайте новый пароль.', 'Choose a new password.'],
@@ -39,21 +44,20 @@ const client = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, {
     global: { fetch: boundedFetch }
 });
 const recovery = createPasswordRecovery({ auth: client.auth, onStatus(status) {
-    document.querySelector('#status').textContent = text(...messages[status]);
+    const error = ['short','mismatch','same','reauth','failed'].includes(status) || (status === 'offline' && !form.hidden);
+    document.querySelector('#status').textContent = error || status === 'saving' ? text(...messages.ready) : text(...messages[status]);
+    document.querySelector('#reset-error').textContent = error ? text(...messages[status]) : '';
     if (status === 'ready') form.hidden = false;
     if (['invalid', 'success'].includes(status)) { form.hidden = true; form.reset(); }
     for (const el of form.elements) el.disabled = ['checking', 'saving'].includes(status);
     retry.hidden = status !== 'offline' || !form.hidden;
     document.querySelector('#return-message').hidden = status !== 'success';
+    document.querySelector('#reset-editor').hidden = status === 'success';
+    const save = document.querySelector('#save-password');
+    save.setAttribute('aria-busy', String(status === 'saving'));
+    save.innerHTML = status === 'saving' ? `<span class="pr-spin" aria-hidden="true"></span><span>${text('Сохраняем…','Saving…')}</span>` : resetSave(t);
     document.querySelector('#open-app').hidden = !['success', 'invalid'].includes(status) || !/Android/i.test(navigator.userAgent);
 } });
-show.textContent = text('Показать пароль', 'Show password');
-show.addEventListener('click', () => {
-    const visible = password.type === 'password';
-    password.type = repeat.type = visible ? 'text' : 'password';
-    show.textContent = visible ? text('Скрыть пароль', 'Hide password') : text('Показать пароль', 'Show password');
-    show.setAttribute('aria-pressed', String(visible));
-});
 retry.addEventListener('click', () => recovery.open(tokens));
 form.addEventListener('submit', async event => {
     event.preventDefault();
