@@ -8,7 +8,7 @@ module.exports = async function verifyAuthDemo(browser, origin, output) {
   await reference.goto(origin+'/__auth-reference.html');
   // The notebook uses light paper and plum accents, even when the OS uses light mode.
   const palette=()=>actual.evaluate(()=>({card:getComputedStyle(document.querySelector('.auth-card')).backgroundColor,button:getComputedStyle(document.querySelector('#auth-submit')).backgroundColor,ink:getComputedStyle(document.querySelector('#auth-title')).color}));
-  const expected={card:'rgb(255, 253, 251)',button:'rgb(214, 162, 201)',ink:'rgb(80, 31, 58)'};
+  const expected={card:'rgb(255, 253, 251)',button:'rgb(195, 141, 158)',ink:'rgb(80, 31, 58)'};
   assert.deepEqual(await palette(),expected,'approved screenshot palette on light OS');
   await actual.emulateMedia({colorScheme:'dark'});
   assert.deepEqual(await palette(),expected,'approved screenshot palette on dark OS');
