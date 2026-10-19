@@ -33,6 +33,7 @@ const server = http.createServer((req, res) => {
   await require('./security-shell-audit.cjs')(browser,origin);
   await require('./backup-audit.cjs')(browser,origin,{seed,cacheKey});
   await require('./tab-safety-audit.cjs')(browser,origin,{seed,cacheKey});
+  await require('./editor-layout-audit.cjs')(browser,origin,{seed,cacheKey});
   await require('./login-error-audit.cjs')(browser,origin);
   await require('./password-reset-audit.cjs')(browser,origin,out);
   await require('./email-notice-audit.cjs')(browser,origin,out,{seed,cacheKey});
@@ -75,6 +76,7 @@ const server = http.createServer((req, res) => {
    assert.equal(await page.locator('.mn-setting details').first().getAttribute('open') !== null, true, 'expanded settings survive sync');
    await page.screenshot({ path: path.join(out, name + '-settings.png'), fullPage: true });
    const english = (appLanguage || (locale.startsWith('en') ? 'en' : 'ru')) === 'en';
+   await page.locator('[data-settings-group="preferences"] > summary').click();
    await page.locator('[data-time-format]').selectOption(english ? '12' : '24');
    await page.locator('[data-view="all"]').click();
    await page.locator('.mn-add').click();
@@ -124,6 +126,9 @@ const server = http.createServer((req, res) => {
     await page.screenshot({ path: path.join(out, name + '-clock.png') });
    }
    await page.locator('[data-save]').click();
+   // This online test starts later recovery from a confirmed server revision.
+   // Reload-during-upload is a separate conflict-protection scenario.
+   await page.waitForFunction(() => document.querySelector('.mn-status')?.dataset.state === 'confirmed');
    if (english) {
     const stored = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).state.todos.home.find(e => e.name.startsWith('Tomorrow I have')), cacheKey);
     assert.equal(stored.time, '15:45'); assert.equal(stored.reminder.time, '00:00');
@@ -210,7 +215,9 @@ const server = http.createServer((req, res) => {
    await page.locator('[data-accept-deadline][data-choice-index="1"]').click();
    assert.equal(await page.locator('.mn-suggestion').isVisible(), false);
    const confirmed = await page.locator('[name="date"]').inputValue();
-   await page.locator('[data-save]').click(); await page.reload(); await page.locator('.mn-main h1').waitFor();
+   await page.locator('[data-save]').click();
+   await page.waitForFunction(() => document.querySelector('.mn-status')?.dataset.state === 'confirmed');
+   await page.reload(); await page.locator('.mn-main h1').waitFor();
    await page.locator('[data-view="all"]').click();
    await page.locator('.mn-open').filter({hasText:'Встреча 10/12'}).click();
    assert.equal(await page.locator('[name="date"]').inputValue(), confirmed, 'chosen deadline survives restart');
@@ -240,7 +247,7 @@ const server = http.createServer((req, res) => {
     // A remote deletion must not make the unfinished local edit inaccessible.
     await page.locator('[data-back]').click();
     await page.locator('[data-sync-open]').first().click(); await page.locator('[data-sync-now]').click();
-    await page.waitForFunction(()=>document.querySelector('.mn-status')?.dataset.state==='confirmed');
+    await page.waitForFunction(()=>document.querySelector('.mn-status')?.dataset.state==='confirmed').catch(async error=>{ console.error('Recovery sync diagnostic', name, await page.evaluate(key=>({status:document.querySelector('.mn-status')?.outerHTML,screen:document.querySelector('.mn-main')?.innerText,snapshot:JSON.parse(localStorage.getItem(key))}),cacheKey),{cloudRevision:cloud.revision}); throw error; });
     cloud = { ...cloud, revision: cloud.revision + 1, notes: cloud.notes.filter(n=>n.id!=='note') };
     await page.locator('[data-sync-now]').click();
     await page.waitForFunction(key=>JSON.parse(localStorage.getItem(key)).state.notes.every(n=>n.id!=='note'),cacheKey);

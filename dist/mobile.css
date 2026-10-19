@@ -190,3 +190,35 @@
 .mn-mail-open>.mn-main{padding:0}
 .mn-mail-open .mn-mail-notice{width:100%}
 .mn-mail-open>:not(.mn-main){display:none!important}
+
+/* Responsive editor: one set of fields, no remount on keyboard/viewport changes. */
+.mn-editor-layout,.mn-editor-writing,.mn-editor-options{min-width:0}
+.mobile-notebook:has(.mn-editing){padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+.mn-editor-schedule{margin:16px 0;border:1px solid #cdb9c1;border-radius:12px;padding:0 12px;background:#fffdfb}
+.mn-editor-schedule>h2{margin:0;font-size:16px}
+.mobile-notebook [data-editor-schedule]{width:100%;min-height:64px;padding:12px 0;text-align:start;background:transparent;border:0;font-size:15px;font-weight:700;overflow-wrap:anywhere}
+[data-editor-schedule]::before{content:'▸';margin-inline-end:7px}
+[data-editor-schedule][aria-expanded=true]::before{content:'▾'}
+.mn-schedule-summary{display:block;margin:4px 0 0 16px;font-size:12px;font-weight:400;color:#715160;line-height:1.5}
+#mn-editor-schedule-body{padding-bottom:8px}
+#mn-editor-schedule-body>label:first-child{margin-top:4px}
+.mn-editor-schedule .mn-reminder-form{margin-bottom:8px}
+.mn-editor-width{flex-shrink:0;margin-inline-start:auto}
+.mn-editor-header:has(.mn-editor-width:not([hidden])){gap:10px}
+.mn-main details.mn-settings-group{margin:0;border-bottom:1px solid #ddccd1}
+.mn-settings-group>summary{min-height:66px;padding:16px 0;font-size:16px;font-weight:700;overflow-wrap:anywhere}
+.mn-settings-group>summary>span{display:block;margin:5px 0 0 16px;font-size:13px;font-weight:400;color:#715160}
+.mn-settings-group>.mn-setting{margin-top:0;padding:8px 0 16px 16px;border:0}
+@media(min-width:1000px){
+ .mn-main.mn-editing{max-width:1100px;padding-inline:24px}
+ .mn-editor-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,320px);gap:24px;align-items:start;margin-top:20px}
+ .mn-editor-writing{background:#fffdfb;border:1px solid #ddccd1;border-radius:12px;padding:20px}
+ .mn-editor-writing>label:first-child{margin-top:0}
+ .mn-editor-writing #mn-details{min-height:220px}
+ .mn-editor-schedule{margin:0;border:0;border-radius:0;padding:0;background:transparent}
+ .mn-editor-schedule .mn-date-fields{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}
+ .mn-editor-schedule .mn-filters button{padding-inline:9px}
+ .mn-editor-schedule .mn-reminder-form{margin-top:18px}
+ .mn-editor-wide-text .mn-editor-layout{grid-template-columns:minmax(0,1fr)}
+ .mn-editor-wide-text .mn-editor-options{max-width:550px;width:100%}
+}

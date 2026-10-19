@@ -88,6 +88,9 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
     const preferencesKey = () => `todo-personal:preferences:${account}`;
     let smartDates = true, dismissedDeadline = '', suggestion = null, deadlineAnchor = null;
     let importPreview = null, backupDeleteKey = null;
+    const settingsGroupsOpen = new Set();
+    const editorMedia = window.matchMedia?.('(min-width: 1000px)');
+    let scheduleExpanded = false, textExpanded = false;
     let syncDetails = null, syncBusy = false, syncPreview = null, syncError = '', offlineReady = false;
     let deletionBusy = false, deletionError = '';
     let reauthBusy = false, reauthError = '', reauthMessage = '', reauthOperation = 0, savedEditorFingerprint = null;
@@ -213,6 +216,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         nav.querySelectorAll('[data-view]').forEach(button => { button.textContent = t(navLabels[button.dataset.view]); });
         renderReminderBanner();
         if (editor) return;
+        main.classList.remove('mn-editing', 'mn-editor-wide-text');
         nav.hidden = view === 'delete-account'; add.hidden = selecting || ['settings', 'sync', 'delete-account'].includes(view);
         nav.querySelectorAll('button').forEach(button => { if (button.dataset.view === view) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
         shell.classList.toggle('mn-mail-open', view === 'mail-notice');
@@ -254,7 +258,12 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
             return;
         }
         if (view === 'settings') {
-            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button>${reauthButton()}<button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${timeSettings()}${reminderSettings()}${webPushSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.43</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
+            for (const group of main.querySelectorAll('[data-settings-group]')) {
+                if (group.open) settingsGroupsOpen.add(group.dataset.settingsGroup);
+                else settingsGroupsOpen.delete(group.dataset.settingsGroup);
+            }
+            main.innerHTML = ui`<h1>Настройки</h1><section class="mn-setting"><h2>Аккаунт</h2><p>${escape(getAccount() || '')}</p><button class="mn-secondary" type="button" data-logout>Выйти</button>${reauthButton()}<button class="mn-secondary mn-danger" type="button" data-delete-account>Удалить аккаунт</button></section>${languageSettings()}${timeSettings()}${reminderSettings()}${webPushSettings()}<section class="mn-setting"><h2>Подсказки сроков</h2><label class="mn-pin"><input type="checkbox" data-smart-dates ${smartDates ? 'checked' : ''}>Предлагать дату и время из текста</label><p>Напишите, например, «завтра в 18:00». Блокнот предложит срок — применить его можно одним нажатием.</p><details><summary>Какие языки поддерживаются?</summary><p>Поддерживаются основные выражения на русском, английском, немецком, итальянском, испанском, китайском, японском, французском, португальском и корейском. Например: «завтра в 18:00» или «tomorrow at 6 pm». Текст записи сохраняется целиком. Напоминание выбирается отдельно.</p></details></section>${syncSettings()}<section class="mn-setting"><h2>О приложении</h2><p class="mn-version">TO-DO Personal · версия 0.4.44</p><nav class="mn-about-links" aria-label="Информация о приложении"><a data-public-page href="https://todo.m1strell.com/privacy.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Политика конфиденциальности</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/support.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Связаться с поддержкой</span><span aria-hidden="true">›</span></a><a data-public-page href="https://todo.m1strell.com/delete-account.html#${getLanguage()}" target="_blank" rel="noopener noreferrer"><span>Удаление без приложения</span><span aria-hidden="true">›</span></a></nav></section>`;
+            groupSettings();
             return;
         }
         // Android's keyboard changes the viewport. Keep the focused search
@@ -416,6 +425,8 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         dismissedDeadline = entry?.deadlineDismissed || draft?.deadlineDismissed || '';
         nav.hidden = true; add.hidden = true;
         main.innerHTML = ui`<div class="mn-editor-header"><button type="button" class="mn-back" data-back>← Назад</button><button type="button" class="mn-primary" data-save>Сохранить</button></div><h1>${previous ? t('Запись') : t('Новая запись')}</h1>${draft ? t('<p class="mn-draft-restored">Черновик восстановлен. Нажмите «Сохранить», когда закончите.</p>') : ''}<div class="mn-types">${[['task', t('Задача')], ['note', t('Заметка')]].map(([value, label]) => `<button type="button" data-type="${value}" aria-pressed="${type === value}">${label}</button>`).join('')}</div><p class="mn-type-help">${type === 'task' ? t('Можно отметить выполненной.') : t('Для мыслей и информации.')}</p><label for="mn-text">Что записать?</label><textarea class="mn-input mn-text" id="mn-text" name="text" dir="auto" placeholder="Запишите мысль или задачу">${escape(text)}</textarea><aside class="mn-suggestion" aria-label="Предложенный срок" aria-live="polite" hidden></aside><details class="mn-language-examples"><summary>Как указать срок словами</summary><p>Можно написать день недели или срок через число минут, часов, дней или недель. Проверьте предложенную дату перед применением.</p><ul>${[[t('Русский'), 'в пятницу в 18:00; через 2 часа'], ['English', 'Friday at 6 pm; in 2 hours'], ['Deutsch', 'Freitag um 18:00; in 2 Stunden'], ['Italiano', 'venerdì alle 18:00; tra 2 ore'], ['Español', 'viernes a las 18:00; en 2 horas'], ['Français', 'vendredi à 18:00; dans 2 heures'], ['Português', 'sexta-feira às 18:00; daqui a 2 horas'], ['中文', '星期五18:00; 2小时后'], ['日本語', '金曜日18:00; 2時間後'], ['한국어', '금요일 18:00; 2시간 후']].map(([language, sample]) => `<li><strong>${language}:</strong> ${sample}</li>`).join('')}</ul><p>«Следующая пятница» означает пятницу следующей недели. «Через 2 часа» отсчитывается от ввода фразы. Текст записи не сокращается и не переводится.</p></details><details ${details ? 'open' : ''}><summary>Подробности</summary><label for="mn-details">Дополнительный текст</label><textarea class="mn-input" id="mn-details" name="details" dir="auto">${escape(details)}</textarea></details><label class="mn-entry-pin"><input type="checkbox" name="pinned" ${(entry?.pinned ?? draft?.pinned) ? 'checked' : ''}><span>Закрепить сверху</span></label><label for="mn-date">Срок · необязательно</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-date" name="date" value="${escape(entry?.date || draft?.date || '')}">${timeInput('time', entry?.time || draft?.time || '', t('Время срока'), getLanguage())}</div><div class="mn-filters"><button type="button" data-date="today">Сегодня</button><button type="button" data-date="tomorrow">Завтра</button><button type="button" data-date="none">Без срока</button></div><p class="mn-deadline-help"></p><label class="mn-pin"><input type="checkbox" name="today" ${(entry ? (entry.today ?? (previous?.project === 'today')) : draft?.today) ? 'checked' : ''}>Также показать в «Сегодня» без срока</label><section class="mn-reminder-form"><h2>Напоминание</h2><label for="mn-reminder-mode">Когда напомнить?</label><select class="mn-input" id="mn-reminder-mode" name="reminderMode">${REMINDER_OPTIONS.map(([value, label]) => `<option value="${value}" ${reminder.mode === value ? 'selected' : ''}>${t(label)}</option>`).join('')}</select><div class="mn-reminder-custom" hidden><label for="mn-reminder-date">Дата напоминания</label><div class="mn-date-fields"><input class="mn-input" type="date" id="mn-reminder-date" name="reminderDate" value="${escape(reminder.date)}">${timeInput('reminderTime', reminder.time, t('Время напоминания'), getLanguage())}</div></div><p class="mn-reminder-preview" aria-live="polite"></p><p class="mn-reminder-device"></p><button type="button" class="mn-secondary" data-enable-reminders>Включить напоминания на этом устройстве</button></section>${previous?.type === 'task' ? `<button type="button" class="mn-secondary" data-complete="${escape(id)}">${entry.checked ? t('Вернуть в активные') : t('Выполнить задачу')}</button>` : ''}${previous ? ui`<button type="button" class="mn-delete" data-delete="${escape(id)}">Удалить запись</button>` : ''}`;
+        scheduleExpanded = Boolean(entry?.date || draft?.date || reminder.mode !== 'none');
+        arrangeEditor();
         if (pickDate) for (const input of main.querySelectorAll('input[type="date"]')) {
             attachNativeDatePicker(input, { pickDate, getOwner: () => account });
         }
@@ -428,9 +439,67 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         savedEditorFingerprint = draft ? null : JSON.stringify(fields());
         if (!id && !draft) main.querySelector('[name="text"]').focus();
     }
+    function arrangeEditor() {
+        main.classList.add('mn-editing');
+        const writing = document.createElement('section'); writing.className = 'mn-editor-writing';
+        const options = document.createElement('aside'); options.className = 'mn-editor-options';
+        options.setAttribute('aria-label', t('Срок и напоминание'));
+        const layout = document.createElement('div'); layout.className = 'mn-editor-layout';
+        const textLabel = main.querySelector('label[for="mn-text"]'); textLabel.before(layout);
+        for (const node of [textLabel, main.querySelector('#mn-text'), main.querySelector('.mn-suggestion'), main.querySelector('#mn-details').closest('details'), main.querySelector('.mn-entry-pin')]) writing.append(node);
+        const schedule = document.createElement('section'); schedule.className = 'mn-editor-schedule';
+        schedule.innerHTML = `<h2><button type="button" data-editor-schedule aria-expanded="false" aria-controls="mn-editor-schedule-body">${t('Срок и напоминание')}<span class="mn-schedule-summary"></span></button></h2><div id="mn-editor-schedule-body"></div>`;
+        const body = schedule.lastElementChild;
+        const dateFields = main.querySelector('.mn-date-fields');
+        for (const node of [main.querySelector('label[for="mn-date"]'), dateFields, main.querySelector('[data-date]').parentElement, main.querySelector('.mn-deadline-help'), main.querySelector('[name="today"]').closest('label'), main.querySelector('.mn-reminder-form')]) body.append(node);
+        options.append(schedule); layout.append(writing, options);
+        writing.append(main.querySelector('.mn-language-examples'));
+        const widthButton = document.createElement('button'); widthButton.type = 'button'; widthButton.className = 'mn-secondary mn-editor-width'; widthButton.dataset.editorWidth = '';
+        main.querySelector('[data-save]').before(widthButton);
+        updateEditorLayout();
+    }
+    function updateEditorLayout() {
+        const toggle = main.querySelector('[data-editor-schedule]');
+        if (!editor || !toggle) return;
+        const wide = Boolean(editorMedia?.matches);
+        const body = main.querySelector('#mn-editor-schedule-body');
+        if (!wide && body.contains(document.activeElement)) scheduleExpanded = true;
+        toggle.hidden = wide;
+        toggle.parentElement.hidden = wide;
+        toggle.setAttribute('aria-expanded', String(wide || scheduleExpanded));
+        body.hidden = !wide && !scheduleExpanded;
+        const widthButton = main.querySelector('[data-editor-width]');
+        widthButton.hidden = !wide;
+        widthButton.setAttribute('aria-pressed', String(textExpanded));
+        widthButton.textContent = t(textExpanded ? 'Вернуть две колонки' : 'Развернуть текст');
+        main.classList.toggle('mn-editor-wide-text', wide && textExpanded);
+    }
+    if (editorMedia?.addEventListener) editorMedia.addEventListener('change', updateEditorLayout);
+    else editorMedia?.addListener?.(updateEditorLayout);
+    function groupSettings() {
+        const sections = [...main.querySelectorAll(':scope > .mn-setting')];
+        const account = sections.shift(), saving = sections.find(section => section.querySelector('.mn-settings-status'));
+        const groups = new Map();
+        const definitions = { notifications: ['Уведомления', 'Разрешения и напоминания'], preferences: ['Предпочтения', 'Язык, время и подсказки сроков'], about: ['О приложении', 'Версия и документы'] };
+        for (const section of sections) {
+            if (section === saving) continue;
+            const key = section.querySelector('[data-language], [data-time-format], [data-smart-dates]') ? 'preferences' : section.querySelector('.mn-version') ? 'about' : 'notifications';
+            if (!groups.has(key)) {
+                const details = document.createElement('details'); details.className = 'mn-settings-group'; details.dataset.settingsGroup = key;
+                details.open = settingsGroupsOpen.has(key);
+                details.innerHTML = `<summary>${t(definitions[key][0])}<span>${t(definitions[key][1])}</span></summary>`;
+                groups.set(key, details);
+            }
+            groups.get(key).append(section);
+        }
+        // Account and saving controls stay directly accessible in Settings.
+        if (saving) account.after(saving);
+        for (const key of ['notifications', 'preferences', 'about']) if (groups.has(key)) main.append(groups.get(key));
+    }
     function updateDate() {
         const selectedDate = main.querySelector('[name="date"]').value;
         const hasDate = Boolean(selectedDate);
+        if (hasDate) { scheduleExpanded = true; updateEditorLayout(); }
         const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
         const preset = !hasDate ? 'none' : selectedDate === localDateString() ? 'today'
             : selectedDate === localDateString(tomorrow) ? 'tomorrow' : null;
@@ -476,6 +545,13 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         device.textContent = deviceReminderHelp();
         device.hidden = !active || (reminderState.native && reminderState.enabled && reminderState.exact && !reminderState.error);
         main.querySelector('[data-enable-reminders]').hidden = !active || reminderState.enabled;
+        const summary = main.querySelector('.mn-schedule-summary');
+        if (summary) {
+            const date = value.date ? new Intl.DateTimeFormat(getLanguage(), { day: 'numeric', month: 'short' }).format(new Date(value.date + 'T12:00:00')) : t('Без срока');
+            const time = value.time ? ' · ' + formatClock(value.time, getLanguage()) : '';
+            const reminder = active ? t(reminderLabel(value, new Date(), getLanguage(), clockHourCycle())) || t('Укажите дату и время напоминания.') : t('Без напоминания');
+            summary.textContent = date + time + ' · ' + reminder;
+        }
     }
     function webPushSettings() {
         if (!configureWebPush) return '';
@@ -576,9 +652,17 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
         editor = false; render();
     }
     function changed() { stashDraft(); if (editingId) commit(false); }
+    main.addEventListener('toggle', event => {
+        const group = event.target;
+        if (!group.isConnected || !group.dataset.settingsGroup) return;
+        if (group.open) settingsGroupsOpen.add(group.dataset.settingsGroup);
+        else settingsGroupsOpen.delete(group.dataset.settingsGroup);
+    }, true);
     shell.addEventListener('datepickererror', () => say(t('Не удалось открыть календарь. Попробуйте снова.')));
     shell.addEventListener('click', event => {
         const button = event.target.closest('button'); if (!button || button.disabled || deletionBusy || reauthBusy) return;
+        if (button.hasAttribute('data-editor-schedule')) { scheduleExpanded = !scheduleExpanded; updateEditorLayout(); return; }
+        if (button.hasAttribute('data-editor-width')) { textExpanded = !textExpanded; updateEditorLayout(); return; }
         if (button.hasAttribute('data-web-push-toggle')) {
             if (pushBusy) return;
             pushBusy = true; button.disabled = true;
@@ -839,7 +923,7 @@ export function createMobileNotebook({ root, todos, notes, persist, logout, reau
             if (!error && view === 'reauthenticate') view = 'settings';
             render(); if (!error) say(t('Вход обновлён. Локальные изменения сохранены.')); else if (view !== 'reauthenticate') say(error);
         },
-        setAccount(id) { if (account !== id) { importPreview = null; backupDeleteKey = null; reauthOperation++; orphanDraftId = null; clearTimeout(undoTimer); deletionBusy = false; deletionError = ''; reauthBusy = false; reauthError = ''; savedEditorFingerprint = null; account = id; clearSelection(); dueFilter = 'all'; reminderQueue = []; syncDetails = null; syncBusy = false; syncPreview = null; syncError = ''; updateSyncNotice(); readPreferences(); dismissedDeadline = ''; suggestion = null; deadlineAnchor = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
+        setAccount(id) { if (account !== id) { settingsGroupsOpen.clear(); textExpanded = false; importPreview = null; backupDeleteKey = null; reauthOperation++; orphanDraftId = null; clearTimeout(undoTimer); deletionBusy = false; deletionError = ''; reauthBusy = false; reauthError = ''; savedEditorFingerprint = null; account = id; clearSelection(); dueFilter = 'all'; reminderQueue = []; syncDetails = null; syncBusy = false; syncPreview = null; syncError = ''; updateSyncNotice(); readPreferences(); dismissedDeadline = ''; suggestion = null; deadlineAnchor = null; editor = false; editingId = null; view = 'today'; query = ''; filter = 'all'; undo = null; draftSafe = true; say(''); render(); } },
         setOfflineReady(value) {
             offlineReady = value;
             if (!editor && view === 'settings') refreshSettingsStatus();
