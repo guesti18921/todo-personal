@@ -1,6 +1,7 @@
 // Persistent, account-scoped snapshots. Text is stored unchanged in JSON.
 export const LOCAL_SCHEMA_VERSION = 1;
 const prefix = 'todo-personal:local:';
+const observed = new Map();
 export const copy = value => JSON.parse(JSON.stringify(value));
 
 export function createEntryId() {
@@ -46,6 +47,7 @@ export function normalizeNotebook(state) {
 
 export function readLocalNotebook(id) {
     const raw = localStorage.getItem(prefix + id);
+    observed.set(id, raw);
     if (!raw) return null;
     const snapshot = JSON.parse(raw);
     if (snapshot.schemaVersion !== LOCAL_SCHEMA_VERSION || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0 || typeof snapshot.dirty !== 'boolean') {
@@ -56,7 +58,9 @@ export function readLocalNotebook(id) {
 
 export function writeLocalNotebook(id, snapshot) {
     try {
-        localStorage.setItem(prefix + id, JSON.stringify({
+        // Extra stale-write guard for browsers without the Web Locks API.
+        if (observed.has(id) && localStorage.getItem(prefix + id) !== observed.get(id)) return false;
+        const value = JSON.stringify({
             schemaVersion: LOCAL_SCHEMA_VERSION,
             state: normalizeNotebook(snapshot.state),
             revision: snapshot.revision,
@@ -64,7 +68,9 @@ export function writeLocalNotebook(id, snapshot) {
             conflict: Boolean(snapshot.conflict),
             savedAt: snapshot.savedAt || new Date().toISOString(),
             syncedAt: snapshot.syncedAt || null
-        }));
+        });
+        localStorage.setItem(prefix + id, value);
+        observed.set(id, value);
         return true;
     } catch (_) { return false; }
 }

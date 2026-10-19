@@ -4,6 +4,10 @@ import { Network } from '@capacitor/network';
 import { App } from '@capacitor/app';
 import { offerDeletedAccountReset } from './localDataReset.js';
 
+const backupFiles = registerPlugin('BackupFiles');
+export const saveNativeBackup = options => backupFiles.save(options);
+export const pickNativeBackup = () => backupFiles.pick();
+
 const localDataReset = registerPlugin('LocalDataReset');
 export function resetDeletedAccountData(getOwner, localize) {
     return offerDeletedAccountReset({ native: Capacitor.getPlatform() === 'android', plugin: localDataReset, getOwner, localize });

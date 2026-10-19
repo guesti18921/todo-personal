@@ -14,7 +14,7 @@ export function parseAuthLink(value) {
     const refresh_token = params.get('refresh_token');
     if (access_token && refresh_token) return { session: { access_token, refresh_token } };
     const code = params.get('code');
-    return code ? { code } : { error: true };
+    return code ? { code, ...(params.get('sb_flow_id') ? { flowId: params.get('sb_flow_id') } : {}) } : { error: true };
 }
 
 export function createAuthLinkHandler({ auth, onStatus }) {
@@ -33,7 +33,7 @@ export function createAuthLinkHandler({ auth, onStatus }) {
                 if (link.error) throw new Error('Invalid confirmation');
                 const result = link.session
                     ? await auth.setSession(link.session)
-                    : await auth.exchangeCodeForSession(link.code);
+                    : await auth.exchangeCodeForSession(link.code, link.flowId ? { flowId: link.flowId } : undefined);
                 if (result.error || !result.data?.session) throw new Error('Confirmation failed');
                 completedUrl = url;
                 onStatus('success');

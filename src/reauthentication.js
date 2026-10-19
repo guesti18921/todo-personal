@@ -20,7 +20,7 @@ export function reauthenticationMethods(user) {
 export async function renewAccountFromLink({ url, temporaryAuth, activeAuth, owner, currentOwner }) {
     const link = parseAuthLink(url);
     if (!link || link.error) throw new Error('invalid_callback');
-    const result = link.session ? await temporaryAuth.setSession(link.session) : await temporaryAuth.exchangeCodeForSession(link.code);
+    const result = link.session ? await temporaryAuth.setSession(link.session) : await temporaryAuth.exchangeCodeForSession(link.code, link.flowId ? { flowId: link.flowId } : undefined);
     if (result.error) throw result.error;
     const verified = await temporaryAuth.getUser();
     if (verified.error) throw verified.error;

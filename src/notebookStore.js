@@ -1,3 +1,5 @@
+import { preserveRecovery } from './backupStore.js';
+import { createNotebookWriter } from './notebookWriter.js';
 import { supabase } from './supabaseClient.js';
 import { normalizeNotebook, readLocalNotebook, writeLocalNotebook } from './localNotebook.js';
 
@@ -6,6 +8,8 @@ import { stable, combineNotebooks, compareNotebooks, notebookSummary } from './s
 
 // Writes are serialized and conditional on the revision read from the server.
 let context = null;
+const writer = createNotebookWriter();
+let openOperation = 0;
 let timer;
 let retryTimer;
 const copy = value => JSON.parse(JSON.stringify(value));
@@ -18,7 +22,7 @@ export function getSyncDetails() {
     if (!c) return null;
     let backup = false;
     try { backup = Boolean(localStorage.getItem(`todo-personal:recovery-latest:${c.id}`)); } catch (_) {}
-    return { phase: c.phase || 'local', localSaved: c.localSaved, dirty: c.dirty, conflict: c.conflict,
+    return { revision: c.revision, phase: c.phase || 'local', localSaved: c.localSaved, dirty: c.dirty, conflict: c.conflict,
         savedAt: c.savedAt || null, syncedAt: c.syncedAt || null, counts: notebookSummary(c.state), failure: c.failure || null, backup };
 }
 export function getRecoveryCopy() {
@@ -27,13 +31,10 @@ export function getRecoveryCopy() {
     return name ? JSON.parse(localStorage.getItem(name)) : null;
 }
 function preserveCopies(c, cloud) {
-    const name = `todo-personal:recovery:${c.id}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-    const backup = { format: 'todo-personal-recovery-v1', createdAt: new Date().toISOString(),
-        local: { state: copy(c.state), revision: c.revision }, cloud: { state: copy(cloud.state), revision: cloud.revision } };
-    try { localStorage.setItem(name, JSON.stringify(backup)); localStorage.setItem(`todo-personal:recovery-latest:${c.id}`, name); }
-    catch (_) { throw new Error('Не удалось сохранить резервную копию на устройстве. Освободите место; обе текущие копии оставлены без изменений.'); }
+    preserveRecovery(localStorage, c.id, { state: copy(c.state), revision: c.revision }, { state: copy(cloud.state), revision: cloud.revision });
 }
 export function closeNotebook() {
+    openOperation++; writer.release();
     clearTimeout(timer);
     clearTimeout(retryTimer);
     context = null;
@@ -75,8 +76,10 @@ function scheduleRetry(c) {
     }, c.retryDelay);
     c.retryDelay = Math.min(c.retryDelay * 2, 60000);
 }
-export async function openNotebook(id) {
+export async function openNotebook(id, { onWaiting } = {}) {
     closeNotebook();
+    const operation = openOperation;
+    if (!await writer.acquire(id, onWaiting) || operation !== openOperation) return null;
     const c = { id, state: empty(), revision: 0, dirty: false, conflict: false, running: null, localSaved: false, retryDelay: 2000 };
     context = c;
     // Restore a complete account snapshot without waiting for the network.
@@ -284,3 +287,6 @@ function resumeSync() {
 window.addEventListener('offline', resumeSync);
 window.addEventListener('online', resumeSync);
 window.addEventListener('focus', resumeSync);
+
+window.addEventListener('pagehide', closeNotebook);
+window.addEventListener('pageshow', event => { if (event.persisted) window.location.reload(); });

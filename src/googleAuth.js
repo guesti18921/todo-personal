@@ -15,7 +15,7 @@ export function authErrorMessage(error) {
     return 'Не удалось выполнить вход. Попробуйте ещё раз.';
 }
 
-export function createGoogleLogin({ auth, native, redirectTo, serverUrl, open, onStatus }) {
+export function createGoogleLogin({ auth, native, redirectTo, serverUrl, open, onStatus, beforeStart = () => {} }) {
     let pending = null;
     function start() {
         if (pending) return pending;
@@ -23,6 +23,7 @@ export function createGoogleLogin({ auth, native, redirectTo, serverUrl, open, o
         pending = (async () => {
             await Promise.resolve(); // Assign pending before even a synchronous SDK failure.
             try {
+                await beforeStart();
                 const { data, error } = await auth.signInWithOAuth({ provider: 'google', options: {
                     redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' }
                 } });

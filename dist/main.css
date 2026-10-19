@@ -1,4 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap");
+@font-face{font-family:Lato;font-style:normal;font-weight:300;font-display:swap;src:url(./fonts/lato-300.woff) format("woff")}
+@font-face{font-family:Lato;font-style:normal;font-weight:400;font-display:swap;src:url(./fonts/lato-400.woff) format("woff")}
+@font-face{font-family:Lato;font-style:normal;font-weight:700;font-display:swap;src:url(./fonts/lato-700.woff) format("woff")}
 @-webkit-keyframes moveInRight {
   0% {
     opacity: 0;

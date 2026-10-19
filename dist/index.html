@@ -2,6 +2,8 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-src 'none'; form-action 'self'; script-src 'self' 'sha256-px/JdJJBFq+P3gz1iOtEsH4ZOCNt4MiNnscKLAFsRI4='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://ihvwqqvndmwtislvgamd.supabase.co wss://ihvwqqvndmwtislvgamd.supabase.co; worker-src 'self'">
+<script>if (window.top !== window.self) document.documentElement.hidden = true;</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <link rel="stylesheet" href="main.css">
     <link rel="stylesheet" href="auth.css?v=3-auth">
@@ -494,6 +496,6 @@
 
     </div>
     
-    <script src="main.js?v=10-tap"></script>
+    <script src="app-loader.js" data-entry="main.js?v=10-tap" defer></script>
 </body>
 </html>

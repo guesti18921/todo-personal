@@ -28,7 +28,7 @@ module.exports = async function(browser, origin, out) {
    assert.equal(await page.locator('#return-message').isVisible(),false);await page.waitForTimeout(50);release();
    await page.waitForFunction(()=>/отличаться|differ/.test(document.querySelector('#reset-error').textContent));
    assert.equal(await page.locator('#return-message').isVisible(),false);assert.equal(await page.locator('#save-password').isEnabled(),true);
-   await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
+   await page.addScriptTag({url:origin+'/__audit-axe.js'});
    assert.deepEqual(await page.evaluate(async()=>(await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}})).violations.map(v=>v.id)),[]);
    await page.evaluate(()=>document.fonts.ready);
    const layout=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,bg:getComputedStyle(document.querySelector('.pr-card')).backgroundColor,accent:getComputedStyle(document.querySelector('#save-password')).backgroundColor}));

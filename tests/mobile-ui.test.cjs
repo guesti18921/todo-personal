@@ -444,7 +444,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.42/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.43/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -850,7 +850,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.42');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.43');
  } finally { dom.window.close(); }
 });
 
@@ -1617,4 +1617,38 @@ for(const language of ['ru-RU','en-US'])for(const header of [true,false])test(`w
   release();await wait();await wait();assert.equal(d.querySelector('#auth-submit').disabled,false);assert.equal(d.querySelector('#auth-submit').getAttribute('aria-busy'),'false');
   assert.match(d.querySelector('#auth-message').textContent,language==='ru-RU'?/Неверная почта или пароль/:/Incorrect email or password/);assert.equal(d.querySelector('#auth-email').value,'audit@example.test');assert.equal(d.querySelector('#todo-app').hidden,true);if(header)assert.equal(cancelled,true);
  }finally{release();dom.window.close()}
+});
+
+function nativeHarness(seed=[], fetcher, launch=null) {
+ const dom=new JSDOM(html,{url:'https://test.local/',runScripts:'outside-only',virtualConsole}),w=dom.window,listeners={},calls=[];
+ Object.defineProperty(w.navigator,'languages',{value:['ru-RU']});Object.defineProperty(w,'crypto',{value:webcrypto});w.androidBridge={postMessage(){}};
+ const definitions={App:{getLaunchUrl:'promise',addListener:'callback',removeListener:'promise'},Browser:{open:'promise'},TimePicker:{deviceFormat:'promise'},Network:{addListener:'callback',removeListener:'promise'},LocalNotifications:{addListener:'callback',removeListener:'promise',cancelAll:'promise',checkPermissions:'promise'},BackupFiles:{save:'promise',pick:'promise'}};
+ w.Capacitor={PluginHeaders:Object.entries(definitions).map(([name,methods])=>({name,methods:Object.entries(methods).map(([name,rtype])=>({name,rtype}))})),nativeCallback:(plugin,name,opts,cb)=>{listeners[plugin+':'+opts.eventName]=cb;return 'cb';},nativePromise:async(plugin,name,opts)=>{calls.push({plugin,name,opts});if(plugin==='BackupFiles')return name==='save'?{cancelled:false}:{cancelled:false,data:JSON.stringify({todos:{},notes:[{id:'imported-native',title:'Native file',text:'Kept',date:'',time:''}]})};return name==='getLaunchUrl'?{url:launch}:name==='deviceFormat'?{is24Hour:true}:name==='checkPermissions'?{display:'prompt'}:{};}};
+ Object.assign(w,{TextEncoder,TextDecoder,Request,Response,Headers,fetch:fetcher});for(const[k,v]of seed)w.localStorage.setItem(k,v);
+ return{dom,w,listeners,calls,start(){w.eval(bundle);},snapshot(){return Array.from({length:w.localStorage.length},(_,i)=>{const k=w.localStorage.key(i);return[k,w.localStorage.getItem(k)]})}};
+}
+for(const cold of [false,true]) test(`native Google PKCE ${cold?'cold process':'warm return'} requires a local verifier and exchanges a duplicate code only once`,async()=>{
+ const session=JSON.parse(listFixture().seed[0][1]);session.user.app_metadata={providers:['google']};let exchanges=0,verifier;
+ const response=data=>new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
+ const fetcher=async(url,opts)=>{const address=String(url?.url||url);if(address.includes('/auth/v1/settings'))return response({external:{google:true}});if(address.includes('/auth/v1/token')){exchanges++;const body=JSON.parse(opts.body);assert.equal(body.auth_code,'returned-code');assert.ok(body.code_verifier.length>=43);verifier=body.code_verifier;return response(session);}if(address.includes('/auth/v1/user'))return response(session.user);if(address.includes('/rest/v1/notebooks'))return response({user_id:id,revision:0,todos:{home:[],today:[],week:[]},notes:[]});throw new TypeError('offline');};
+ let f=nativeHarness([],fetcher);try{
+  f.start();await wait();await wait();const d=f.w.document;assert.equal(d.querySelector('#auth-google').hidden,false);d.querySelector('#auth-google').click();await wait();await wait();
+  const opened=f.calls.find(x=>x.plugin==='Browser');assert.ok(opened);const authorize=new URL(opened.opts.url);assert.ok(authorize.searchParams.get('code_challenge'));assert.equal(authorize.searchParams.get('code_challenge_method'),'s256');
+  const callback=new URL(authorize.searchParams.get('redirect_to'));callback.searchParams.set('code','returned-code');const link=callback.href;
+  assert.equal(f.w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token'),null);
+  if(cold){const seed=f.snapshot();f.w.close();f=nativeHarness(seed,fetcher,link);f.start();await wait();await wait();}else{f.listeners['App:appUrlOpen']({url:link});f.listeners['App:appUrlOpen']({url:link});}
+  await wait();await ready(f.dom);await wait();f.listeners['App:appUrlOpen']({url:link});await wait();assert.equal(exchanges,1);assert.ok(verifier);assert.equal(JSON.parse(f.w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token')).user.id,id);
+  assert.equal(f.w.localStorage.getItem('todo-personal:native-oauth:pending'),null);assert.equal(f.snapshot().filter(([k])=>k.startsWith('todo-personal:native-oauth')).length,0);
+ }finally{f.w.close();}
+});
+test('native unsolicited OAuth tokens or codes cannot sign in a logged-out account',async()=>{
+ const session=JSON.parse(listFixture().seed[0][1]);let requests=0;const f=nativeHarness([],async()=>{requests++;throw new TypeError('offline')});try{f.start();await wait();await wait();const before=requests;for(const link of ['todopersonal://auth-callback?code=unsolicited','todopersonal://auth-callback#access_token='+session.access_token+'&refresh_token=injected']){f.listeners['App:appUrlOpen']({url:link});await wait();}assert.equal(requests,before);assert.equal(f.w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token'),null);assert.equal(f.w.document.querySelector('#todo-app').hidden,true);}finally{f.w.close();}
+});
+test('native backup actions use the user-selected file plugin and import only after confirmation',async()=>{
+ const fixture=listFixture(),f=nativeHarness(fixture.seed,async()=>{throw new TypeError('offline')});try{f.start();await ready(f.dom);const d=f.w.document;d.querySelector('[data-view="settings"]').click();d.querySelector('[data-sync-open]').click();d.querySelector('[data-export]').click();await wait();const saved=f.calls.find(x=>x.plugin==='BackupFiles'&&x.name==='save');assert.ok(saved);assert.equal(JSON.parse(saved.opts.data).owner,id);assert.match(saved.opts.name,/\.json$/);d.querySelector('[data-import-backup]').click();await wait();assert.ok(d.querySelector('[data-import-apply]'));assert.deepEqual(JSON.parse(f.w.localStorage.getItem(cacheKey)).state,fixture.state);d.querySelector('[data-import-apply]').click();await wait();await wait();assert.ok(JSON.parse(f.w.localStorage.getItem(cacheKey)).state.notes.some(n=>n.id==='imported-native'));}finally{f.w.close();}
+});
+for(const other of [false,true]) test(`native PKCE reauthentication ${other?'rejects another owner':'renews the current owner'} without replacing notebook data`,async()=>{
+ const fixture=listFixture(),original=JSON.parse(fixture.seed[0][1]);original.user.app_metadata={providers:['google']};fixture.seed[0][1]=JSON.stringify(original);const returned=JSON.parse(JSON.stringify(original));returned.refresh_token='renewed-pkce';if(other)returned.user.id='22222222-2222-4222-8222-222222222222';const response=data=>new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
+ let exchanged=false;const f=nativeHarness(fixture.seed,async(url,options={})=>{const address=String(url?.url||url);if(address.includes('/auth/v1/settings'))return response({external:{google:true}});if(address.includes('/auth/v1/token')){exchanged=true;return response(returned);}if(address.includes('/auth/v1/user'))return response(exchanged?returned.user:original.user);throw new TypeError('offline');});
+ try{f.start();await ready(f.dom);await wait();const d=f.w.document;d.querySelector('[data-view="settings"]').click();d.querySelector('[data-reauthenticate]').click();d.querySelector('[data-reauth-google]').click();await wait();await wait();const opened=f.calls.find(x=>x.plugin==='Browser');assert.ok(opened);const callback=new URL(new URL(opened.opts.url).searchParams.get('redirect_to'));callback.searchParams.set('code','renew-current');f.listeners['App:appUrlOpen']({url:callback.href});await wait();await wait();const stored=JSON.parse(f.w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token'));assert.equal(stored.user.id,id);assert.equal(stored.refresh_token,other?original.refresh_token:'renewed-pkce');assert.deepEqual(JSON.parse(f.w.localStorage.getItem(cacheKey)).state,fixture.state);if(other)assert.match(d.querySelector('[data-reauth-error]').textContent,/тот же аккаунт/);}finally{f.w.close();}
 });

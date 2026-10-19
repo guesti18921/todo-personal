@@ -15,6 +15,7 @@ function fixture(existing = new Map()) {
     const accounts = new Map();
     const selections = [];
     const storage = {
+        get length() { return disk.size; }, key: index => [...disk.keys()][index] ?? null,
         getItem: key => disk.get(key) ?? null,
         setItem(key, value) { if (failWrites) throw new Error('Quota exceeded'); disk.set(key, value); },
         removeItem: key => disk.delete(key)
@@ -64,7 +65,7 @@ function fixture(existing = new Map()) {
         }
     };
     const context = vm.createContext({
-        console, crypto: webcrypto, localStorage: storage,
+        console, TextEncoder, crypto: webcrypto, localStorage: storage,
         setTimeout(fn, delay) { const id = ++sequence; timers.set(id, { fn, delay }); return id; },
         clearTimeout(id) { timers.delete(id); },
         window: { addEventListener(event, handler) { listeners.set(event, handler); } }

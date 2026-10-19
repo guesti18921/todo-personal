@@ -18,6 +18,7 @@ const types = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/htm
 const server = http.createServer((req, res) => {
  const url = new URL(req.url, 'http://localhost');
  if(url.pathname==='/__auth-reference.html'){res.setHeader('Content-Type','text/html');res.end(fs.readFileSync(path.join(__dirname,'fixtures/approved-auth-plum.html')));return;}
+ if(url.pathname==='/__audit-axe.js'){res.setHeader('Content-Type','text/javascript');res.end(fs.readFileSync(require.resolve('axe-core/axe.min.js')));return;}
  const file = path.resolve(assets, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
  if (!file.startsWith(assets + path.sep)) { res.writeHead(403).end(); return; }
  try { res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream'); res.end(fs.readFileSync(file)); }
@@ -29,6 +30,9 @@ const server = http.createServer((req, res) => {
  const browser = await chromium.launch({ headless: true, ...(process.env.TODO_CHROMIUM_PATH ? { executablePath: process.env.TODO_CHROMIUM_PATH, args: ['--no-sandbox', '--disable-gpu'] } : {}) });
  const results = [];
  try {
+  await require('./security-shell-audit.cjs')(browser,origin);
+  await require('./backup-audit.cjs')(browser,origin,{seed,cacheKey});
+  await require('./tab-safety-audit.cjs')(browser,origin,{seed,cacheKey});
   await require('./login-error-audit.cjs')(browser,origin);
   await require('./password-reset-audit.cjs')(browser,origin,out);
   await require('./email-notice-audit.cjs')(browser,origin,out,{seed,cacheKey});
@@ -60,7 +64,7 @@ const server = http.createServer((req, res) => {
    await page.goto(origin); await page.locator('.mn-main h1').waitFor();
    await page.locator('[data-view="all"]').click();
    assert.equal(await page.locator('.mn-status').evaluate(el => el.scrollWidth <= el.clientWidth && getComputedStyle(el).textOverflow !== 'ellipsis'), true, 'saving status must remain fully readable at ' + width);
-   await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+   await page.addScriptTag({url:origin+'/__audit-axe.js'});
    const accessibility = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(v => ({ id: v.id, impact: v.impact, nodes: v.nodes.map(n => n.target) })));
    assert.deepEqual(accessibility, [], 'accessibility failures at ' + width + ': ' + JSON.stringify(accessibility));
    await page.screenshot({ path: path.join(out, name + '-list.png'), fullPage: true });
@@ -210,7 +214,7 @@ const server = http.createServer((req, res) => {
    await page.locator('[data-view="all"]').click();
    await page.locator('.mn-open').filter({hasText:'Встреча 10/12'}).click();
    assert.equal(await page.locator('[name="date"]').inputValue(), confirmed, 'chosen deadline survives restart');
-   await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+   await page.addScriptTag({url:origin+'/__audit-axe.js'});
    const savedAccessibility = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations.map(v=>v.id));
    assert.deepEqual(savedAccessibility, []);
    if (['small', 'english-small'].includes(name)) {
@@ -229,7 +233,7 @@ const server = http.createServer((req, res) => {
     await page.setViewportSize({width,height:Math.max(220,height-220)}); await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
     assert.equal(await resetInput.evaluate(el=>el.isConnected && document.activeElement===el && el.value==='test-password'),true);
     await page.setViewportSize({width,height}); await page.screenshot({path:path.join(out,name+'-password-recovery.png'),fullPage:true});
-    await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
+    await page.addScriptTag({url:origin+'/__audit-axe.js'});
     assert.deepEqual(await page.evaluate(async()=>(await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}})).violations.map(v=>v.id)),[]);
     await page.locator('[data-cancel-reauth]').click(); await page.locator('[data-view="all"]').click(); await page.locator('[data-open="note"]').click();
     assert.equal(await page.locator('#mn-details').inputValue(),'Preserve this draft during recovery');
@@ -274,7 +278,7 @@ const server = http.createServer((req, res) => {
   await p.locator('#auth-forgot').click();await p.locator('#auth-recovery-form').waitFor();
   assert.equal(await p.locator('#auth-tabs').isVisible(),true);
   await p.locator('#auth-recovery-back').click();await p.locator('#auth-tabs').waitFor();
-  await p.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
+  await p.addScriptTag({url:origin+'/__audit-axe.js'});
   for (const width of [320,736,1280]) {
    await p.setViewportSize({width,height:900});
    assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'auth overflow '+width);

@@ -26,7 +26,7 @@ module.exports=async function auditEmailNotices(browser,origin,out,{seed,cacheKe
   const p=await context.newPage();
   try{
    for(mode of ['recovery','signup','masked','existing-error','unconfirmed']){
-    await p.goto(origin);await p.locator('#auth-google').waitFor();await p.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
+    await p.goto(origin);await p.locator('#auth-google').waitFor();await p.addScriptTag({url:origin+'/__audit-axe.js'});
     const email='a'.repeat(64)+'@'+'b'.repeat(50)+'.example.test';
     await p.locator('#auth-email').fill(email);
     if(mode==='recovery'){
@@ -75,7 +75,7 @@ module.exports=async function auditEmailNotices(browser,origin,out,{seed,cacheKe
    await p.goto(origin);await p.locator('.mn-main h1').waitFor();
    const before=await p.evaluate(key=>JSON.parse(localStorage.getItem(key)).state,cacheKey);
    await p.locator('[data-view="settings"]').click();await p.locator('[data-reauthenticate]').click();await p.locator('[data-reauth-recovery]').click();
-   await p.locator('.mn-mail-notice').waitFor();await p.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
+   await p.locator('.mn-mail-notice').waitFor();await p.addScriptTag({url:origin+'/__audit-axe.js'});
    await fit(p,320,568,'notebook recovery '+locale);
    assert.deepEqual(await p.evaluate(key=>JSON.parse(localStorage.getItem(key)).state,cacheKey),before);
    await p.screenshot({path:out+'/email-notebook-'+locale+'.png',fullPage:true});

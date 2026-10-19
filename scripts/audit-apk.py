@@ -2,8 +2,8 @@
 import json, pathlib, sys, zipfile
 from apk_manifest import decode
 apk = pathlib.Path(sys.argv[1])
-version = sys.argv[2] if len(sys.argv) > 2 else '0.4.42'
-code = sys.argv[3] if len(sys.argv) > 3 else '46'
+version = sys.argv[2] if len(sys.argv) > 2 else '0.4.43'
+code = sys.argv[3] if len(sys.argv) > 3 else '47'
 with zipfile.ZipFile(apk) as z:
  assert z.testzip() is None
  manifest = decode(z.read('AndroidManifest.xml'))
@@ -31,13 +31,14 @@ with zipfile.ZipFile(apk) as z:
  config = json.loads(z.read('assets/capacitor.config.json'))['android']
  assert config['webContentsDebuggingEnabled'] is False and config['allowMixedContent'] is False and config['loggingBehavior'] == 'none'
  assert not any(n.lower().endswith(('.p12', '.jks', '.keystore', '.env')) for n in z.namelist())
- for name in ['password-reset.css', 'password-reset.js', 'reset-password.html']:
+ for name in ['password-reset.css', 'password-reset.js', 'reset-password.html', 'app-loader.js', 'fonts/lato-300.woff', 'fonts/lato-400.woff', 'fonts/lato-700.woff']:
   assert z.read('assets/public/'+name) == pathlib.Path('dist',name).read_bytes(), 'Recovery asset mismatch: '+name
  bundle = z.read('assets/public/main.js')
  assert version.encode() in bundle and b'SUPABASE_SERVICE_ROLE_KEY' not in bundle
  assert b'sourceMappingURL=data:' not in bundle
  assert b'NetworkPlugin' in b''.join(z.read(n) for n in z.namelist() if n.endswith('.dex'))
  assert b'DatePickerPlugin' in b''.join(z.read(n) for n in z.namelist() if n.endswith('.dex'))
+ assert b'BackupFilesPlugin' in b''.join(z.read(n) for n in z.namelist() if n.endswith('.dex'))
  assert b'TimePickerPlugin' in b''.join(z.read(n) for n in z.namelist() if n.endswith('.dex'))
 print('APK static audit passed:', version, 'release manifest, backup exclusions, TLS, permissions, exported components and assets.')
 print('Permissions:', ', '.join(sorted(permissions)))

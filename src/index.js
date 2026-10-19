@@ -1,3 +1,7 @@
+import { recoveryHistory, readRecovery, removeRecovery, preserveRecovery, parseBackup, mergeImported, BACKUP_BYTES } from './backupStore.js';
+import { stable, notebookSummary } from './syncModel.js';
+import { pickWebBackup } from './backupFiles.js';
+import { NATIVE_OAUTH_KEY, nativeOAuthStorage, createNativeOAuthGate } from './nativeOAuth.js';
 import { emailNoticeCopy } from './emailNotice.js';
 import { createAuthPresentation } from './authPresentation.js';
 import { createWebPush } from './webPush.js';
@@ -11,7 +15,7 @@ import { supabase, SUPABASE_URL, SUPABASE_PUBLIC_KEY } from './supabaseClient.js
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { createReminderEngine } from './reminderEngine.js';
 import { listEntries, createMobileNotebook } from './mobileNotebook.js';
-import { isNativeApp, setupNativeApp, openAuthBrowser, resetDeletedAccountData } from './nativeApp.js';
+import { isNativeApp, setupNativeApp, openAuthBrowser, resetDeletedAccountData, saveNativeBackup, pickNativeBackup } from './nativeApp.js';
 import { readCachedAccount } from './localAccount.js';
 import { AUTH_REDIRECT_URL, createAuthLinkHandler, parseAuthLink } from './authDeepLink.js';
 import { syncFailurePhase } from './syncFailure.js';
@@ -293,6 +297,7 @@ let activeAuthMethods = (() => { try { return reauthenticationMethods(JSON.parse
 let googleReauthPending = null;
 let googleReauthRunning = false;
 let nativePasswordRecovery = null;
+let nativeOAuthReturning = null, nativeOAuthCompleted = null;
 let authOperationGeneration = 0;
 
 // A separate non-persistent client prevents a cancelled verification request
@@ -301,6 +306,12 @@ const confirmationAuth = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:confirmation-check' },
     global: { fetch: boundedFetch }
 });
+
+const nativeOAuthGate = isNativeApp() ? createNativeOAuthGate(localStorage) : null;
+const nativeOAuthClient = isNativeApp() ? createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, {
+    auth: { persistSession: true, storage: nativeOAuthStorage(localStorage), storageKey: NATIVE_OAUTH_KEY,
+        autoRefreshToken: false, detectSessionInUrl: false, flowType: 'pkce' }, global: { fetch: boundedFetch }
+}) : null;
 let confirmationStatus = null;
 let emailNoticeKind = 'confirmation';
 const confirmationMessages = {
@@ -450,10 +461,11 @@ async function refreshGoogleProvider() {
     catch (_) { googleEnabled = false; }
     finally { checkingGoogle = false; updateGoogleVisibility(); }
 }
-const googleLogin = createGoogleLogin({ auth: supabase.auth, native: isNativeApp(),
+const googleLogin = createGoogleLogin({ auth: nativeOAuthClient?.auth || supabase.auth, native: isNativeApp(),
     serverUrl: SUPABASE_URL,
     redirectTo: isNativeApp() ? AUTH_REDIRECT_URL : location.origin + location.pathname,
-    open: openAuthBrowser,
+    beforeStart: () => nativeOAuthGate?.clear(),
+    open: async (url, native) => { nativeOAuthGate?.remember(url, null); await openAuthBrowser(url, native); },
     onStatus(state, message) {
         authGoogle.disabled = authSubmit.disabled = authSwitch.disabled = state === 'pending';
         if (!activeUser) authMessage.textContent = state === 'pending' ? t('Открываем вход через Google…')
@@ -580,7 +592,7 @@ async function loadAccount(id, ticket) {
     retryLoad.disabled = switchAccount.disabled = true;
     authMessage.textContent = t('Открываем ваши записи…');
     try {
-        const state = await openNotebook(id);
+        const state = await openNotebook(id, { onWaiting() { if (ticket === generation) authMessage.textContent = t('Блокнот открыт в другой вкладке. Закройте её — здесь он откроется автоматически.'); } });
         if (ticket !== generation || !state) return;
         applyState(state);
         ready = true;
@@ -594,7 +606,7 @@ async function loadAccount(id, ticket) {
     } catch (error) {
         if (ticket !== generation) return;
         closeNotebook();
-        authMessage.textContent = error instanceof SyntaxError || /^(Invalid|Unsupported) (local |notebook)/.test(error?.message || '')
+        authMessage.textContent = error?.code === 'notebook_lock_unavailable' ? t('Не удалось безопасно открыть блокнот. Закройте другие вкладки приложения и попробуйте снова.') : error instanceof SyntaxError || /^(Invalid|Unsupported) (local |notebook)/.test(error?.message || '')
             ? t('Не удалось прочитать сохранённые записи. Данные на устройстве оставлены без изменений. Попробуйте обновить приложение.')
             : t({
                 auth: 'Не удалось подтвердить вход. Войдите в аккаунт заново.',
@@ -891,13 +903,15 @@ mobileUI = createMobileNotebook({
         if (!owner || changingAccount || googleReauthRunning) throw new Error(t('Не удалось войти. Проверьте пароль и соединение.'));
         authOperationGeneration++;
         nativePasswordRecovery = null;
-        const temporary = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:reauth-google' }, global: { fetch: boundedFetch } });
+        const temporary = nativeOAuthClient || createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:reauth-google' }, global: { fetch: boundedFetch } });
         const pending = { owner, temporary, startedAt: Date.now() }; googleReauthPending = pending;
         try {
             const login = createGoogleLogin({ auth: temporary.auth, native: isNativeApp(), serverUrl: SUPABASE_URL,
                 redirectTo: isNativeApp() ? AUTH_REDIRECT_URL : location.origin + location.pathname + '?reauth=google',
+                beforeStart: () => nativeOAuthGate?.clear(),
                 open: async url => {
                     if (owner !== activeUser) throw new Error('account_mismatch');
+                    nativeOAuthGate?.remember(url, owner);
                     if (!isNativeApp()) sessionStorage.setItem('todo-personal:reauth-google', JSON.stringify({ owner, startedAt: pending.startedAt }));
                     await openAuthBrowser(url);
                 }, onStatus() {} });
@@ -926,15 +940,52 @@ mobileUI = createMobileNotebook({
         const state = await resolveConflict(mode);
         if (state && ready && id === activeUser) { applyState(state); flushNotebook(); }
     },
-    canExportNotebook: !isNativeApp(),
-    exportNotebook(recovery = false) {
-        const data = recovery ? getRecoveryCopy() : getDraft();
+    canExportNotebook: true,
+    getBackupHistory: () => activeUser ? recoveryHistory(localStorage, activeUser) : [],
+    deleteBackup(key) {
+        if (!activeUser) throw new Error(t('Сначала войдите в аккаунт.'));
+        try { removeRecovery(localStorage, activeUser, key); }
+        catch (_) { throw new Error(t('Не удалось удалить копию на устройстве. Записи блокнота не изменены.')); }
+    },
+    async exportNotebook(recovery = false) {
+        const owner = activeUser;
+        if (!owner || !ready) throw new Error(t('Дождитесь открытия блокнота.'));
+        const data = typeof recovery === 'string' ? readRecovery(localStorage, owner, recovery) : recovery ? getRecoveryCopy() : { format: 'todo-personal-backup-v1', owner, exportedAt: new Date().toISOString(), state: getDraft() };
         if (!data) throw new Error(t('Нет сохранённой копии для скачивания.'));
-        if (isNativeApp()) throw new Error(t('Скачивание файла пока доступно в веб-версии. Резервная копия сохранена на этом устройстве.'));
-        const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' }));
-        const link = document.createElement('a'); link.href = url;
-        link.download = `todo-personal-${recovery ? 'recovery' : 'backup'}-${new Date().toISOString().slice(0, 10)}.json`;
-        link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+        const raw = JSON.stringify(data, null, 2);
+        if (new TextEncoder().encode(raw).length > BACKUP_BYTES) throw new Error(t('Файл слишком большой. Максимальный размер — 8 МБ.'));
+        const name = `todo-personal-${recovery ? 'recovery' : 'backup'}-${new Date().toISOString().slice(0, 10)}.json`;
+        if (isNativeApp()) {
+            try { return await saveNativeBackup({ name, data: raw }); }
+            catch (_) { throw new Error(t('Не удалось сохранить файл. Выберите другое место и попробуйте снова.')); }
+        }
+        const url = URL.createObjectURL(new Blob([raw], { type: 'application/json;charset=utf-8' }));
+        const link = document.createElement('a'); link.href = url; link.download = name; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return { cancelled: false };
+    },
+    async importNotebook(mode, preview) {
+        const owner = activeUser;
+        if (!owner || !ready) throw new Error(t('Дождитесь открытия блокнота.'));
+        if (mode === 'pick') {
+            let raw;
+            if (isNativeApp()) {
+                let file; try { file = await pickNativeBackup(); } catch (_) { throw new Error(t('Не удалось прочитать файл резервной копии.')); }
+                if (file.cancelled) return null; raw = file.data;
+            } else raw = await pickWebBackup();
+            if (raw === null || owner !== activeUser) return null;
+            const parsed = parseBackup(raw, owner), current = getDraft();
+            return { owner, state: parsed.state, hasOwner: parsed.hasOwner, fingerprint: stable(current), counts: notebookSummary(parsed.state) };
+        }
+        if (mode !== 'apply' || preview?.owner !== owner) throw new Error(t('Сначала выберите файл для текущего аккаунта.'));
+        const current = getDraft();
+        if (stable(current) !== preview.fingerprint) throw new Error(t('Блокнот изменился после выбора файла. Выберите файл ещё раз — текущие записи сохранены.'));
+        const next = mergeImported(current, preview.state);
+        if (stable(next) === stable(current)) return { changed: false };
+        const revision = getSyncDetails()?.revision || 0;
+        preserveRecovery(localStorage, owner, { state: current, revision }, { state: preview.state, revision });
+        if (!saveNotebook(next)) { saveNotebook(current); throw new Error(t('Не удалось сохранить импорт на устройстве. Текущие записи оставлены без изменений.')); }
+        applyState(next); await flushNotebook(); return { changed: true };
     },
     getAccount: () => activeUserEmail
 });
@@ -972,7 +1023,29 @@ const handleRegularAuthLink = createAuthLinkHandler({ auth: supabase.auth, onSta
         authMessage.textContent = t('Не удалось завершить вход. Проверьте соединение и попробуйте снова. Если подтверждаете почту, откройте ссылку из письма ещё раз.');
     }
 } });
+async function finishNativeSignIn(url) {
+    if (nativeOAuthReturning) return nativeOAuthReturning.url === url ? nativeOAuthReturning.promise : false;
+    const link = parseAuthLink(url), pending = nativeOAuthGate.read(link, null);
+    if (!pending) { authMessage.textContent = t('Начните вход через Google в приложении заново. Записи на устройстве сохранены.'); return false; }
+    const operation = authOperationGeneration;
+    authGoogle.disabled = authSubmit.disabled = authSwitch.disabled = true;
+    authMessage.textContent = t('Завершаем вход…');
+    const promise = Promise.resolve().then(async () => {
+        try {
+            const result = await nativeOAuthClient.auth.exchangeCodeForSession(link.code, link.flowId ? { flowId: link.flowId } : undefined);
+            if (operation !== authOperationGeneration || activeUser || result.error || !result.data?.session) throw new Error('incomplete_oauth');
+            const verified = await nativeOAuthClient.auth.getUser();
+            if (operation !== authOperationGeneration || activeUser || verified.error || verified.data?.user?.id !== result.data.session.user.id) throw new Error('incomplete_oauth');
+            const installed = await supabase.auth.setSession({ access_token: result.data.session.access_token, refresh_token: result.data.session.refresh_token });
+            if (installed.error) throw installed.error;
+            nativeOAuthCompleted = url; return true;
+        } catch (_) { if (!activeUser && operation === authOperationGeneration) authMessage.textContent = t('Не удалось завершить вход. Начните вход через Google в приложении заново.'); return false; }
+        finally { nativeOAuthReturning = null; nativeOAuthGate.clear(); authGoogle.disabled = authSubmit.disabled = authSwitch.disabled = false; }
+    });
+    nativeOAuthReturning = { url, promise }; return promise;
+}
 async function handleAuthLink(url) {
+    if (nativeOAuthCompleted === url) return true;
     // Android may deliver the same link again while the password request is pending.
     // Keep its controller and disabled form intact until that request finishes.
     if (nativePasswordRecovery?.saving) return false;
@@ -1009,16 +1082,19 @@ async function handleAuthLink(url) {
     }
 
     if (!parseAuthLink(url)) return false;
+    if (!activeUser && nativeOAuthClient) return finishNativeSignIn(url);
     if (!activeUser) return handleRegularAuthLink(url);
     // Keep recovery isolated until the user explicitly starts another sign-in.
     if (nativePasswordRecovery?.owner === activeUser) return false;
     if (googleReauthRunning) return false;
+    const parsed = parseAuthLink(url);
+    if (nativeOAuthClient && parsed?.code && !nativeOAuthGate.read(parsed, activeUser)) { mobileUI.completeReauthentication(t('Вход истёк. Нажмите «Продолжить с Google» ещё раз.')); return false; }
     const operation = authOperationGeneration;
     const pending = googleReauthPending;
     // Even after an Android process restart, never install another user's session over an open notebook.
     const owner = pending?.owner || activeUser;
     if (pending && Date.now() - pending.startedAt > 15 * 60 * 1000) { googleReauthPending = null; mobileUI.completeReauthentication(t('Вход истёк. Нажмите «Продолжить с Google» ещё раз.')); return false; }
-    const temporary = pending?.temporary || createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:reauth-google' }, global: { fetch: boundedFetch } });
+    const temporary = pending?.temporary || nativeOAuthClient || createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'todo-personal:reauth-google' }, global: { fetch: boundedFetch } });
     googleReauthRunning = true;
     try {
         await renewAccountFromLink({ url, temporaryAuth: temporary.auth, activeAuth: supabase.auth, owner, currentOwner: () => operation === authOperationGeneration ? activeUser : null });
@@ -1029,7 +1105,7 @@ async function handleAuthLink(url) {
     } catch (error) {
         if (operation !== authOperationGeneration || activeUser !== owner) return false;
         mobileUI.completeReauthentication(t(error.message === 'account_mismatch' ? 'Войдите в тот же аккаунт. Локальные записи не перенесены.' : 'Не удалось завершить вход. Локальные записи сохранены. Попробуйте снова.')); return false;
-    } finally { googleReauthRunning = false; googleReauthPending = null; }
+    } finally { googleReauthRunning = false; googleReauthPending = null; if (parsed?.code) nativeOAuthGate?.clear(); }
 }
 if (!isNativeApp() && new URLSearchParams(location.search).get('reauth') === 'google') {
     const callback = AUTH_REDIRECT_URL + location.hash;
