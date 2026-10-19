@@ -521,7 +521,6 @@ export default {
   "Эта почта уже используется для входа:": "This email is already used to sign in:",
   "Войдите с прежним паролем или восстановите доступ. Пароль, введённый при повторной регистрации, не заменяет пароль аккаунта.": "Sign in with your existing password or reset it. The password entered during a repeat signup does not replace your account password.",
   "Восстановить пароль": "Reset password",
-  "Срок и напоминание": "Due date and reminder",
   "Развернуть текст": "Expand text",
   "Вернуть две колонки": "Restore two columns",
   "Без напоминания": "No reminder",
