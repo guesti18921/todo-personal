@@ -17,7 +17,7 @@ import { createReminderEngine } from './reminderEngine.js';
 import { listEntries, createMobileNotebook } from './mobileNotebook.js';
 import { isNativeApp, setupNativeApp, openAuthBrowser, resetDeletedAccountData, saveNativeBackup, pickNativeBackup } from './nativeApp.js';
 import { readCachedAccount } from './localAccount.js';
-import { AUTH_REDIRECT_URL, createAuthLinkHandler, parseAuthLink } from './authDeepLink.js';
+import { AUTH_REDIRECT_URL, createAuthLinkHandler, parseAuthLink, isPasswordResetReturnLink } from './authDeepLink.js';
 import { syncFailurePhase } from './syncFailure.js';
 import { boundedFetch } from './networkFetch.js';
 import { authErrorMessage, createGoogleLogin, googleProviderEnabled } from './googleAuth.js';
@@ -1045,6 +1045,11 @@ async function finishNativeSignIn(url) {
     nativeOAuthReturning = { url, promise }; return promise;
 }
 async function handleAuthLink(url) {
+    if (isPasswordResetReturnLink(url)) {
+        // Returning from the isolated browser reset never changes an open account.
+        if (!activeUser && !recoveryRequestBusy) { authConfirmBack.click(); authPassword.focus(); }
+        return true;
+    }
     if (nativeOAuthCompleted === url) return true;
     // Android may deliver the same link again while the password request is pending.
     // Keep its controller and disabled form intact until that request finishes.

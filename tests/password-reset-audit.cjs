@@ -4,7 +4,7 @@ module.exports = async function(browser, origin, out) {
  const id='11111111-1111-4111-8111-111111111111';
  const jwt=Buffer.from('{"alg":"HS256"}').toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:id,exp:Math.floor(Date.now()/1000)+86400})).toString('base64url')+'.test';
  for(const locale of ['ru-RU','en-US']) for(const [width,height] of [[320,568],[390,844],[736,900]]) {
-  const context=await browser.newContext({viewport:{width,height},locale});
+  const context=await browser.newContext({viewport:{width,height},locale,...(width===390?{userAgent:'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/155.0 Mobile Safari/537.36'}:{})});
   const page=await context.newPage();let updates=0,release,fail=true;const errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await context.addInitScript(()=>localStorage.setItem('existing-notebook-account','keep'));
@@ -36,9 +36,16 @@ module.exports = async function(browser, origin, out) {
    await page.screenshot({path:path.join(out,`reset-${locale}-${width}.png`),fullPage:true});
    fail=false;await page.locator('#save-password').click();await page.waitForFunction(()=>document.querySelector('#save-password').disabled);await page.waitForTimeout(50);release();
    await page.locator('#return-message').waitFor();assert.equal(await page.locator('#reset-form').isVisible(),false);
+   assert.equal(await page.locator('[data-reset-back]').getAttribute('href'),width===390?'todopersonal://auth-callback?return=sign-in':'https://todo.m1strell.com/');
+   assert.equal(await page.locator('#web-sign-in').isVisible(),width===390);
+   assert.equal(await page.locator('#open-app').isVisible(),false);
    assert.match(await page.locator('[data-reset-success] h1').textContent(),/Пароль сохранён|Password saved/);
    assert.equal(await page.evaluate(()=>localStorage.getItem('existing-notebook-account')),'keep');assert.equal(await page.evaluate(()=>localStorage.length),1);assert.equal(updates,2);assert.deepEqual(errors,[]);
    await page.screenshot({path:path.join(out,`reset-success-${locale}-${width}.png`),fullPage:true});
+   const cdp=await context.newCDPSession(page);let target;cdp.on('Page.frameRequestedNavigation',event=>{target=event.url;});await cdp.send('Page.enable');
+   await page.route('https://todo.m1strell.com/**',route=>route.fulfill({status:200,contentType:'text/html',body:'<p>Sign in</p>'}));
+   await page.locator('[data-reset-back]').click();await page.waitForTimeout(150);assert.equal(target,width===390?'todopersonal://auth-callback?return=sign-in':'https://todo.m1strell.com/');
+   if(width===390){assert.match(page.url(),/reset-password/);await page.locator('#web-sign-in').click();await page.waitForURL('https://todo.m1strell.com/');}
   } finally {await context.close();}
  }
  console.log('Password reset: 6 layouts, independent centered eyes, server failure/pending/success, account isolation and accessibility passed');

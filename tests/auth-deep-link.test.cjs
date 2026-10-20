@@ -94,3 +94,10 @@ test('native launch and running app deliver callbacks through the same handler',
     await native.namespace.openAuthBrowser('https://example.com');
     assert.deepEqual(opened, ['https://example.com']);
 });
+
+test('password-reset return is a strict credential-free navigation link', async () => {
+ const { PASSWORD_RESET_RETURN_URL: url, isPasswordResetReturnLink, createAuthLinkHandler } = await fixture();
+ assert.equal(url, 'todopersonal://auth-callback?return=sign-in');
+ assert.equal(isPasswordResetReturnLink(url), true);
+ for (const value of [url+'#access_token=secret',url+'&code=secret',url.replace('auth-callback','other'),null]) assert.equal(isPasswordResetReturnLink(value),false);
+});

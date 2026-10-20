@@ -1,11 +1,14 @@
 import { resetFrame, resetFields, resetSave, resetNote, resetSuccess, toggleResetEye } from './passwordResetView.js';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_PUBLIC_KEY } from './authConfig.js';
+import { PASSWORD_RESET_RETURN_URL } from './authDeepLink.js';
 import { boundedFetch } from './networkFetch.js';
 import { readRecoveryTokens, createPasswordRecovery } from './passwordRecovery.js';
 
 const tokens = readRecoveryTokens(window.todoRecoveryFragment || '');
 delete window.todoRecoveryFragment;
+const android = /Android/i.test(navigator.userAgent);
+const webSignIn = 'https://todo.m1strell.com/';
 const en = !navigator.language.toLowerCase().startsWith('ru');
 document.documentElement.lang = en ? 'en' : 'ru';
 const text = (ru, english) => en ? english : ru;
@@ -15,7 +18,15 @@ const translations = {
  'Пароль сохранён':'Password saved','Теперь можно войти с новым паролем.':'You can now sign in with your new password.','Вернуться ко входу':'Return to sign in'
 };
 const t = ru => en ? translations[ru] || ru : ru;
-document.querySelector('#reset-root').innerHTML = resetFrame(`<div id="reset-editor"><h1 id="heading">${t('Новый пароль')}</h1><p class="pr-sub" id="status" role="status" aria-live="polite"></p><form id="reset-form" hidden>${resetFields(t)}<p class="pr-error" id="reset-error" role="alert"></p><button class="pr-save" id="save-password" type="submit">${resetSave(t)}</button></form><button class="pr-save" id="retry" type="button" hidden>${text('Повторить проверку','Retry verification')}</button>${resetNote(t)}</div><div id="return-message" hidden>${resetSuccess(t)}</div><a class="pr-link" id="open-app" href="todopersonal://auth-callback" hidden>${text('Открыть Android-приложение','Open Android app')}</a>`);
+document.querySelector('#reset-root').innerHTML = resetFrame(`<div id="reset-editor"><h1 id="heading">${t('Новый пароль')}</h1><p class="pr-sub" id="status" role="status" aria-live="polite"></p><form id="reset-form" hidden>${resetFields(t)}<p class="pr-error" id="reset-error" role="alert"></p><button class="pr-save" id="save-password" type="submit">${resetSave(t)}</button></form><button class="pr-save" id="retry" type="button" hidden>${text('Повторить проверку','Retry verification')}</button>${resetNote(t)}</div><div id="return-message" hidden>${resetSuccess(t)}</div><a class="pr-link" id="open-app" href="${PASSWORD_RESET_RETURN_URL}" hidden>${text('Открыть Android-приложение','Open Android app')}</a><a class="pr-link" id="web-sign-in" href="${webSignIn}" hidden>${text('Войти в веб-версии','Sign in on the web')}</a>`);
+// Keep the shared native success view intact; on this browser page the action is navigation.
+const backButton = document.querySelector('[data-reset-back]');
+const backLink = document.createElement('a');
+backLink.className = backButton.className;
+backLink.dataset.resetBack = '';
+backLink.textContent = backButton.textContent;
+backLink.href = android ? PASSWORD_RESET_RETURN_URL : webSignIn;
+backButton.replaceWith(backLink);
 const form = document.querySelector('#reset-form');
 const password = document.querySelector('#new-password');
 const repeat = document.querySelector('#repeat-password');
@@ -23,7 +34,6 @@ const retry = document.querySelector('#retry');
 document.addEventListener('click', event => {
  const eye = event.target.closest('[data-reset-eye]');
  if (eye) toggleResetEye(eye, document, t);
- if (event.target.closest('[data-reset-back]')) location.assign('https://todo.m1strell.com/');
 });
 const messages = {
     checking: ['Проверяем ссылку…', 'Checking the link…'],
@@ -56,7 +66,8 @@ const recovery = createPasswordRecovery({ auth: client.auth, onStatus(status) {
     const save = document.querySelector('#save-password');
     save.setAttribute('aria-busy', String(status === 'saving'));
     save.innerHTML = status === 'saving' ? `<span class="pr-spin" aria-hidden="true"></span><span>${text('Сохраняем…','Saving…')}</span>` : resetSave(t);
-    document.querySelector('#open-app').hidden = !['success', 'invalid'].includes(status) || !/Android/i.test(navigator.userAgent);
+    document.querySelector('#open-app').hidden = status !== 'invalid' || !android;
+    document.querySelector('#web-sign-in').hidden = !['success', 'invalid'].includes(status) || !android;
 } });
 retry.addEventListener('click', () => recovery.open(tokens));
 form.addEventListener('submit', async event => {

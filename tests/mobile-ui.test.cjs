@@ -444,7 +444,7 @@ test('draft recovery is visible after restart, discard is reversible and storage
   assert.equal(dom.window.localStorage.getItem(draftKey), null);
   assert.equal(d.querySelector('[data-continue-draft]'), null);
   assert.ok(JSON.parse(dom.window.localStorage.getItem(cacheKey)).state.notes.some(n => n.title === draft.text));
-  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.44/);
+  d.querySelector('[data-view="settings"]').click(); assert.match(d.querySelector('.mn-main').textContent, /версия 0\.4\.45/);
  } finally { dom.window.close(); }
 });
 test('notification permissions are shown only after choosing a reminder and return when needed', async () => {
@@ -850,7 +850,7 @@ test('public documents are grouped in settings and privacy is available before l
   const links = [...d.querySelectorAll('.mn-about-links a')];
   assert.deepEqual(links.map(a => new URL(a.href).pathname), ['/privacy.html', '/support.html', '/delete-account.html']);
   assert.ok(links.every(a => a.target === '_blank' && a.rel.includes('noopener')));
-  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.44');
+  assert.equal(d.querySelector('.mn-version').textContent, 'TO-DO Personal · версия 0.4.45');
  } finally { dom.window.close(); }
 });
 
@@ -1651,4 +1651,19 @@ for(const other of [false,true]) test(`native PKCE reauthentication ${other?'rej
  const fixture=listFixture(),original=JSON.parse(fixture.seed[0][1]);original.user.app_metadata={providers:['google']};fixture.seed[0][1]=JSON.stringify(original);const returned=JSON.parse(JSON.stringify(original));returned.refresh_token='renewed-pkce';if(other)returned.user.id='22222222-2222-4222-8222-222222222222';const response=data=>new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
  let exchanged=false;const f=nativeHarness(fixture.seed,async(url,options={})=>{const address=String(url?.url||url);if(address.includes('/auth/v1/settings'))return response({external:{google:true}});if(address.includes('/auth/v1/token')){exchanged=true;return response(returned);}if(address.includes('/auth/v1/user'))return response(exchanged?returned.user:original.user);throw new TypeError('offline');});
  try{f.start();await ready(f.dom);await wait();const d=f.w.document;d.querySelector('[data-view="settings"]').click();d.querySelector('[data-reauthenticate]').click();d.querySelector('[data-reauth-google]').click();await wait();await wait();const opened=f.calls.find(x=>x.plugin==='Browser');assert.ok(opened);const callback=new URL(new URL(opened.opts.url).searchParams.get('redirect_to'));callback.searchParams.set('code','renew-current');f.listeners['App:appUrlOpen']({url:callback.href});await wait();await wait();const stored=JSON.parse(f.w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token'));assert.equal(stored.user.id,id);assert.equal(stored.refresh_token,other?original.refresh_token:'renewed-pkce');assert.deepEqual(JSON.parse(f.w.localStorage.getItem(cacheKey)).state,fixture.state);if(other)assert.match(d.querySelector('[data-reauth-error]').textContent,/тот же аккаунт/);}finally{f.w.close();}
+});
+
+for(const cold of [false,true]) test(`password reset ${cold?'cold':'warm'} return opens Android sign-in without exchanging credentials`,async()=>{
+ let authRequests=0;
+ const f=nativeHarness([],async(url)=>{const address=String(url?.url||url);if(address.includes('/auth/v1/settings'))return new Response(JSON.stringify({external:{google:true}}),{status:200});authRequests++;throw new TypeError('offline');},cold?'todopersonal://auth-callback?return=sign-in':null);
+ try{f.start();await wait();await wait();const d=f.w.document;
+  if(!cold){d.querySelector('#auth-email').value='return@example.test';d.querySelector('#auth-forgot').click();assert.equal(d.querySelector('#auth-recovery-form').hidden,false);f.listeners['App:appUrlOpen']({url:'todopersonal://auth-callback?return=sign-in'});await wait();}
+  assert.equal(d.querySelector('#auth-form').hidden,false);assert.equal(d.querySelector('#auth-confirm').hidden,true);assert.equal(d.querySelector('#auth-recovery-form').hidden,true);assert.equal(d.querySelector('#auth-password').value,'');assert.equal(d.activeElement.id,'auth-password');assert.equal(authRequests,0);assert.equal(f.w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token'),null);
+ }finally{f.w.close();}
+});
+test('password reset return cannot replace an open Android account or its draft',async()=>{
+ const fixture=listFixture();let exchanges=0;
+ const f=nativeHarness(fixture.seed,async(url)=>{const address=String(url?.url||url);if(address.includes('/auth/v1/token'))exchanges++;throw new TypeError('offline');});
+ try{f.start();await ready(f.dom);const d=f.w.document;d.querySelector('[data-view="all"]').click();d.querySelector('.mn-add').click();const input=d.querySelector('#mn-text');input.value='Unfinished draft';input.dispatchEvent(new f.w.Event('input',{bubbles:true}));const before=f.w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token');f.listeners['App:appUrlOpen']({url:'todopersonal://auth-callback?return=sign-in'});await wait();assert.equal(d.querySelector('#mn-text'),input);assert.equal(input.value,'Unfinished draft');assert.equal(d.querySelector('#todo-app').hidden,false);assert.equal(f.w.localStorage.getItem('sb-ihvwqqvndmwtislvgamd-auth-token'),before);assert.equal(exchanges,0);
+ }finally{f.w.close();}
 });

@@ -1,4 +1,7 @@
 export const AUTH_REDIRECT_URL = 'todopersonal://auth-callback';
+// Navigation only: never attach credentials or install a session from this link.
+export const PASSWORD_RESET_RETURN_URL = AUTH_REDIRECT_URL + '?return=sign-in';
+export const isPasswordResetReturnLink = value => value === PASSWORD_RESET_RETURN_URL;
 
 // Only the dedicated auth URI may supply credentials. Never log callback URLs.
 export function parseAuthLink(value) {

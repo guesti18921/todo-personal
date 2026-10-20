@@ -2,8 +2,8 @@
 import json, pathlib, sys, zipfile
 from apk_manifest import decode
 apk = pathlib.Path(sys.argv[1])
-version = sys.argv[2] if len(sys.argv) > 2 else '0.4.44'
-code = sys.argv[3] if len(sys.argv) > 3 else '48'
+version = sys.argv[2] if len(sys.argv) > 2 else '0.4.45'
+code = sys.argv[3] if len(sys.argv) > 3 else '49'
 with zipfile.ZipFile(apk) as z:
  assert z.testzip() is None
  manifest = decode(z.read('AndroidManifest.xml'))

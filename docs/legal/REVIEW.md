@@ -74,10 +74,7 @@ Public URLs:
 https://todo.m1strell.com/privacy.html
 https://todo.m1strell.com/delete-account.html
 
-Remaining: add the public privacy link to sign-in and Settings, plus support and
-external account-deletion links, then ship them in the next signed Android build.
-Complete Play Console Data Safety and regional/audience checks. Gmail filtering
-verification is deferred at the owner's request; do not claim it is resolved.
+Historical note (2026-10-08), superseded by the review below: the three public links are now shipped in sign-in/Settings and signed Android builds. Play Console setup is separate from the current direct APK distribution. Mailbox delivery cannot be inferred from a working mailto link.
 
 ## Manual support deletion procedure
 
@@ -115,3 +112,40 @@ password protection is OFF (Pro feature). Email limit 30/project/hour; sign-in
 and signup limit 30/IP/5 minutes; token verification 30/IP/5 minutes; token
 refresh 150/IP/5 minutes. IP forwarding OFF. Minimum password length was 6;
 user instructed to set 8, saved state still needs confirmation. The client weak-password message uses 8 in Android 0.4.12; the backend saved value still needs confirmation.
+
+## Current implementation review — 2026-10-20 / 0.4.45
+
+Compared the RU/EN policy, support and deletion pages with the current source,
+live deployed deletion/push Edge Functions, and read-only database constraints.
+All three public tables have RLS enabled. Confirmed ON DELETE CASCADE from
+notebooks and web_push_subscriptions to auth.users, and from delivery history
+to subscriptions. No user rows or secrets were read for this review.
+
+Updated both policy languages to cover optional browser push endpoints, keys,
+language/time zone, encrypted delivery metadata without entry text, browser/OS
+push providers, 90-day unrenewed subscription expiry and dispatcher cleanup of
+history older than 7 days. Clarified that local Android reminders remain local,
+whereas browser push needs internet. Added selected-file JSON import/export,
+unencrypted files without Auth credentials, recovery history, and the fact that
+entry deletion does not rewrite earlier recovery copies. Removed a brittle
+fixed Supabase log-access window and an unverified current audit-log toggle;
+provider retention rules remain distinct from erasure guarantees.
+
+Support and deletion contact remains support@m1strell.com. Prior owner acceptance
+of mailbox monitoring and 30-day handling/cleanup remains unchanged. Reviewing
+code and DNS cannot confirm present mailbox receipt or ongoing manual handling.
+Do not claim delivery testing or legal certification from this source audit.
+The deletion mailto prepares a draft and does not send or delete anything itself.
+
+The UI links are present before sign-in and in Settings > About (RU/EN).
+Policy, support, and account-deletion HTML use local styles and no tracking.
+Fixed long policy heading wrapping at 320px without changing the palette.
+Ready-to-use listing text and release preservation notes are in
+`docs/release-readiness-0.4.45.md`. Store identity, audience, regions and a
+submitted Data Safety form cannot be verified without that actual listing.
+
+References rechecked: Supabase mobile deep linking; Android create-deeplinks;
+Supabase Logs documentation (plan-dependent availability); Resend GDPR page
+(30-day email/log retention on standard Free/Pro/Scale plans). Supabase changelog
+2026-10-12 announces legacy TLS CBC cipher removal on 2026-11-10; this navigation
+change does not alter TLS or supported Android WebView requirements.
