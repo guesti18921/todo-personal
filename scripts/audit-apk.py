@@ -2,8 +2,8 @@
 import json, pathlib, sys, zipfile
 from apk_manifest import decode
 apk = pathlib.Path(sys.argv[1])
-version = sys.argv[2] if len(sys.argv) > 2 else '0.4.45'
-code = sys.argv[3] if len(sys.argv) > 3 else '49'
+version = sys.argv[2] if len(sys.argv) > 2 else '0.4.46'
+code = sys.argv[3] if len(sys.argv) > 3 else '50'
 with zipfile.ZipFile(apk) as z:
  assert z.testzip() is None
  manifest = decode(z.read('AndroidManifest.xml'))
@@ -22,6 +22,9 @@ with zipfile.ZipFile(apk) as z:
  activity = app.find('activity')
  assert any(x.get('scheme') == 'todopersonal' and x.get('host') == 'auth-callback' for x in activity.iter('data'))
  xml = [decode(z.read(n)) for n in z.namelist() if n.startswith('res/') and n.endswith('.xml')]
+ assert app.get('icon') == app.get('roundIcon'), 'Launcher variants must share the same adaptive resource'
+ assert any(x.tag == 'adaptive-icon' and x.find('monochrome') is not None for x in xml), 'Missing Android 13 themed icon'
+ assert any(x.tag == 'vector' and any(p.get('pathData') == 'M47.5,31H55.5L39.5,77H31.5ZM68.5,31H76.5L60.5,77H52.5Z' for p in x.findall('path')) for x in xml), 'Missing native brand mark'
  domains = {'root', 'file', 'database', 'sharedpref', 'external'}
  backup = next(x for x in xml if x.tag == 'full-backup-content')
  assert domains.issubset({x.get('domain') for x in backup.findall('exclude') if x.get('path') == '.'})
@@ -31,7 +34,7 @@ with zipfile.ZipFile(apk) as z:
  config = json.loads(z.read('assets/capacitor.config.json'))['android']
  assert config['webContentsDebuggingEnabled'] is False and config['allowMixedContent'] is False and config['loggingBehavior'] == 'none'
  assert not any(n.lower().endswith(('.p12', '.jks', '.keystore', '.env')) for n in z.namelist())
- for name in ['password-reset.css', 'password-reset.js', 'reset-password.html', 'app-loader.js', 'fonts/lato-300.woff', 'fonts/lato-400.woff', 'fonts/lato-700.woff']:
+ for name in ['img/brand-icon.svg', 'img/favicon.png', 'password-reset.css', 'password-reset.js', 'reset-password.html', 'app-loader.js', 'fonts/lato-300.woff', 'fonts/lato-400.woff', 'fonts/lato-700.woff']:
   assert z.read('assets/public/'+name) == pathlib.Path('dist',name).read_bytes(), 'Recovery asset mismatch: '+name
  bundle = z.read('assets/public/main.js')
  assert version.encode() in bundle and b'SUPABASE_SERVICE_ROLE_KEY' not in bundle
