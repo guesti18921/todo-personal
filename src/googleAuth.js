@@ -1,4 +1,15 @@
 // OAuth launches only after a tap. No provider tokens or secrets are logged.
+export function emailSendErrorMessage(error) {
+    const detail = error?.originalError?.status ? error.originalError : error;
+    const code = detail?.code || detail?.error_code || '';
+    if (detail?.status === 429 || code.includes('rate_limit')) return 'Слишком много писем. Подождите немного и повторите попытку.';
+    if (['email_address_invalid', 'validation_failed'].includes(code)) return 'Проверьте адрес электронной почты и попробуйте снова.';
+    if (detail?.status >= 500) return 'Сервис отправки писем временно недоступен. Попробуйте позже.';
+    if (detail?.status >= 400) return 'Сервис отклонил отправку письма. Попробуйте позже.';
+    if (['AuthRetryableFetchError', 'AbortError', 'TypeError'].includes(detail?.name) || detail?.status === 0) return 'Не удалось связаться с сервисом отправки писем. Проверьте соединение и попробуйте снова.';
+    return 'Не удалось отправить письмо. Попробуйте ещё раз.';
+}
+
 export function authErrorMessage(error) {
     if (error?.originalError?.status) error = error.originalError;
     const legacyCodes = { 'Invalid login credentials': 'invalid_credentials', 'Email not confirmed': 'email_not_confirmed' };

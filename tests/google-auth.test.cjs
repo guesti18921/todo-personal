@@ -9,6 +9,19 @@ async function fixture() {
 }
 const serverUrl = 'https://project.supabase.co';
 const url = `${serverUrl}/auth/v1/authorize?provider=google`;
+test('email sending errors distinguish transport, SMTP failure, rejection and throttling without leaking details', async () => {
+ const { emailSendErrorMessage: message } = await fixture();
+ for (const error of [{status:503,name:'AuthRetryableFetchError'}, {status:500,code:'unexpected_failure'}]) {
+  assert.match(message(error), /отправки писем временно недоступен/);
+  assert.doesNotMatch(message(error), /соединение|интернет/);
+ }
+ for (const error of [{status:429}, {code:'over_email_send_rate_limit'}, {code:'over_request_rate_limit'}]) assert.match(message(error), /Слишком много писем/);
+ for (const error of [{name:'AbortError'}, {name:'TypeError'}, {name:'AuthRetryableFetchError',status:0}]) assert.match(message(error), /Проверьте соединение/);
+ assert.match(message({status:422,code:'email_address_invalid'}), /адрес электронной почты/);
+ assert.match(message({status:403}), /отклонил/);
+ assert.match(message({originalError:{status:500}}), /временно недоступен/);
+ assert.doesNotMatch(message({message:'private-smtp-token',code:'unknown'}), /private|token|интернет/);
+});
 test('Google launch uses the current redirect, native browser, account picker and deduplicates taps', async () => {
     const { createGoogleLogin } = await fixture();
     let calls = 0, resolve; const statuses = [], opened = [];

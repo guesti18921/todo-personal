@@ -19,15 +19,15 @@ module.exports=async function auditEmailNotices(browser,origin,out,{seed,cacheKe
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/settings'))return route.fulfill({json:{external:{google:true}}});
    if(path.endsWith('/signup')){sent++;if(mode==='existing-error')return route.fulfill({status:422,json:{error_code:'user_already_exists',msg:'User already registered'}});return route.fulfill({json:{user:{id:'notice-fixture',identities:mode==='masked'?[]:[{provider:'email'}]},session:null}})}
-   if(path.endsWith('/recover')){sent++;return route.fulfill(mode==='error'?{status:503,json:{error_code:'unexpected_failure',msg:'Fixture failure'}}:{json:{}})}
+   if(path.endsWith('/recover')){sent++;if(mode==='offline')return route.abort('failed');return route.fulfill(mode==='error'?{status:503,json:{code:'unexpected_failure',message:'private SMTP details'}}:mode==='limited'?{status:429,json:{code:'over_email_send_rate_limit',message:'private'}}:mode==='rejected'?{status:422,json:{error_code:'email_address_invalid',message:'private'}}:{json:{}})}
    if(path.endsWith('/token'))return route.fulfill({status:400,json:{error_code:'email_not_confirmed',msg:'Email not confirmed'}});
    return route.abort();
   });
   const p=await context.newPage();
   try{
+   const email='a'.repeat(64)+'@'+'b'.repeat(50)+'.example.test';
    for(mode of ['recovery','signup','masked','existing-error','unconfirmed']){
     await p.goto(origin);await p.locator('#auth-google').waitFor();await p.addScriptTag({url:origin+'/__audit-axe.js'});
-    const email='a'.repeat(64)+'@'+'b'.repeat(50)+'.example.test';
     await p.locator('#auth-email').fill(email);
     if(mode==='recovery'){
      await p.locator('#auth-forgot').click();await p.locator('#auth-recovery-send').click();
@@ -60,9 +60,17 @@ module.exports=async function auditEmailNotices(browser,origin,out,{seed,cacheKe
     assert.equal(await p.locator('.auth-card__intro').isVisible(),true);
     checked++;
    }
-   mode='error';await p.locator('#auth-forgot').click();await p.locator('#auth-recovery-send').click();
-   await p.waitForFunction(()=>!document.querySelector('#auth-recovery-send').disabled);
-   assert.equal(await p.locator('#auth-confirm').isVisible(),false);assert.equal(await p.locator('#auth-recovery-form').isVisible(),true);
+   await p.locator('#auth-forgot').click();
+   for(mode of ['error','limited','rejected','offline']){
+    await p.locator('#auth-recovery-send').click();
+    await p.waitForFunction(()=>!document.querySelector('#auth-recovery-send').disabled);
+    assert.equal(await p.locator('#auth-confirm').isVisible(),false);assert.equal(await p.locator('#auth-recovery-form').isVisible(),true);
+    const message=await p.locator('#auth-message').textContent();
+    const expected={error:/отправки писем временно недоступен|email service is temporarily unavailable/,limited:/Слишком много писем|Too many emails/,rejected:/адрес электронной почты|email address/,offline:/Проверьте соединение|Check your connection/};
+    assert.match(message,expected[mode]);assert.doesNotMatch(message,/private|SMTP/);
+    assert.equal(await p.locator('#auth-recovery-email').inputValue(),email);
+   }
+   mode='recovery';await p.locator('#auth-recovery-send').click();await p.locator('#auth-confirm').waitFor();
   }finally{await context.close()}
  }
  // A recovery request from the notebook opens a receipt and keeps local data intact.

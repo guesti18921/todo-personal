@@ -360,7 +360,7 @@ export default {
   "Офлайн-запуск пока не подтверждён. Откройте страницу с интернетом и дождитесь подготовки.": "Offline access is not ready yet. Open this page with internet and wait for setup.",
   "Для запуска без интернета сначала откройте эту страницу с сетью и дождитесь подготовки офлайн-версии.": "To open the notebook offline, first open this page with internet and wait for offline setup.",
   "О приложении": "About",
-  "TO-DO Personal · версия 0.4.46": "TO-DO Personal · version 0.4.46",
+  "TO-DO Personal · версия 0.4.47": "TO-DO Personal · version 0.4.47",
   "Мобильный блокнот": "Mobile notebook",
   "Создать запись": "Create entry",
   "Разделы блокнота": "Notebook sections",
@@ -529,4 +529,9 @@ export default {
   "Предпочтения": "Preferences",
   "Язык, время и подсказки сроков": "Language, time and date suggestions",
   "Версия и документы": "Version and documents",
+  "Проверьте адрес электронной почты и попробуйте снова.": "Check your email address and try again.",
+  "Сервис отправки писем временно недоступен. Попробуйте позже.": "The email service is temporarily unavailable. Try again later.",
+  "Сервис отклонил отправку письма. Попробуйте позже.": "The service rejected the email request. Try again later.",
+  "Не удалось связаться с сервисом отправки писем. Проверьте соединение и попробуйте снова.": "Could not reach the email service. Check your connection and try again.",
+  "Не удалось отправить письмо. Попробуйте ещё раз.": "Could not send the email. Please try again.",
 };

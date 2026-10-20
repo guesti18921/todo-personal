@@ -20,7 +20,7 @@ import { readCachedAccount } from './localAccount.js';
 import { AUTH_REDIRECT_URL, createAuthLinkHandler, parseAuthLink, isPasswordResetReturnLink } from './authDeepLink.js';
 import { syncFailurePhase } from './syncFailure.js';
 import { boundedFetch } from './networkFetch.js';
-import { authErrorMessage, createGoogleLogin, googleProviderEnabled } from './googleAuth.js';
+import { authErrorMessage, emailSendErrorMessage, createGoogleLogin, googleProviderEnabled } from './googleAuth.js';
 import { createClient } from '@supabase/supabase-js';
 import { createEmailConfirmation, EMAIL_CONFIRMATION_URL } from './emailConfirmation.js';
 import { requestAccountDeletion, clearDeletedAccount, isAccountDeleted } from './accountDeletion.js';
@@ -445,13 +445,12 @@ recoveryForm.addEventListener('submit', async event => {
         const { error } = await confirmationAuth.auth.resetPasswordForEmail(recoveryEmail.value.trim(), { redirectTo: PASSWORD_RESET_URL });
         // An OAuth return can finish while this request is pending.
         if (activeUser || recoveryForm.hidden) return;
-        if (error) authMessage.textContent = t(['over_email_send_rate_limit', 'over_request_rate_limit'].includes(error.code)
-            ? 'Слишком много писем. Подождите немного и повторите попытку.' : 'Не удалось отправить письмо. Проверьте интернет и попробуйте снова.');
+        if (error) authMessage.textContent = t(emailSendErrorMessage(error));
         else {
             document.querySelector('#auth-email').value = recoveryEmail.value.trim();
             showEmailNotice('recovery', recoveryEmail.value.trim());
         }
-    } catch (_) { if (!activeUser && !recoveryForm.hidden) authMessage.textContent = t('Не удалось отправить письмо. Проверьте интернет и попробуйте снова.'); }
+    } catch (error) { if (!activeUser && !recoveryForm.hidden) authMessage.textContent = t(emailSendErrorMessage(error)); }
     finally { recoveryRequestBusy = false; recoverySend.disabled = recoveryBack.disabled = recoveryEmail.disabled = false; }
 });
 async function refreshGoogleProvider() {
@@ -895,7 +894,7 @@ mobileUI = createMobileNotebook({
         const owner = activeUser, email = activeUserEmail;
         if (!owner || !email || changingAccount) throw new Error(t('Не удалось войти. Проверьте пароль и соединение.'));
         const { error } = await confirmationAuth.auth.resetPasswordForEmail(email, { redirectTo: isNativeApp() ? AUTH_REDIRECT_URL : PASSWORD_RESET_URL });
-        if (error) throw new Error(t(authErrorMessage(error)));
+        if (error) throw new Error(t(emailSendErrorMessage(error)));
         if (owner !== activeUser) throw new Error(t('Войдите в тот же аккаунт. Локальные записи не перенесены.'));
     },
     async reauthenticateGoogle() {
