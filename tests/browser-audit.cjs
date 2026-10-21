@@ -36,6 +36,7 @@ const server = http.createServer((req, res) => {
   await require('./editor-layout-audit.cjs')(browser,origin,{seed,cacheKey});
   await require('./login-error-audit.cjs')(browser,origin);
   await require('./password-reset-audit.cjs')(browser,origin,out);
+  await require('./email-action-audit.cjs')(browser,origin);
  await require('./public-pages-audit.cjs')(browser, origin);
   await require('./email-notice-audit.cjs')(browser,origin,out,{seed,cacheKey});
   for (const [name, width, height, locale, appLanguage] of [['small', 320, 640, 'ru-RU'], ['phone', 360, 800, 'ru-RU'], ['large', 412, 915, 'ru-RU'], ['landscape', 800, 360, 'ru-RU'], ['desktop', 1280, 800, 'ru-RU'], ['english', 360, 800, 'en-US'], ['english-small', 320, 640, 'en-GB'], ['english-wide', 412, 915, 'en-US'], ['english-ru-os', 360, 800, 'ru-RU', 'en'], ['russian-en-os', 360, 800, 'en-US', 'ru']]) {

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-src 'none'; form-action 'self'; script-src 'self' 'sha256-lK4LMfi0qk4palSKwaZBYUs0HsuCpuO7ibcKsqDI9Wo='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://ihvwqqvndmwtislvgamd.supabase.co wss://ihvwqqvndmwtislvgamd.supabase.co; worker-src 'self'">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow">
+<title>TO-DO Personal — подтверждение</title>
+<script>
+window.todoEmailAction = location.hash;
+history.replaceState(null, '', location.pathname);
+if (window.top !== window.self) document.documentElement.hidden = true;
+</script>
+<link rel="stylesheet" href="email-action.css"></head>
+<body><main><div class="brand"><span>//</span> TO-DO Personal</div>
+<h1 id="heading">Проверяем ссылку…</h1><p id="message" role="status"></p>
+<button id="continue" type="button" hidden>Продолжить</button>
+<a id="back" href="https://todo.m1strell.com/" hidden>Вернуться в блокнот</a>
+<noscript>Для проверки ссылки включите JavaScript. / Enable JavaScript to verify this link.</noscript>
+</main><script src="email-action.js" defer></script></body></html>
