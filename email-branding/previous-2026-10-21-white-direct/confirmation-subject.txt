@@ -1,0 +1,1 @@
+{{ if eq (printf "%v" .Data.todo_personal_language) "ru" }}Подтвердите почту · TO-DO Personal{{ else }}Confirm your email · TO-DO Personal{{ end }}

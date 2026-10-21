@@ -16,7 +16,7 @@ def local(key,kind,lang=None):
 def render(kind,lang=None):
  t=lambda key:local(key,kind,lang)
  language=lang or condition+'ru{{ else }}en{{ end }}'
- url='https://example.test/confirmation-preview' if lang else '{{ .ConfirmationURL }}'
+ url='https://todo.m1strell.com/email-action.html#confirmation_url=preview' if lang else 'https://todo.m1strell.com/email-action.html#confirmation_url={{ .ConfirmationURL | urlquery }}'
  return f'''<!doctype html>
 <html lang="{language}" style="color-scheme:light dark;"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><meta name="format-detection" content="telephone=no,date=no,address=no,email=no"><title>{t('subject')}</title>
 <style>
