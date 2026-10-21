@@ -32,6 +32,10 @@ module.exports = async function(browser, origin) {
   await page.goto(origin+'/email-action.html'+fragment);await page.locator('#back:not([hidden])').waitFor();
   assert.equal(await page.locator('#continue').isVisible(),false);assert.equal(calls,0);assert.equal(new URL(page.url()).hash,'');await context.close();
  }
+ const reuse=await browser.newContext();const reusedPage=await reuse.newPage();
+ await reusedPage.goto(origin+'/email-action.html');await reusedPage.locator('#back:not([hidden])').waitFor();
+ await reusedPage.goto(origin+'/email-action.html#confirmation_url='+encodeURIComponent(base+'?token='+token+'&type=signup'));
+ await reusedPage.locator('#continue:not([hidden])').waitFor();assert.equal(new URL(reusedPage.url()).hash,'');await reuse.close();
  // An expired token is handled by the existing reset screen after server verification.
  const context=await browser.newContext({locale:'ru-RU'});const page=await context.newPage();
  await page.route('https://*.supabase.co/**',route=>route.fulfill({status:302,headers:{location:origin+'/reset-password.html#error=access_denied&error_code=otp_expired'}}));

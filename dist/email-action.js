@@ -2,6 +2,10 @@
     'use strict';
     const fragment = window.todoEmailAction || '';
     delete window.todoEmailAction;
+    // A second email can reuse this tab without causing a full navigation.
+    window.addEventListener('hashchange', () => {
+        if (window.location.hash) window.location.reload();
+    });
     const en = !navigator.language.toLowerCase().startsWith('ru');
     document.documentElement.lang = en ? 'en' : 'ru';
     const text = (ru, english) => en ? english : ru;
