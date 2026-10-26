@@ -37,7 +37,9 @@ self.addEventListener('push', event => {
     event.waitUntil(pushSerial(async () => {
         try {
             const data = event.data?.json();
-            if (data?.version !== 1 || typeof data.owner !== 'string' || typeof data.entryId !== 'string' || data.entryId.length > 200 || typeof data.at !== 'string') return;
+            // Match backupStore.checkedState: valid imported IDs are up to 512
+            // UTF-16 code units. Preserve the ID so clicks target the same entry.
+            if (data?.version !== 1 || typeof data.owner !== 'string' || typeof data.entryId !== 'string' || !data.entryId || data.entryId.length > 512 || typeof data.at !== 'string') return;
             const at = Date.parse(data.at);
             if (!Number.isFinite(at) || at > Date.now() + 60000 || Date.now() - at > 30 * 60000) return;
             if (await pushBinding() !== data.owner) return;
@@ -74,3 +76,4 @@ self.addEventListener('notificationclick', event => {
         }
     }).catch(() => {}));
 });
+

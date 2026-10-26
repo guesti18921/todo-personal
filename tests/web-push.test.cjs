@@ -125,6 +125,32 @@ test('closed-tab worker persists account binding, deduplicates, and drops previo
 test('notification click preserves an existing editor and never switches accounts',async()=>{
  const f=workerFixture();await f.bind('a');f.windows.push(f.client);await f.click(f.payload);assert.equal(f.focuses,1);assert.equal(f.opened,0);assert.equal(f.messages[0].entryId,'note');await f.bind('b');await f.click(f.payload);assert.equal(f.focuses,1);
 });
+test('imported long IDs survive push display, deduplication and opening without rewriting',async()=>{
+ const backup=await sourceModule('src/backupStore.js');
+ for(const id of ['ordinary-id','x'.repeat(200),'x'.repeat(201),'x'.repeat(512),'😀'.repeat(256)]){
+  const raw=JSON.stringify({format:'todo-personal-backup-v1',owner:'a',state:{todos:{home:[]},notes:[{id,title:'Audit note',text:''}]}});
+  const parsed=backup.parseBackup(raw,'a');
+  const merged=backup.mergeImported({todos:{home:[]},notes:[]},parsed.state);
+  assert.equal(merged.notes[0].id,id);
+  const f=workerFixture();await f.bind('a');
+  const payload={...f.payload,entryId:merged.notes[0].id};
+  await f.push(payload);await f.push(payload);assert.equal(f.shown.length,1);
+  assert.equal(f.shown[0].data.entryId,id);
+  f.windows.push(f.client);await f.click(f.shown[0].data);
+  assert.equal(f.messages[0].entryId,id);assert.equal(f.opened,0);
+  await f.bind('b');await f.push(payload);assert.equal(f.shown.length,1);
+ }
+});
+test('worker rejects empty and oversized IDs at the same upper boundary as backup import',async()=>{
+ const backup=await sourceModule('src/backupStore.js');
+ for(const id of ['x'.repeat(513),'😀'.repeat(257)]){
+  const raw=JSON.stringify({format:'todo-personal-backup-v1',owner:'a',state:{todos:{home:[]},notes:[{id,title:'Audit note'}]}});
+  assert.throws(()=>backup.parseBackup(raw,'a'));
+ }
+ const f=workerFixture();await f.bind('a');
+ for(const id of ['',null,42,'x'.repeat(513),'😀'.repeat(257)])await f.push({...f.payload,entryId:id});
+ assert.equal(f.shown.length,0);
+});
 async function dispatchFixture({failure=null,changed=false,revoked=false}={}){
  const m=await sourceModule('supabase/functions/_shared/pushDispatch.js');const at='2026-10-15T12:00:00.000Z',sub={id:'sub',owner_id:'a',subscription:validSub,enabled_at:'2026-10-15T11:00:00.000Z',expires_at:'2027-01-01T00:00:00.000Z',time_zone:'UTC',language:'en'},notes=[{id:'note',date:'2026-10-15',time:'12:00',reminder:{mode:'at'}}];const claims=new Set(),updates=[],sent=[];let reads=0;
  const server={rpc:async(name,args)=>{const key=JSON.stringify([args.p_subscription,args.p_entry,args.p_at]);if(claims.has(key))return{data:false};claims.add(key);return{data:true}},from(table){let action='select',row,conditions={};const q={select(){return q},gt(){return q},lt(){return q},order(){return q},limit(){return q},maybeSingle(){return q},eq(k,v){conditions[k]=v;return q},update(value){action='update';row=value;return q},delete(){action='delete';return q},then(yes,no){let data;if(action==='select'&&table==='notebooks'){reads++;data={notes:changed&&reads>1?[]:notes,todos:{},revision:0}}else if(action==='select'&&table==='web_push_subscriptions')data=conditions.id?(revoked?null:sub):[sub];if(action!=='select')updates.push({table,action,row,conditions:{...conditions}});return Promise.resolve({data,error:null}).then(yes,no)}};return q}};
@@ -144,3 +170,4 @@ test('first signed-out startup clears a previously durable worker binding',async
  const client=m.createWebPush({supported:true,auth:{},fetcher:()=>{},serverUrl:'https://test',publicKey:'public',storage:{getItem:()=>null},permission:{permission:'granted'},nav:{serviceWorker:{getRegistration:async()=>null}},bindWorker:async id=>bindings.push(id)});
  await client.setAccount(null);await new Promise(r=>setImmediate(r));assert.deepEqual(bindings,[null]);
 });
+

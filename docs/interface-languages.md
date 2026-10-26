@@ -1,12 +1,12 @@
-# Interface languages — 0.4.5
+# Interface languages — current Android baseline 0.4.47
 
 The mobile notebook has Russian and English interface translations. Entries can contain text in any language. Deadline suggestions currently recognize common expressions in Russian, English, German, Italian, Spanish, Chinese, Japanese, French, Portuguese and Korean.
 
 ## First launch and language choice
 
-The primary device/browser language determines the initial interface: Russian for `ru`, English for `en`, and English for unsupported languages. Country, IP address and VPN are not used. A language selector is available before signing in and under Settings. Choosing a language never translates entry text or changes deadlines, time zone, reminder times or account identity.
+The primary device/browser language determines the initial interface: Russian for `ru`, English for `en`, and English for unsupported languages. Country, IP address and VPN are not used. The sign-in, registration and recovery screens use the system language; there is no language selector before sign-in. A language selector is available under Settings after sign-in. Choosing a language never translates entry text or changes deadlines, time zone, reminder times or account identity.
 
-An explicit pre-login choice takes precedence over the account language for that sign-in. Otherwise the saved account language takes precedence over device detection.
+Old manual pre-login preferences do not override system detection on the signed-out screens. After sign-in, pending local account preferences take precedence, then the saved account language; device detection is the initial fallback. Signing out returns the auth screens to the system language.
 
 ## Offline and account persistence
 
@@ -22,9 +22,10 @@ Date labels use the chosen interface locale. Dates and times continue to use the
 
 ## Manual Android check
 
-1. Install 0.4.5 over the existing signed app. Keep the existing installation and data.
+1. Install the current signed APK over the existing signed app. Keep the existing installation and data.
 2. Switch Russian → English → Russian under Settings. Check navigation, search, deadline controls and reminder choices.
 3. Create a long multilingual note; verify the list preview is compact and opening it shows the entire text.
 4. Choose English, turn off internet, close and reopen the app. Check that the language and entries remain.
 5. Schedule a near-future reminder, switch the interface language, and check its title, original text, exact time and tap target.
 6. Reconnect and sign into the same account on a second device; check that the account language is used.
+
