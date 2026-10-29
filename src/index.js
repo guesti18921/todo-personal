@@ -20,7 +20,7 @@ import { readCachedAccount } from './localAccount.js';
 import { AUTH_REDIRECT_URL, createAuthLinkHandler, parseAuthLink, isPasswordResetReturnLink } from './authDeepLink.js';
 import { syncFailurePhase } from './syncFailure.js';
 import { boundedFetch } from './networkFetch.js';
-import { authErrorMessage, emailSendErrorMessage, createGoogleLogin, googleProviderEnabled } from './googleAuth.js';
+import { authErrorMessage, emailSendErrorMessage, createGoogleLogin } from './googleAuth.js';
 import { createClient } from '@supabase/supabase-js';
 import { createEmailConfirmation, EMAIL_CONFIRMATION_URL } from './emailConfirmation.js';
 import { requestAccountDeletion, clearDeletedAccount, isAccountDeleted } from './accountDeletion.js';
@@ -287,8 +287,6 @@ const recoveryEmail = document.querySelector('#auth-recovery-email');
 const recoverySend = document.querySelector('#auth-recovery-send');
 const recoveryBack = document.querySelector('#auth-recovery-back');
 let recoveryRequestBusy = false;
-let googleEnabled = false;
-let checkingGoogle = false;
 const logout = document.querySelector('#logout-btn');
 let registering = false;
 let activeUser = null;
@@ -408,7 +406,7 @@ function changeLanguage(language) {
 window.addEventListener('online', () => languagePreferences.sync());
 window.addEventListener('focus', () => languagePreferences.sync());
 
-function updateGoogleVisibility() { authGoogleArea.hidden = !googleEnabled || Boolean(activeUser) || authConfirm.hidden === false || authForm.hidden; }
+function updateGoogleVisibility() { authGoogleArea.hidden = Boolean(activeUser) || authConfirm.hidden === false || authForm.hidden; }
 function closeRecoveryForm() {
     recoveryForm.hidden = true;
     renderAuthCopy();
@@ -453,13 +451,6 @@ recoveryForm.addEventListener('submit', async event => {
     } catch (error) { if (!activeUser && !recoveryForm.hidden) authMessage.textContent = t(emailSendErrorMessage(error)); }
     finally { recoveryRequestBusy = false; recoverySend.disabled = recoveryBack.disabled = recoveryEmail.disabled = false; }
 });
-async function refreshGoogleProvider() {
-    if (checkingGoogle || activeUser) return;
-    checkingGoogle = true;
-    try { googleEnabled = await googleProviderEnabled({ fetch: boundedFetch, serverUrl: SUPABASE_URL, publicKey: SUPABASE_PUBLIC_KEY }); }
-    catch (_) { googleEnabled = false; }
-    finally { checkingGoogle = false; updateGoogleVisibility(); }
-}
 const googleLogin = createGoogleLogin({ auth: nativeOAuthClient?.auth || supabase.auth, native: isNativeApp(),
     serverUrl: SUPABASE_URL,
     redirectTo: isNativeApp() ? AUTH_REDIRECT_URL : location.origin + location.pathname,
@@ -471,7 +462,7 @@ const googleLogin = createGoogleLogin({ auth: nativeOAuthClient?.auth || supabas
             : state === 'opened' ? t('Завершите вход в окне Google. Если закрыли его, можно попробовать снова.') : t(message);
     }
 });
-authGoogle.addEventListener('click', () => { if (googleEnabled) googleLogin.start(); });
+authGoogle.addEventListener('click', () => googleLogin.start());
 passwordToggle.addEventListener('click', () => {
     const show = authPassword.type === 'password';
     authPassword.type = show ? 'text' : 'password';
@@ -485,9 +476,6 @@ if (authReturnParams.has('error')) {
         : t('Не удалось завершить вход. Попробуйте снова или войдите по почте.');
     history.replaceState(null, '', location.pathname + location.search);
 }
-refreshGoogleProvider();
-window.addEventListener('focus', refreshGoogleProvider);
-window.addEventListener('online', refreshGoogleProvider);
 
 let generation = 0;
 let ready = false;
@@ -655,7 +643,6 @@ supabase.auth.onAuthStateChange((_event, session) => {
     recoveryForm.reset();
     authForgot.hidden = Boolean(id) || registering;
     updateGoogleVisibility();
-    if (!id) refreshGoogleProvider();
     retryLoad.hidden = switchAccount.hidden = true;
     authForm.reset();
     authPassword.type = 'password';

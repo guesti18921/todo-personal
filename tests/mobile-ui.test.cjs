@@ -310,7 +310,7 @@ test('relative suggestion is anchored across draft and record reopen, and combin
  } finally { dom.window.close(); }
 });
 
-test('login offers Google only when enabled, preserves email login and explains password errors', async () => {
+test('login keeps Google visible, preserves email login and explains password errors', async () => {
  let enabled = false;
  const dom = boot([], false, async (request) => {
   const url = String(request?.url || request);
@@ -321,7 +321,8 @@ test('login offers Google only when enabled, preserves email login and explains 
  });
  try {
   const d = dom.window.document; await wait();
-  assert.equal(d.querySelector('#auth-google-area').hidden, true);
+  assert.equal(d.querySelector('#auth-google-area').hidden, false);
+  assert.equal(d.querySelector('#auth-google').disabled, false);
   assert.equal(d.querySelector('#auth-form').hidden, false);
   d.querySelector('#auth-password').value = 'long-enough';
   d.querySelector('#auth-password-toggle').click();
@@ -339,6 +340,27 @@ test('login offers Google only when enabled, preserves email login and explains 
   assert.equal(d.querySelector('#auth-confirm').hidden, false);
   assert.equal(d.querySelector('#auth-google-area').hidden, true);
   d.querySelector('#auth-confirm-back').click(); assert.equal(d.querySelector('#auth-google-area').hidden, false);
+ } finally { dom.window.close(); }
+});
+
+test('Google button is visible without a settings response and remains usable after a network failure', async () => {
+ let settingsCalls = 0;
+ const dom = boot([], false, async request => {
+  const url = String(request?.url || request);
+  if (url.includes('/auth/v1/settings')) { settingsCalls++; throw new TypeError('offline'); }
+  throw new TypeError('offline');
+ });
+ try {
+  const d = dom.window.document;
+  assert.equal(d.querySelector('#auth-google-area').hidden, false);
+  await wait();
+  assert.equal(settingsCalls, 0);
+  assert.equal(d.querySelector('#auth-google-area').hidden, false);
+  assert.equal(d.querySelector('#auth-google').disabled, false);
+  d.querySelector('#auth-forgot').click();
+  assert.equal(d.querySelector('#auth-google-area').hidden, true);
+  d.querySelector('#auth-recovery-back').click();
+  assert.equal(d.querySelector('#auth-google-area').hidden, false);
  } finally { dom.window.close(); }
 });
 
